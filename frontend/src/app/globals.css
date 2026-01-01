@@ -1,0 +1,52 @@
+@import url("https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Lexend", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Fira Code", "SFMono-Regular", ui-monospace, monospace;
+}
+
+body {
+  background: #ffffff;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.font-display {
+  font-family: "Lexend", "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.animate-enter {
+  animation: subtle-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes subtle-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.roof-only-icon {
+  clip-path: polygon(0% 0%, 100% 0%, 100% 50%, 0% 50%);
+  margin-bottom: -32px;
+}
+
+.splash-gradient {
+  background: radial-gradient(circle at 20% 20%, rgba(10, 68, 184, 0.35), transparent 50%),
+    radial-gradient(circle at 80% 0%, rgba(140, 0, 92, 0.35), transparent 45%),
+    radial-gradient(circle at 50% 60%, rgba(44, 193, 255, 0.2), transparent 35%);
+  opacity: 0.65;
+}
