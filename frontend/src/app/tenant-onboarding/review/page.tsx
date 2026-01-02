@@ -131,7 +131,7 @@ export default function TenantReview() {
 
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200  z-10 flex justify-center">
           <div className="max-w-md w-full">
-           <Link href={'/tenant-onboarding/review'}
+           <Link href={'/explore'}
               className=" w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
               type="button"
             >
