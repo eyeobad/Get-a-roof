@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "framer-motion": "^12.23.26",
     "material-icons": "^1.13.14",
     "next": "16.1.1",
     "react": "19.2.3",
