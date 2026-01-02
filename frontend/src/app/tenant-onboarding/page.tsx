@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function TenantOnboarding() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
@@ -87,7 +88,8 @@ export default function TenantOnboarding() {
                   <div
                     className={`flex h-12 w-12 ${option.wide ? "mr-4 " : "mx-auto"} items-center justify-center rounded-full bg-blue-50 text-3xl ${option.accent} transition-transform duration-200 group-hover:scale-110`}
                   >
-                    <span className="material-icons-round ">{option.icon}</span>
+                    <span className="material-icons-round "
+                    >{option.icon}</span>
                   </div>
                   <span className={`text-lg font-semibold ${option.wide ? "mt-3 ms-2" : ""}  leading-tight text-text-main-light dark:text-text-main-dark`}>
                     {option.label}
@@ -99,9 +101,9 @@ export default function TenantOnboarding() {
         </main>
 
         <div className="mt-4 pt-4 pb-2">
-        <button className="w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none ">
+        <Link href={'/tenant-onboarding/more-about-you'} className="block text-center w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none ">
             Next
-          </button>
+          </Link>
         </div>
       </div>
     </div>
