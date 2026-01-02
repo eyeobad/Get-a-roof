@@ -35,7 +35,7 @@ export default function TenantOnboarding() {
           <button
             type="button"
             aria-label="Go back"
-            className="p-2 rounded-full text-text-main-light transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:text-text-main-dark dark:hover:bg-gray-800 dark:focus:ring-offset-background-dark"
+            className="p-2 rounded-full text-text-main-light transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:text-text-main-dark  dark:focus:ring-offset-background-dark"
           >
             <span className="material-icons-round text-3xl">arrow_back</span>
           </button>
