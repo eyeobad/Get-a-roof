@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
+import Link from "next/link";
 const sections = [
   {
     key: "employment",
@@ -108,9 +108,9 @@ export default function TenantMoreAboutYou() {
           <div aria-label="Progress" className="mb-6" role="region">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-bold text-primary dark:text-blue-400 tracking-wide">
-                Step 2 of 5
+                Step 2 of 3
               </span>
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">40%</span>
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">67%</span>
             </div>
             <div
               aria-label="Onboarding progress"
@@ -122,13 +122,11 @@ export default function TenantMoreAboutYou() {
             >
               <div
                 className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
-                style={{ width: "40%" }}
+                style={{ width: "67%" }}
               />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">
-            More About You
-          </h1>
+         <h1 className="text-3xl font-bold text-slate-900  mb-2 tracking-tight">More About You</h1>
           <p className="text-lg text-slate-500 dark:text-slate-600 leading-relaxed">
             Help us find the best match for your property needs.
           </p>
@@ -205,13 +203,13 @@ export default function TenantMoreAboutYou() {
 
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-300 z-10 flex justify-center">
           <div className="max-w-md w-full">
-            <button
-              className="w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+            <Link href={'/tenant-onboarding/review'}
+              className=" w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
               type="button"
             >
               Next Step
               <span className="material-icons-round text-xl">arrow_forward</span>
-            </button>
+            </Link>
           </div>
         </div>
       </main>

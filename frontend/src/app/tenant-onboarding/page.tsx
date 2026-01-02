@@ -31,15 +31,23 @@ export default function TenantOnboarding() {
           className="flex flex-col gap-2"
         >
           <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-text-sub-light dark:text-text-sub-dark">
-            <span>Step 1 of 5</span>
-            <span className="text-primary dark:text-blue-400">20% Complete</span>
+            <span>Step 1 of 3</span>
+            <span className="text-primary dark:text-blue-400">33% Complete</span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-background-light dark:bg-surface-dark">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: "20%" }}
-            />
-          </div>
+             <div
+              aria-label="Onboarding progress"
+              aria-valuemax={5}
+              aria-valuemin={1}
+              aria-valuenow={2}
+              className="w-full bg-slate-200 rounded-full h-2 overflow-hidden"
+              role="progressbar"
+            >
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: "33%" }}
+              /></div>
+            </div>
         </div>
 
         <div className="flex items-center gap-2 py-3">
