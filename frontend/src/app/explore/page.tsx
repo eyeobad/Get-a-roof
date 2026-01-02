@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 export default function ExploreCards() {
   const navigation = [
@@ -69,7 +70,7 @@ export default function ExploreCards() {
       <main className="flex-1 flex flex-col justify-center items-center relative w-full max-w-md mx-auto px-4 pb-2">
         <div className="absolute w-[90%] h-[80%] bg-white/50 rounded-[2.5rem] -z-10 translate-y-4 scale-95 shadow-sm border border-slate-200" />
 
-        <div className="relative w-full h-[650px] bg-white rounded-[2rem] overflow-hidden shadow-card flex flex-col border border-slate-100 z-10 group cursor-grab active:cursor-grabbing">
+        <Link href="/property-details" className="relative w-full h-[650px] bg-white rounded-[2rem] overflow-hidden shadow-card flex flex-col border border-slate-100 z-10 group cursor-grab active:cursor-grabbing">
           <div className="relative h-[65%] w-full">
             <div className="absolute inset-0">
               <Image
@@ -135,7 +136,7 @@ export default function ExploreCards() {
               </div>
             </div>
           </div>
-        </div>
+        </Link>
       </main>
 
       {/* Action Buttons */}
