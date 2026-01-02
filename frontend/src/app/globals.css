@@ -12,6 +12,14 @@
   --color-foreground: var(--foreground);
   --font-sans: "Lexend", "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Fira Code", "SFMono-Regular", ui-monospace, monospace;
+  /* 1. Add your custom colors here so 'bg-primary' works */
+  --color-primary: #0a44b8;
+  --color-primary-hover: #083696;
+  
+  /* 5. Add your border radius extensions */
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 }
 
 body {
