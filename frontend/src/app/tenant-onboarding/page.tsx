@@ -1,11 +1,21 @@
 "use client";
 
+import { useState } from "react";
+
 export default function TenantOnboarding() {
-  const propertyOptions = [
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
+
+  const options = [
     { label: "Non-owner occupied", icon: "apartment", accent: "text-primary" },
     { label: "Shared apartment", icon: "groups", accent: "text-primary" },
     { label: "Shortlet", icon: "luggage", accent: "text-orange-600" },
     { label: "Self compound", icon: "fence", accent: "text-green-600" },
+    {
+      label: "Shared compound",
+      icon: "holiday_village",
+      accent: "text-purple-600",
+      wide: true,
+    },
   ];
 
   return (
@@ -35,7 +45,7 @@ export default function TenantOnboarding() {
           <button
             type="button"
             aria-label="Go back"
-            className="p-2 rounded-full text-text-main-light transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:text-text-main-dark  dark:focus:ring-offset-background-dark"
+            className="p-2 rounded-full text-text-main-light transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:text-text-main-dark dark:hover:bg-gray-800 dark:focus:ring-offset-background-dark"
           >
             <span className="material-icons-round text-3xl">arrow_back</span>
           </button>
@@ -47,47 +57,49 @@ export default function TenantOnboarding() {
               What are you looking for?
             </h1>
             <p className="text-lg leading-relaxed text-text-sub-light dark:text-text-sub-dark">
-              Select the type of living arrangement that suits your needs best. You can adjust this later.
+              Select the type of living arrangement that suits your needs best. You can adjust this
+              later.
             </p>
           </div>
 
-          <div role="group" aria-label="Property type options" className="grid grid-cols-2 gap-4 mb-8">
-            {propertyOptions.map((option, index) => (
-              <button
-                key={option.label}
-                type="button"
-                className="group relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-gray-200 bg-surface-light px-6 py-6 text-center transition-all duration-200 hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none dark:border-gray-700 dark:bg-surface-dark"
-              >
-                {index === 1 && (
-                  <div className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white">
-                    <span className="material-icons-round text-sm">check</span>
-                  </div>
-                )}
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-3xl ${option.accent} transition-transform duration-200 group-hover:scale-110`}>
-                  <span className="material-icons-round">{option.icon}</span>
-                </div>
-                <span className="text-lg font-semibold leading-tight text-text-main-light dark:text-text-main-dark">
-                  {option.label}
-                </span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="col-span-2 flex items-center justify-start gap-4 rounded-2xl border-2 border-gray-200 bg-surface-light px-6 py-6 transition-all duration-200 hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary outline-none dark:border-gray-700 dark:bg-surface-dark"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
-                <span className="material-icons-round text-3xl">holiday_village</span>
-              </div>
-              <span className="text-lg font-semibold leading-tight text-left text-text-main-light dark:text-text-main-dark">
-                Shared compound
-              </span>
-            </button>
-          </div>
+          <div role="group" className="grid grid-cols-2 gap-4 mb-8">
+            {options.map((option, index) => {
+              const isSelected = selectedIndex === index;
 
+              return (
+                <button
+                  key={option.label}
+                  type="button"
+                  onClick={() => setSelectedIndex(index)}
+                  className={`
+                    relative group flex rounded-2xl border-2 transition-all duration-200 outline-none
+                    ${option.wide ? "col-span-2 flex-row justify-start gap-4 px-6 py-6" : "flex-col gap-3 px-6 py-6 h-40"}
+                    ${isSelected
+                      ? "border-primary bg-blue-50/50 dark:bg-blue-900/20 shadow-soft ring-1 ring-primary"
+                      : "border-gray-200 bg-surface-light dark:border-gray-700 dark:bg-surface-dark hover:border-primary hover:-translate-y-0.5 hover:shadow-[0_15px_30px_rgba(10,68,184,0.1)]"}
+                  `}
+                >
+                  {isSelected && (
+                    <div className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white">
+                      <span className="material-icons-round text-sm">check</span>
+                    </div>
+                  )}
+                  <div
+                    className={`flex h-12 w-12 ${option.wide ? "mr-4 " : "mx-auto"} items-center justify-center rounded-full bg-blue-50 text-3xl ${option.accent} transition-transform duration-200 group-hover:scale-110`}
+                  >
+                    <span className="material-icons-round ">{option.icon}</span>
+                  </div>
+                  <span className={`text-lg font-semibold ${option.wide ? "mt-3 ms-2" : ""}  leading-tight text-text-main-light dark:text-text-main-dark`}>
+                    {option.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </main>
 
         <div className="mt-4 pt-4 pb-2">
-          <button className="w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-primary/40">
+        <button className="w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none ">
             Next
           </button>
         </div>
