@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 
 const gallery = [
   { src: "/p2.png", alt: "Gallery image 2" },
@@ -9,6 +10,13 @@ const gallery = [
 ];
 
 export default function PropertyDetails() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const prevSlide = () =>
+    setCurrentIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
+
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % gallery.length);
+
   return (
     <div className="min-h-screen text-slate-900 font-display">
       <div className="relative flex flex-col min-h-screen w-full max-w-md mx-auto pb-32">
@@ -27,17 +35,31 @@ export default function PropertyDetails() {
           </button>
         </header>
 
-        <div className="relative w-full h-[55vh] md:mt-16">
-          <div className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar">
-            {gallery.map((item) => (
-              <div key={item.alt} className="relative flex-shrink-0 h-full w-full snap-center">
-                <Image src={item.src} alt={item.alt} fill sizes="100vw" className="object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent" />
-              </div>
-            ))}
-          </div>
+        <div className="relative w-full h-[55vh] md:mt-16 overflow-hidden">
+          <Image
+            src={gallery[currentIndex].src}
+            alt={gallery[currentIndex].alt}
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent" />
+          <button
+            onClick={prevSlide}
+            aria-label="Previous slide"
+            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-lg"
+          >
+            ‹
+          </button>
+          <button
+            onClick={nextSlide}
+            aria-label="Next slide"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-lg"
+          >
+            ›
+          </button>
           <div className="absolute bottom-8 right-5 bg-black/60 text-white px-4 py-1.5 rounded-full text-base font-semibold backdrop-blur-md shadow-sm border border-white/10">
-            1/10
+            {currentIndex + 1}/{gallery.length}
           </div>
         </div>
 
