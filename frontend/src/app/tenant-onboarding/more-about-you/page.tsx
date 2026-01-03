@@ -3,6 +3,16 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
+type SectionConfig = {
+  key: string;
+  title: string;
+  icon: string;
+  buttonLabels: readonly string[];
+  primaryIndex: number;
+  note?: string;
+  fullWidth?: boolean;
+};
+
 const sections = [
   {
     key: "employment",
@@ -78,23 +88,21 @@ const sections = [
     primaryIndex: 1,
     fullWidth: true,
   },
-] as const;
+] as const satisfies readonly SectionConfig[];
 
 type Section = (typeof sections)[number];
 type SectionKey = Section["key"];
 type Selections = Record<SectionKey, number>;
-
 type SectionWithSelection = Section & { selectedIndex: number };
 
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
 
-  const [selections, setSelections] = useState<Selections>(() =>
-    sections.reduce<Selections>((acc, section) => {
-      acc[section.key] = section.primaryIndex ?? 0;
-      return acc;
-    }, {} as Selections)
-  );
+  const [selections, setSelections] = useState<Selections>(() => {
+    const initial = {} as Selections;
+    for (const s of sections) initial[s.key] = s.primaryIndex ?? 0;
+    return initial;
+  });
 
   const handleSelect = (key: SectionKey, index: number) => {
     setSelections((prev) => ({ ...prev, [key]: index }));
@@ -118,7 +126,6 @@ export default function TenantMoreAboutYou() {
               </span>
               <span className="text-xs font-semibold text-slate-400">67%</span>
             </div>
-
             <div
               aria-label="Onboarding progress"
               aria-valuemax={5}
@@ -154,11 +161,11 @@ export default function TenantMoreAboutYou() {
                 </h2>
               </div>
 
-              {section.note && (
+              {section.note ? (
                 <p className="text-slate-500 text-sm mb-3 ml-8">
                   {section.note}
                 </p>
-              )}
+              ) : null}
 
               <div
                 className={`flex ${
@@ -202,7 +209,10 @@ export default function TenantMoreAboutYou() {
 
             <div className="bg-white border border-slate-200 shadow-lg rounded-2xl p-6">
               <div className="flex justify-between items-center mb-6">
-                <label className="text-lg font-medium text-slate-600" htmlFor="earnings">
+                <label
+                  className="text-lg font-medium text-slate-600"
+                  htmlFor="earnings"
+                >
                   Yearly Income
                 </label>
                 <span className="text-2xl font-bold text-primary tabular-nums">
