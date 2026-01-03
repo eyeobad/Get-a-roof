@@ -1,7 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+const socialLinks = [
+  { name: "Twitter", href: "https://twitter.com/intent/tweet?text=Check%20out%20this%20listing", icon: "twitter" },
+  { name: "Facebook", href: "https://www.facebook.com/sharer/sharer.php?u=", icon: "facebook" },
+  { name: "WhatsApp", href: "https://wa.me/?text=Check%20out%20this%20listing", icon: "whatsapp" },
+];
 
 const gallery = [
   { src: "/p2.png", alt: "Gallery image 2" },
@@ -11,28 +18,83 @@ const gallery = [
 
 export default function PropertyDetails() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
 
   const prevSlide = () =>
     setCurrentIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
 
   const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShareUrl(window.location.href);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen text-slate-900 font-display">
       <div className="relative flex flex-col min-h-screen w-full max-w-md mx-auto pb-32">
         <header className="fixed top-0 left-0 right-0 z-50 max-w-md mx-auto flex items-center justify-between px-4 pt-6 pb-2 pointer-events-none">
-          <button
-            aria-label="Go back"
+          <Link
+            aria-label="Back to explore"
+            href="/explore"
             className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg text-slate-900 hover:bg-white transition-transform active:scale-95"
           >
             <span className="material-symbols-outlined text-3xl">arrow_back</span>
-          </button>
-          <button
-            aria-label="Share property"
-            className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg text-slate-900 hover:bg-white transition-transform active:scale-95"
-          >
-            <span className="material-symbols-outlined text-2xl">share</span>
-          </button>
+          </Link>
+          <div className="relative">
+            <button
+              aria-label="Share property"
+              className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg text-slate-900 hover:bg-white transition-transform active:scale-95"
+              onClick={() => {
+                if (navigator.share && shareUrl) {
+                  navigator.share({ title: "Property detail", url: shareUrl }).catch(() => {
+                    setShareMenuOpen((prev) => !prev);
+                  });
+                } else {
+                  setShareMenuOpen((prev) => !prev);
+                }
+              }}
+            >
+              <span className="material-symbols-outlined text-2xl">share</span>
+            </button>
+
+            {shareMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white shadow-2xl border border-slate-200 p-4 text-sm text-slate-700 z-50">
+                <p className="font-semibold text-gray-900 mb-2">Share this listing</p>
+                <div className="flex flex-col gap-2 mb-3">
+                  <button
+                    onClick={() => shareUrl && navigator.clipboard?.writeText(shareUrl)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-medium hover:bg-slate-50"
+                  >
+                    Copy link
+                  </button>
+                  {shareUrl && (
+                    <input
+                      readOnly
+                      value={shareUrl}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 bg-gray-50"
+                    />
+                  )}
+                </div>
+                <div className="flex items-center justify-between">
+                  {socialLinks.map((social) => (
+                    <a
+                      key={social.name}
+                      href={`${social.href}${encodeURIComponent(shareUrl || "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-slate-600 hover:text-primary text-2xl"
+                      aria-label={`Share on ${social.name}`}
+                    >
+                      <span className="material-symbols-outlined">{social.icon}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </header>
 
         <div className="relative w-full h-[55vh] md:mt-16 overflow-hidden">
@@ -129,10 +191,10 @@ export default function PropertyDetails() {
                 style={{ backgroundImage: "url('/p4.png')" }}
               />
               <div className="absolute inset-0 bg-black/5 flex items-center justify-center">
-                <button className="bg-white text-primary px-7 py-3.5 rounded-full flex items-center gap-2.5 shadow-xl transform transition-transform active:scale-95 group-hover:scale-105">
+                <Link href="/map-view" className="bg-white text-primary px-7 py-3.5 rounded-full flex items-center gap-2.5 shadow-xl transform transition-transform active:scale-95 group-hover:scale-105">
                   <span className="material-symbols-outlined text-primary">map</span>
                   <span className="font-bold text-lg">View on Map</span>
-                </button>
+                </Link>
               </div>
             </div>
           </div>

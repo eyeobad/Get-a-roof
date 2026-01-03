@@ -1,7 +1,13 @@
 ﻿"use client";
 
 import Image from "next/image";
-import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   motion,
@@ -101,20 +107,25 @@ const exploreData: ExploreCard[] = [
   },
 ];
 
+const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
+
 export default function ExploreCards() {
   const router = useRouter();
+
   const navigation = [
     { icon: "search", label: "Explore", active: true },
     { icon: "groups", label: "Matches" },
     { icon: "chat_bubble", label: "Messages" },
     { icon: "person", label: "Profile" },
   ];
+
   const solidStyle = { fontVariationSettings: "'FILL' 1" };
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [budget, setBudget] = useState(100000);
   const [distance, setDistance] = useState(15);
   const [apartmentType, setApartmentType] = useState("");
+
   const toggleOptions = useMemo(
     () => [
       { label: "Self Compound", key: "selfCompound" },
@@ -124,6 +135,7 @@ export default function ExploreCards() {
     ],
     []
   );
+
   const [toggles, setToggles] = useState<Record<string, boolean>>(() =>
     toggleOptions.reduce((acc, option, index) => {
       const active = index % 2 === 1;
@@ -134,10 +146,12 @@ export default function ExploreCards() {
   const exploreCards = useMemo<ExploreCard[]>(() => exploreData, []);
   const [cards, setCards] = useState<ExploreCard[]>(exploreCards);
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
+
   const controls = useAnimation();
   const visibleCards = cards.slice(0, 3);
 
   const removeTopCard = () => setCards((prev) => prev.slice(1));
+
   const resetDeck = () => {
     setCards(exploreCards);
     controls.set({ x: 0, rotate: 0, opacity: 1 });
@@ -145,11 +159,10 @@ export default function ExploreCards() {
   };
 
   const handleSwipe = async (direction: "left" | "right") => {
-    if (isSwipeAnimating || cards.length === 0) {
-      return;
-    }
+    if (isSwipeAnimating || cards.length === 0) return;
 
     setIsSwipeAnimating(true);
+
     await controls.start({
       x: direction === "left" ? -420 : 420,
       rotate: direction === "left" ? -18 : 18,
@@ -179,9 +192,11 @@ export default function ExploreCards() {
             className="object-cover"
           />
         </div>
+
         <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-bold tracking-wide shadow-sm">
           {card.tag}
         </div>
+
         <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-primary to-transparent" />
       </div>
 
@@ -210,6 +225,7 @@ export default function ExploreCards() {
           <span className="material-symbols-outlined text-3xl mt-0.5 text-terracotta shrink-0">
             location_on
           </span>
+
           <div className="flex flex-col gap-1">
             <p className="text-base font-semibold leading-snug opacity-95">{card.address}</p>
             <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
@@ -225,7 +241,7 @@ export default function ExploreCards() {
   );
 
   return (
-    <div className="min-h-screen bg-background-light text-[#0c141d] dark:text-slate-50 font-display transition-colors duration-200 overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-background-light text-[#0c141d] font-display transition-colors duration-200 overflow-hidden flex flex-col">
       {/* Header */}
       <header className="flex-none flex items-center justify-between px-6 py-4 bg-background-light z-20">
         <div className="relative w-12 h-12">
@@ -237,7 +253,9 @@ export default function ExploreCards() {
             className="object-contain scale-[1.8]"
           />
         </div>
+
         <h1 className="text-2xl font-bold tracking-tight text-primary">Explore</h1>
+
         <div className="w-12 flex justify-end">
           <button
             onClick={() => setFiltersOpen(true)}
@@ -253,10 +271,6 @@ export default function ExploreCards() {
         <div className="absolute w-[90%] h-[80%] bg-white/50 rounded-[2.5rem] -z-10 translate-y-4 scale-95 shadow-sm border border-slate-200" />
 
         <div className="relative w-full h-[650px]">
-          <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none hidden lg:flex">
-            
-          </div>
-
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence>
               {visibleCards.map((card, index) => (
@@ -300,6 +314,7 @@ export default function ExploreCards() {
           <span className="material-symbols-outlined text-3xl">close</span>
           <span className="text-lg font-bold tracking-wide">PASS</span>
         </button>
+
         <button
           onClick={() => handleSwipe("right")}
           disabled={isSwipeAnimating || cards.length === 0}
@@ -310,7 +325,7 @@ export default function ExploreCards() {
       </div>
 
       {/* Bottom Nav */}
-      <nav className="flex-none bg-white dark:bg-background-dark border-t border-slate-200 pb-safe z-30">
+      <nav className="flex-none bg-white border-t border-slate-200 pb-safe z-30">
         <div className="flex justify-around items-end pt-3 pb-4 px-2">
           {navigation.map((item) => (
             <a
@@ -367,35 +382,74 @@ type CardItemProps = {
 
 function CardItem({ card, index, isFront, controls, onSwipe, children }: CardItemProps) {
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-18, 18]);
+  const rotate = useTransform(x, [-220, 220], [-18, 18]);
+
+  // NEW: premium swipe overlays
+  const likeOpacity = useTransform(x, [40, 140], [0, 1]);
+  const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
-    const threshold = 120;
-    if (info.offset.x > threshold) {
+    const offset = info.offset.x;
+    const velocity = info.velocity.x;
+    const power = swipePower(offset, velocity);
+
+    const distanceThreshold = 120;
+    const powerThreshold = 900;
+
+    if (offset > distanceThreshold || power > powerThreshold) {
       await onSwipe("right");
-    } else if (info.offset.x < -threshold) {
-      await onSwipe("left");
+      x.set(0);
+      return;
     }
+
+    if (offset < -distanceThreshold || power > powerThreshold) {
+      await onSwipe("left");
+      x.set(0);
+      return;
+    }
+
+    // snap back
+    x.set(0);
   };
 
   return (
     <motion.div
       className="absolute inset-0 flex items-center justify-center px-2"
-        style={{
-          zIndex: isFront ? 50 : 40 - index,
-          x,
-          rotate,
-          scale: isFront ? 1 : 1 - index * 0.04,
-          y: isFront ? 0 : index * 24,
-        }}
+      style={{
+        zIndex: isFront ? 50 : 40 - index,
+        x,
+        rotate,
+        scale: isFront ? 1 : 1 - index * 0.04,
+        y: isFront ? 0 : index * 24,
+        willChange: "transform",
+      }}
       animate={isFront ? controls : undefined}
       drag={isFront ? "x" : false}
-      dragElastic={0.19}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragSnapToOrigin
+      dragElastic={0.12}
+      dragMomentum={false}
       onDragEnd={handleDragEnd}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.9 }}
       exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.2 } }}
     >
-      <div className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative">
+      <div className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y">
+        {/* NEW: Like / Nope overlays */}
+        {isFront && (
+          <>
+            <motion.div style={{ opacity: likeOpacity }} className="absolute top-6 left-6 z-20">
+              <div className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-extrabold tracking-widest shadow-lg">
+                LIKE
+              </div>
+            </motion.div>
+            <motion.div style={{ opacity: nopeOpacity }} className="absolute top-6 right-6 z-20">
+              <div className="px-4 py-2 rounded-xl bg-rose-500 text-white font-extrabold tracking-widest shadow-lg">
+                NOPE
+              </div>
+            </motion.div>
+          </>
+        )}
+
         {children}
       </div>
     </motion.div>
@@ -415,13 +469,12 @@ function FilterModal({
   toggles,
   setToggles,
 }: FilterModalProps) {
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex">
+    <div className="fixed inset-0 z-70 flex">
       <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-[2px]" onClick={close} />
+
       <div className="relative ml-auto w-full max-w-[80vw] md:max-w-xs">
         <div className="h-full bg-white shadow-2xl rounded-l-3xl p-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
@@ -553,6 +606,7 @@ function FilterModal({
               >
                 Reset
               </button>
+
               <button className="flex-[2] rounded-xl bg-primary px-3 py-3.5 text-xs font-bold text-white shadow-sm hover:brightness-110 active:scale-95 transition-all">
                 Apply Filters
               </button>
