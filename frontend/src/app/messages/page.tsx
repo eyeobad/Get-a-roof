@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
+import BottomNav from "@/components/BottomNav";
 
 type Conversation = {
   id: string;
@@ -64,13 +65,6 @@ const conversations: Conversation[] = [
   },
 ];
 
-const navItems = [
-  { label: "Explore", icon: "search", active: false },
-  { label: "Matches", icon: "group", active: false },
-  { label: "Messages", icon: "chat_bubble", active: true },
-  { label: "Profile", icon: "person", active: false },
-];
-
 const seedMessages: Message[] = [
   {
     id: "m1",
@@ -127,70 +121,6 @@ function ConversationAvatar({ src, alt }: { src: string; alt: string }) {
       />
       <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-green-500" />
     </div>
-  );
-}
-
-function DesktopNav() {
-  return (
-    <nav className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white px-6 py-3">
-      <div className="mx-auto flex max-w-6xl items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {navItems.map((item) => (
-          <a
-            key={item.label}
-            href="#"
-            className={`flex flex-1 flex-col items-center gap-1 transition-colors ${
-              item.active ? "text-primary" : "hover:text-primary"
-            }`}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={
-                item.active
-                  ? { fontSize: 28, fontVariationSettings: "'FILL' 1" }
-                  : { fontSize: 28 }
-              }
-            >
-              {item.icon}
-            </span>
-            <span className="text-[11px] leading-normal tracking-wide">
-              {item.label}
-            </span>
-          </a>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
-function MobileNav() {
-  return (
-    <nav className="absolute bottom-0 w-full border-t border-slate-200 bg-white px-6 py-3">
-      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {navItems.map((item) => (
-          <a
-            key={item.label}
-            href="#"
-            className={`flex flex-1 flex-col items-center gap-1 transition-colors ${
-              item.active ? "text-primary" : "hover:text-primary"
-            }`}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={
-                item.active
-                  ? { fontSize: 28, fontVariationSettings: "'FILL' 1" }
-                  : { fontSize: 28 }
-              }
-            >
-              {item.icon}
-            </span>
-            <span className="text-[11px] leading-normal tracking-wide">
-              {item.label}
-            </span>
-          </a>
-        ))}
-      </div>
-    </nav>
   );
 }
 
@@ -299,7 +229,7 @@ export default function MessagesPage() {
               ))}
             </main>
 
-            <MobileNav />
+            <BottomNav className="lg:hidden" />
           </>
         )}
 
@@ -636,14 +566,10 @@ export default function MessagesPage() {
             </section>
           </div>
 
-          {/* Desktop bottom nav */}
-          <DesktopNav />
+          <BottomNav className="hidden lg:block" />
         </div>
       </div>
 
-      <style>{`
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
-      `}</style>
     </>
   );
 }

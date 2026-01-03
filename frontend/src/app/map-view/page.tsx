@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import BottomNav from "@/components/BottomNav";
 
 const markers = [
   { price: "$325k", top: "25%", left: "20%" },
@@ -282,30 +283,7 @@ export default function MapView() {
           </main>
         )}
 
-        <nav className="bg-white border-t border-gray-200 pb-safe pt-2 px-6 shrink-0 z-30">
-          <div className="flex justify-between items-center h-16">
-            {[
-              { label: "Explore", icon: "search" },
-              { label: "Matches", icon: "group" },
-              { label: "Messages", icon: "chat_bubble" },
-              { label: "Profile", icon: "person" },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                href="/"
-                className={`flex flex-col items-center gap-1 text-gray-400 w-16 hover:text-primary transition-colors ${
-                  item.label === "Explore" ? "text-primary" : ""
-                }`}
-              >
-                <span className="material-symbols-outlined text-[22px] font-bold">
-                  {item.icon}
-                </span>
-                <span className="text-[11px] font-medium">{item.label}</span>
-              </Link>
-            ))}
-          </div>
-          <div className="h-4 w-full" />
-        </nav>
+        <BottomNav />
       </div>
 
       {/* Desktop (same as what you already have) */}

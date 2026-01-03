@@ -18,6 +18,8 @@ import {
   type PanInfo,
 } from "framer-motion";
 
+import BottomNav from "@/components/BottomNav";
+
 type ExploreCard = {
   id: string;
   image: string;
@@ -111,15 +113,6 @@ const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velo
 
 export default function ExploreCards() {
   const router = useRouter();
-
-  const navigation = [
-    { icon: "search", label: "Explore", active: true },
-    { icon: "groups", label: "Matches" },
-    { icon: "chat_bubble", label: "Messages" },
-    { icon: "person", label: "Profile" },
-  ];
-
-  const solidStyle = { fontVariationSettings: "'FILL' 1" };
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [budget, setBudget] = useState(100000);
@@ -324,29 +317,7 @@ export default function ExploreCards() {
         </button>
       </div>
 
-      {/* Bottom Nav */}
-      <nav className="flex-none bg-white border-t border-slate-200 pb-safe z-30">
-        <div className="flex justify-around items-end pt-3 pb-4 px-2">
-          {navigation.map((item) => (
-            <a
-              key={item.label}
-              href="#"
-              className={`flex flex-1 flex-col items-center gap-1 group ${
-                item.active ? "text-primary" : "text-slate-400"
-              }`}
-            >
-              <div className="p-1 rounded-full group-hover:bg-primary/5 transition-colors">
-                <span className="material-symbols-outlined text-3xl" style={solidStyle}>
-                  {item.icon}
-                </span>
-              </div>
-              <span className={`text-xs font-semibold ${item.active ? "text-primary" : ""}`}>
-                {item.label}
-              </span>
-            </a>
-          ))}
-        </div>
-      </nav>
+      <BottomNav />
 
       {/* Filters Drawer */}
       <FilterModal
@@ -364,7 +335,6 @@ export default function ExploreCards() {
       />
 
       <style>{`
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
         ::-webkit-scrollbar { width: 0px; background: transparent; }
       `}</style>
     </div>
