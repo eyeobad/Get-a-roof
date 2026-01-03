@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+
 const sections = [
   {
     key: "employment",
@@ -77,18 +78,23 @@ const sections = [
     primaryIndex: 1,
     fullWidth: true,
   },
-];
+] as const;
+
+type Section = (typeof sections)[number];
+type SectionKey = Section["key"];
+type Selections = Record<SectionKey, number>;
 
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
-  const [selections, setSelections] = useState(() =>
-    sections.reduce(
-      (acc, section) => ({ ...acc, [section.key]: section.primaryIndex ?? 0 }),
-      {}
-    )
-  );
 
-  const handleSelect = (key: string, index: number) => {
+  const [selections, setSelections] = useState<Selections>(() => {
+    return sections.reduce((acc, section) => {
+      acc[section.key] = section.primaryIndex ?? 0;
+      return acc;
+    }, {} as Selections);
+  });
+
+  const handleSelect = (key: SectionKey, index: number) => {
     setSelections((prev) => ({ ...prev, [key]: index }));
   };
 
@@ -110,7 +116,9 @@ export default function TenantMoreAboutYou() {
               <span className="text-sm font-bold text-primary dark:text-blue-400 tracking-wide">
                 Step 2 of 3
               </span>
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">67%</span>
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                67%
+              </span>
             </div>
             <div
               aria-label="Onboarding progress"
@@ -126,7 +134,10 @@ export default function TenantMoreAboutYou() {
               />
             </div>
           </div>
-         <h1 className="text-3xl font-bold text-slate-900  mb-2 tracking-tight">More About You</h1>
+
+          <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">
+            More About You
+          </h1>
           <p className="text-lg text-slate-500 dark:text-slate-600 leading-relaxed">
             Help us find the best match for your property needs.
           </p>
@@ -136,12 +147,20 @@ export default function TenantMoreAboutYou() {
           {sectionData.map((section) => (
             <section key={section.key}>
               <div className="flex items-center gap-2 mb-3">
-                <span className="material-icons-round text-primary text-2xl">{section.icon}</span>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-black/70 ">{section.title}</h2>
+                <span className="material-icons-round text-primary text-2xl">
+                  {section.icon}
+                </span>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-black/70">
+                  {section.title}
+                </h2>
               </div>
+
               {section.note && (
-                <p className="text-slate-500 dark:text-slate-400 text-sm mb-3 ml-8 ">{section.note}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mb-3 ml-8">
+                  {section.note}
+                </p>
               )}
+
               <div
                 className={`flex ${section.fullWidth ? "flex-col" : "flex-wrap"} gap-3 ${
                   section.fullWidth ? "mb-4" : ""
@@ -149,7 +168,10 @@ export default function TenantMoreAboutYou() {
               >
                 {section.buttonLabels.map((label, index) => {
                   const isPrimary = section.selectedIndex === index;
-                  const baseClasses = section.fullWidth ? "w-full text-left pl-6" : "px-6";
+                  const baseClasses = section.fullWidth
+                    ? "w-full text-left pl-6"
+                    : "px-6";
+
                   return (
                     <button
                       key={label}
@@ -171,20 +193,29 @@ export default function TenantMoreAboutYou() {
 
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-2xl">paid</span>
-              <h2 className="text-xl font-bold text-dark/60 dark:text-black/70">Annual Earnings</h2>
+              <span className="material-icons-round text-primary text-2xl">
+                paid
+              </span>
+              <h2 className="text-xl font-bold text-dark/60 dark:text-black/70">
+                Annual Earnings
+              </h2>
             </div>
+
             <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-260 shadow-lg rounded-2xl p-6 shadow-soft">
               <div className="flex justify-between items-center mb-6">
-                <label className="text-lg font-medium text-slate-600 dark:text-slate-500" htmlFor="earnings">
+                <label
+                  className="text-lg font-medium text-slate-600 dark:text-slate-500"
+                  htmlFor="earnings"
+                >
                   Yearly Income
                 </label>
                 <span className="text-2xl font-bold text-primary dark:text-blue-400 tabular-nums">
                   ${earnings.toLocaleString()}
                 </span>
               </div>
+
               <input
-                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary focus:outline-none "
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary focus:outline-none"
                 id="earnings"
                 max={250000}
                 min={0}
@@ -193,6 +224,7 @@ export default function TenantMoreAboutYou() {
                 value={earnings}
                 onChange={(event) => setEarnings(Number(event.target.value))}
               />
+
               <div className="flex justify-between mt-3 text-sm font-medium text-slate-500">
                 <span>$0</span>
                 <span>$250k+</span>
@@ -203,9 +235,9 @@ export default function TenantMoreAboutYou() {
 
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-300 z-10 flex justify-center">
           <div className="max-w-md w-full">
-            <Link href={'/tenant-onboarding/review'}
-              className=" w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
-              type="button"
+            <Link
+              href="/tenant-onboarding/review"
+              className="w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
             >
               Next Step
               <span className="material-icons-round text-xl">arrow_forward</span>
