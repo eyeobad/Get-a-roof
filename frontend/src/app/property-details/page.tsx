@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const socialLinks = [
   { name: "Twitter", href: "https://twitter.com/intent/tweet?text=Check%20out%20this%20listing", icon: "twitter" },
@@ -20,6 +21,7 @@ export default function PropertyDetails() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const router = useRouter();
 
   const prevSlide = () =>
     setCurrentIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
@@ -36,13 +38,13 @@ export default function PropertyDetails() {
     <div className="min-h-screen text-slate-900 font-display">
       <div className="relative flex flex-col min-h-screen w-full max-w-md mx-auto pb-32">
         <header className="fixed top-0 left-0 right-0 z-50 max-w-md mx-auto flex items-center justify-between px-4 pt-6 pb-2 pointer-events-none">
-          <Link
-            aria-label="Back to explore"
-            href="/explore"
+          <button
+            aria-label="Go back"
+            onClick={() => router.back()}
             className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg text-slate-900 hover:bg-white transition-transform active:scale-95"
           >
             <span className="material-symbols-outlined text-3xl">arrow_back</span>
-          </Link>
+          </button>
           <div className="relative">
             <button
               aria-label="Share property"

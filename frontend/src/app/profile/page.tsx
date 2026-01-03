@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 type Option = { label: string };
 type PreferenceGroup = {
   key: string;
@@ -133,6 +133,7 @@ function Modal({
 
 export default function ProfilePage() {
   // ---- SOURCE OF TRUTH (enterprise pattern) ----
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileState>(() => ({
     fullName: "Sarah Jenkins",
     email: "sarah.jenkins@example.com",
@@ -191,12 +192,13 @@ export default function ProfilePage() {
       <div className="mx-auto w-full max-w-md lg:max-w-6xl lg:px-6">
         {/* Header */}
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-background-light px-4 py-3 lg:px-0">
-          <Link href="/explore"
+          <button
+            onClick={() => router.back()}
             aria-label="Go back"
             className="rounded-full p-2 text-primary transition-colors hover:bg-slate-100"
           >
             <span className="material-symbols-outlined text-[28px]">arrow_back</span>
-          </Link>
+          </button>
 
           <h2 className="flex-1 text-center text-2xl font-bold tracking-tight text-primary">My Profile</h2>
 

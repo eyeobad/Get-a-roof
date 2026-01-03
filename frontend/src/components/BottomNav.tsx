@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AnimatedIcon from "@/components/AnimatedIcon";
+import { type MotionScheme } from "@/lib/motion";
 
 const navItems = [
   { label: "Explore", icon: "search", href: "/explore" },
@@ -10,13 +12,12 @@ const navItems = [
   { label: "Profile", icon: "person", href: "/profile" },
 ];
 
-const solidStyle = { fontVariationSettings: "'FILL' 1" };
-
 type BottomNavProps = {
   className?: string;
+  scheme?: MotionScheme;
 };
 
-export default function BottomNav({ className = "" }: BottomNavProps) {
+export default function BottomNav({ className = "", scheme }: BottomNavProps) {
   const pathname = usePathname();
   const normalizedPath = pathname === "/" ? "/explore" : pathname;
 
@@ -37,12 +38,11 @@ export default function BottomNav({ className = "" }: BottomNavProps) {
               aria-current={isActive ? "page" : undefined}
             >
               <div className="p-1 rounded-full group-hover:bg-primary/5 transition-colors">
-                <span
-                  className="material-symbols-outlined text-3xl"
-                  style={solidStyle}
-                >
-                  {item.icon}
-                </span>
+                <AnimatedIcon
+                  name={item.icon}
+                  active={isActive}
+                  scheme={isActive ? "expressive" : scheme}
+                />
               </div>
               <span
                 className={`text-xs font-semibold ${isActive ? "text-primary" : ""}`}

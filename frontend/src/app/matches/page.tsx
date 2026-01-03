@@ -2,8 +2,10 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import { useMotionScheme } from "@/lib/motion";
 
 type Match = {
   id: string;
@@ -24,7 +26,7 @@ const matchesSeed: Match[] = [
     id: "match-1",
     title: "4 Bed Duplex",
     location: "Lekki Phase 1, Lagos",
-    price: "â‚¦85,000,000",
+    price: "₦85,000,000",
     image: "/p5.png",
     tags: ["Serviced", "Gym"],
     online: true,
@@ -37,7 +39,7 @@ const matchesSeed: Match[] = [
     id: "match-2",
     title: "5 Bed Villa",
     location: "Ikoyi, Lagos",
-    price: "â‚¦120,000,000",
+    price: "₦120,000,000",
     image: "/p6.png",
     tags: ["Pool", "Security"],
     online: true,
@@ -48,7 +50,7 @@ const matchesSeed: Match[] = [
     id: "match-3",
     title: "3 Bed Apartment",
     location: "Victoria Island, Lagos",
-    price: "â‚¦45,000,000",
+    price: "₦45,000,000",
     image: "/p7.png",
     tags: ["Furnished"],
     online: false,
@@ -59,7 +61,7 @@ const matchesSeed: Match[] = [
     id: "match-4",
     title: "3 Bed Terrace",
     location: "Ajah, Lagos",
-    price: "â‚¦60,000,000",
+    price: "₦60,000,000",
     image: "/p8.png",
     tags: ["New Build", "Parking"],
     online: false,
@@ -73,6 +75,8 @@ export default function MatchesPage() {
   const matches = useMemo(() => matchesSeed, []);
   const [selectedId, setSelectedId] = useState(matches[0]?.id ?? "");
   const selected = matches.find((m) => m.id === selectedId) ?? matches[0];
+  const { effects } = useMotionScheme();
+  const tapToken = effects.tap;
 
   const openChat = (id: string) => {
     setSelectedId(id);
@@ -90,14 +94,14 @@ export default function MatchesPage() {
                 Matches
               </h1>
               <div className="flex items-center gap-2">
-                <button
+                <motion.button
                   aria-label="Search"
                   className="flex items-center justify-center text-[#1A1A1A] p-2 rounded-full hover:bg-black/5 transition-colors"
                 >
                   <span className="material-symbols-outlined text-3xl">
                     search
                   </span>
-                </button>
+                  </motion.button>
                 <button
                   aria-label="Filter"
                   className="flex items-center justify-center text-[#1A1A1A] p-2 rounded-full hover:bg-black/5 transition-colors"
@@ -113,9 +117,11 @@ export default function MatchesPage() {
           <main className="flex-1 px-5 pt-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {matches.map((m) => (
-                <button
+                <motion.button
                   key={m.id}
-                  onClick={() => router.push("/property-details")}
+                  onClick={() => openChat(m.id)}
+                  whileTap={{ scale: tapToken.scale }}
+                  transition={tapToken.transition}
                   className="text-left bg-white rounded-[24px] overflow-hidden shadow-sm border border-black/5 flex flex-col active:scale-[0.98] transition-transform duration-200"
                 >
                   <div className="relative aspect-[4/3] bg-gray-200">
@@ -156,7 +162,7 @@ export default function MatchesPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {m.tags.map((t) => (
+              {m.tags.map((t) => (
                         <span
                           key={t}
                           className="px-3 py-1.5 rounded-full bg-[#e7ebf4] text-primary text-sm font-bold"
@@ -166,7 +172,7 @@ export default function MatchesPage() {
                       ))}
                     </div>
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
 
@@ -208,18 +214,20 @@ export default function MatchesPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 no-scrollbar">
-            {matches.map((m) => {
-              const active = m.id === selectedId;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => openChat(m.id)}
-                  className={`w-full text-left rounded-2xl border transition-colors overflow-hidden ${
-                    active
-                      ? "border-primary bg-white shadow-sm"
-                      : "border-black/5 bg-white hover:bg-white/80"
-                  }`}
-                >
+              {matches.map((m) => {
+                const active = m.id === selectedId;
+                return (
+                  <motion.button
+                    key={m.id}
+                    onClick={() => openChat(m.id)}
+                    whileTap={{ scale: tapToken.scale }}
+                    transition={tapToken.transition}
+                    className={`w-full text-left rounded-2xl border transition-colors overflow-hidden ${
+                      active
+                        ? "border-primary bg-white shadow-sm"
+                        : "border-black/5 bg-white hover:bg-white/80"
+                    }`}
+                  >
                   <div className="flex gap-4 p-4">
                     <div className="relative h-16 w-16 rounded-2xl overflow-hidden bg-gray-200 shrink-0">
                       <Image
@@ -268,7 +276,7 @@ export default function MatchesPage() {
                       </div>
                     </div>
                   </div>
-                </button>
+                </motion.button>
               );
             })}
 
