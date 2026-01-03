@@ -84,6 +84,8 @@ type Section = (typeof sections)[number];
 type SectionKey = Section["key"];
 type Selections = Record<SectionKey, number>;
 
+type SectionWithSelection = Section & { selectedIndex: number };
+
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
 
@@ -98,10 +100,10 @@ export default function TenantMoreAboutYou() {
     setSelections((prev) => ({ ...prev, [key]: index }));
   };
 
-  const sectionData = useMemo(() => {
+  const sectionData = useMemo<SectionWithSelection[]>(() => {
     return sections.map((section) => ({
       ...section,
-      selectedIndex: selections[section.key as SectionKey],
+      selectedIndex: selections[section.key],
     }));
   }, [selections]);
 
