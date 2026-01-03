@@ -7,10 +7,9 @@ import { useAppStore } from "@/store/useAppStore";
 export default function PropertyDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const listingId = params?.id;
-  const listing = useAppStore((state) =>
-    listingId ? state.listingsById[listingId] ?? null : null
-  );
+  const listingIdRaw = params?.id;
+  const listingId = Array.isArray(listingIdRaw) ? listingIdRaw[0] : listingIdRaw ?? null;
+  const listing = useAppStore((state) => (listingId ? state.listingsById[listingId] ?? null : null));
 
   if (!listing) {
     return (

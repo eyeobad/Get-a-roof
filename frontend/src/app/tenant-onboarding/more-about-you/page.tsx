@@ -87,13 +87,12 @@ type Selections = Record<SectionKey, number>;
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
 
-  const [selections, setSelections] = useState<Selections>(() => {
-    const initial = {} as Selections;
-    for (const section of sections) {
-      initial[section.key] = section.primaryIndex ?? 0;
-    }
-    return initial;
-  });
+  const [selections, setSelections] = useState<Selections>(() =>
+    sections.reduce<Selections>((acc, section) => {
+      acc[section.key] = section.primaryIndex ?? 0;
+      return acc;
+    }, {} as Selections)
+  );
 
   const handleSelect = (key: SectionKey, index: number) => {
     setSelections((prev) => ({ ...prev, [key]: index }));
