@@ -146,7 +146,6 @@ export default function MessagesPage() {
   const openConversation = (id: string) => {
     setActiveId(id);
     setMobileView("chat");
-    // optional: mark unread off in UI state here if you want
   };
 
   const sendMessage = () => {
@@ -164,7 +163,6 @@ export default function MessagesPage() {
     setMessages((prev) => [...prev, next]);
     setMessageText("");
 
-    // scroll to bottom next tick
     requestAnimationFrame(() => {
       chatRef.current?.scrollTo({
         top: chatRef.current.scrollHeight,
@@ -175,9 +173,8 @@ export default function MessagesPage() {
 
   return (
     <>
-      {/* MOBILE */}
+      {/* MOBILE (DO NOT TOUCH) */}
       <div className="relative flex h-screen w-full max-w-md flex-col overflow-hidden bg-background-light text-slate-900 shadow-2xl lg:hidden">
-        {/* Mobile List View */}
         {mobileView === "list" && (
           <>
             <header className="flex items-center justify-between border-b border-slate-200 bg-background-light px-5 py-5">
@@ -233,7 +230,6 @@ export default function MessagesPage() {
           </>
         )}
 
-        {/* Mobile Chat View */}
         {mobileView === "chat" && activeConversation && (
           <>
             <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-4">
@@ -349,12 +345,11 @@ export default function MessagesPage() {
         )}
       </div>
 
-      {/* DESKTOP */}
+      {/* DESKTOP (bottom nav should sit under LEFT column only) */}
       <div className="hidden lg:block h-screen overflow-hidden bg-background-light text-slate-900">
         <div className="relative h-screen overflow-hidden">
-          {/* Content area (reserve space for desktop bottom nav) */}
-          <div className="flex h-full pb-[76px]">
-            {/* LEFT: conversations list (scrollable, no visible scrollbar) */}
+          <div className="flex h-full">
+            {/* LEFT: conversations list + BottomNav under it */}
             <aside className="w-[420px] border-r border-slate-200 bg-white flex flex-col overflow-hidden">
               <header className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
                 <div>
@@ -387,16 +382,16 @@ export default function MessagesPage() {
                 </div>
               </div>
 
+              {/* Scrollable list: reserve space for BottomNav by adding pb */}
               <main
                 ref={listRef}
-                className="flex-1 overflow-y-auto pr-2"
+                className="flex-1 overflow-y-auto pr-2 pb-[76px]"
                 style={{
                   scrollbarWidth: "none",
                   msOverflowStyle: "none",
                 }}
               >
                 <style>{`
-                  /* hide scrollbar (desktop list + chat) */
                   .no-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
                 `}</style>
 
@@ -443,11 +438,13 @@ export default function MessagesPage() {
                   <div className="h-4" />
                 </div>
               </main>
+
+              {/* BottomNav pinned to the bottom of the LEFT column only */}
+              <BottomNav className="hidden lg:block" />
             </aside>
 
-            {/* RIGHT: chat panel */}
+            {/* RIGHT: chat panel (NO BottomNav under here) */}
             <section className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
-              {/* Chat header */}
               <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="h-11 w-11 rounded-full overflow-hidden relative bg-slate-100 shrink-0">
@@ -481,7 +478,6 @@ export default function MessagesPage() {
                 </div>
               </header>
 
-              {/* Messages */}
               <main
                 ref={chatRef}
                 className="flex-1 overflow-y-auto px-8 py-6 no-scrollbar"
@@ -528,7 +524,6 @@ export default function MessagesPage() {
                 </div>
               </main>
 
-              {/* Composer */}
               <div className="border-t border-slate-200 bg-white px-6 py-4">
                 <div className="mx-auto flex max-w-3xl items-end gap-3">
                   <button
@@ -565,11 +560,8 @@ export default function MessagesPage() {
               </div>
             </section>
           </div>
-
-          <BottomNav className="hidden lg:block" />
         </div>
       </div>
-
     </>
   );
 }

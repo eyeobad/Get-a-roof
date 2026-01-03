@@ -80,7 +80,7 @@ export default function MatchesPage() {
 
   const openChat = (id: string) => {
     setSelectedId(id);
-    router.push("/property-details");
+    router.push(`/property-details/${id}`);
   };
 
   return (

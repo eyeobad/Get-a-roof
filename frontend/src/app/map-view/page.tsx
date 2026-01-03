@@ -263,7 +263,7 @@ export default function MapView() {
                 </div>
 
                 <Link
-                  href="/property-details"
+                  href="/property-details/listing-1"
                   className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                 >
                   <span>View Home Details</span>

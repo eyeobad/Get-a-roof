@@ -19,18 +19,8 @@ import {
 } from "framer-motion";
 
 import BottomNav from "@/components/BottomNav";
-
-type ExploreCard = {
-  id: string;
-  image: string;
-  price: string;
-  period: string;
-  stats: { icon: string; label: string }[];
-  address: string;
-  highlight: string;
-  tag: string;
-  alt: string;
-};
+import { useAppStore } from "@/store/useAppStore";
+import type { Listing } from "@/lib/listings";
 
 type FilterModalProps = {
   isOpen: boolean;
@@ -45,69 +35,6 @@ type FilterModalProps = {
   toggles: Record<string, boolean>;
   setToggles: Dispatch<SetStateAction<Record<string, boolean>>>;
 };
-
-const exploreData: ExploreCard[] = [
-  {
-    id: "listing-1",
-    image: "/hero.png",
-    price: "$3,500",
-    period: "/mo",
-    stats: [
-      { icon: "bed", label: "3 Beds" },
-      { icon: "bathtub", label: "2 Baths" },
-      { icon: "square_foot", label: "1,850 sqft" },
-    ],
-    address: "4528 Evergreen Terrace, Springfield, IL",
-    highlight: "Shared Apartment",
-    tag: "New Listing",
-    alt: "Modern suburban home",
-  },
-  {
-    id: "listing-2",
-    image: "/p2.png",
-    price: "$2,750",
-    period: "/mo",
-    stats: [
-      { icon: "bed", label: "2 Beds" },
-      { icon: "bathtub", label: "2 Baths" },
-      { icon: "square_foot", label: "1,300 sqft" },
-    ],
-    address: "21 Johnson Street, Victoria Island, NG",
-    highlight: "Self Compound",
-    tag: "Curated Pick",
-    alt: "Contemporary apartment facade",
-  },
-  {
-    id: "listing-3",
-    image: "/p3.png",
-    price: "$4,100",
-    period: "/mo",
-    stats: [
-      { icon: "bed", label: "4 Beds" },
-      { icon: "bathtub", label: "3 Baths" },
-      { icon: "square_foot", label: "2,200 sqft" },
-    ],
-    address: "8 Palm Drive, Lekki, NG",
-    highlight: "Shortlets",
-    tag: "Beachside",
-    alt: "Luxury villa with pool",
-  },
-  {
-    id: "listing-4",
-    image: "/p4.png",
-    price: "$3,100",
-    period: "/mo",
-    stats: [
-      { icon: "bed", label: "3 Beds" },
-      { icon: "bathtub", label: "2 Baths" },
-      { icon: "square_foot", label: "1,600 sqft" },
-    ],
-    address: "120 Harmon Road, Abuja",
-    highlight: "Self Compound",
-    tag: "Newly Renovated",
-    alt: "Modern penthouse during golden hour",
-  },
-];
 
 const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
 
@@ -136,23 +63,37 @@ export default function ExploreCards() {
     }, {})
   );
 
-  const exploreCards = useMemo<ExploreCard[]>(() => exploreData, []);
-  const [cards, setCards] = useState<ExploreCard[]>(exploreCards);
+  const exploreQueue = useAppStore((state) => state.exploreQueue);
+  const listingsById = useAppStore((state) => state.listingsById);
+  const likeListing = useAppStore((state) => state.likeListing);
+  const passListing = useAppStore((state) => state.passListing);
+  const advanceQueue = useAppStore((state) => state.advanceQueue);
+  const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
+  const ensureMatchForListing = useAppStore((state) => state.ensureMatchForListing);
+  const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
+
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
 
   const controls = useAnimation();
-  const visibleCards = cards.slice(0, 3);
 
-  const removeTopCard = () => setCards((prev) => prev.slice(1));
+  const visibleCards = useMemo(() => {
+    return exploreQueue
+      .slice(0, 3)
+      .map((id) => listingsById[id])
+      .filter((listing): listing is Listing => Boolean(listing));
+  }, [exploreQueue, listingsById]);
 
   const resetDeck = () => {
-    setCards(exploreCards);
+    resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
   };
 
   const handleSwipe = async (direction: "left" | "right") => {
-    if (isSwipeAnimating || cards.length === 0) return;
+    if (isSwipeAnimating || visibleCards.length === 0) return;
+
+    const topListing = visibleCards[0];
+    if (!topListing) return;
 
     setIsSwipeAnimating(true);
 
@@ -163,17 +104,22 @@ export default function ExploreCards() {
       transition: { duration: 0.35 },
     });
 
-    removeTopCard();
-
     if (direction === "right") {
-      router.push("/property-details");
+      likeListing(topListing.id);
+      ensureMatchForListing(topListing.id);
+      setSelectedListingId(topListing.id);
+      router.push(`/property-details/${topListing.id}`);
+    } else {
+      passListing(topListing.id);
     }
+
+    advanceQueue();
 
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
   };
 
-  const cardBody = (card: ExploreCard) => (
+  const cardBody = (card: Listing) => (
     <>
       <div className="relative h-[65%] w-full pointer-events-none">
         <div className="absolute inset-0">
@@ -269,7 +215,6 @@ export default function ExploreCards() {
               {visibleCards.map((card, index) => (
                 <CardItem
                   key={card.id}
-                  card={card}
                   index={index}
                   isFront={index === 0}
                   controls={controls}
@@ -282,7 +227,7 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {cards.length === 0 && (
+        {exploreQueue.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>
@@ -301,7 +246,7 @@ export default function ExploreCards() {
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-4 pb-8 grid grid-cols-2 gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
-          disabled={isSwipeAnimating || cards.length === 0}
+          disabled={isSwipeAnimating || visibleCards.length === 0}
           className="flex items-center justify-center gap-2 h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
@@ -310,7 +255,7 @@ export default function ExploreCards() {
 
         <button
           onClick={() => handleSwipe("right")}
-          disabled={isSwipeAnimating || cards.length === 0}
+          disabled={isSwipeAnimating || visibleCards.length === 0}
           className="flex items-center justify-center h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-70"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
@@ -342,7 +287,6 @@ export default function ExploreCards() {
 }
 
 type CardItemProps = {
-  card: ExploreCard;
   index: number;
   isFront: boolean;
   controls: ReturnType<typeof useAnimation>;
@@ -350,7 +294,7 @@ type CardItemProps = {
   children: ReactNode;
 };
 
-function CardItem({ card, index, isFront, controls, onSwipe, children }: CardItemProps) {
+function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
 
@@ -358,7 +302,7 @@ function CardItem({ card, index, isFront, controls, onSwipe, children }: CardIte
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
 
-  const handleDragEnd = async (_: any, info: PanInfo) => {
+  const handleDragEnd = async (_: unknown, info: PanInfo) => {
     const offset = info.offset.x;
     const velocity = info.velocity.x;
     const power = swipePower(offset, velocity);
