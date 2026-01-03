@@ -102,7 +102,7 @@ export default function TenantMoreAboutYou() {
   const sectionData = useMemo(() => {
     return sections.map((section) => ({
       ...section,
-      selectedIndex: selections[section.key], // ✅ now strongly typed
+      selectedIndex: selections[section.key as SectionKey],
     }));
   }, [selections]);
 
