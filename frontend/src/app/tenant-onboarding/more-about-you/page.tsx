@@ -3,8 +3,20 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
+type SectionKey =
+  | "employment"
+  | "marital"
+  | "vehicles"
+  | "pets"
+  | "smoking"
+  | "drinking"
+  | "religion"
+  | "education"
+  | "social"
+  | "children";
+
 type SectionConfig = {
-  key: string;
+  key: SectionKey;
   title: string;
   icon: string;
   buttonLabels: readonly string[];
@@ -13,7 +25,7 @@ type SectionConfig = {
   fullWidth?: boolean;
 };
 
-const sections = [
+const sections: readonly SectionConfig[] = [
   {
     key: "employment",
     title: "Employment Status",
@@ -88,12 +100,10 @@ const sections = [
     primaryIndex: 1,
     fullWidth: true,
   },
-] as const satisfies readonly SectionConfig[];
+];
 
-type Section = (typeof sections)[number];
-type SectionKey = Section["key"];
 type Selections = Record<SectionKey, number>;
-type SectionWithSelection = Section & { selectedIndex: number };
+type SectionWithSelection = SectionConfig & { selectedIndex: number };
 
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
@@ -126,6 +136,7 @@ export default function TenantMoreAboutYou() {
               </span>
               <span className="text-xs font-semibold text-slate-400">67%</span>
             </div>
+
             <div
               aria-label="Onboarding progress"
               aria-valuemax={5}
@@ -141,9 +152,7 @@ export default function TenantMoreAboutYou() {
             </div>
           </div>
 
-          <h1 className="text-3xl font-bold mb-2 tracking-tight">
-            More About You
-          </h1>
+          <h1 className="text-3xl font-bold mb-2 tracking-tight">More About You</h1>
           <p className="text-lg text-slate-500 leading-relaxed">
             Help us find the best match for your property needs.
           </p>
@@ -156,27 +165,17 @@ export default function TenantMoreAboutYou() {
                 <span className="material-icons-round text-primary text-2xl">
                   {section.icon}
                 </span>
-                <h2 className="text-xl font-bold text-slate-800">
-                  {section.title}
-                </h2>
+                <h2 className="text-xl font-bold text-slate-800">{section.title}</h2>
               </div>
 
               {section.note ? (
-                <p className="text-slate-500 text-sm mb-3 ml-8">
-                  {section.note}
-                </p>
+                <p className="text-slate-500 text-sm mb-3 ml-8">{section.note}</p>
               ) : null}
 
-              <div
-                className={`flex ${
-                  section.fullWidth ? "flex-col" : "flex-wrap"
-                } gap-3`}
-              >
+              <div className={`flex ${section.fullWidth ? "flex-col" : "flex-wrap"} gap-3`}>
                 {section.buttonLabels.map((label, index) => {
                   const isSelected = section.selectedIndex === index;
-                  const base = section.fullWidth
-                    ? "w-full text-left pl-6"
-                    : "px-6";
+                  const base = section.fullWidth ? "w-full text-left pl-6" : "px-6";
 
                   return (
                     <button
@@ -199,20 +198,13 @@ export default function TenantMoreAboutYou() {
 
           <section>
             <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-2xl">
-                paid
-              </span>
-              <h2 className="text-xl font-bold text-slate-700">
-                Annual Earnings
-              </h2>
+              <span className="material-icons-round text-primary text-2xl">paid</span>
+              <h2 className="text-xl font-bold text-slate-700">Annual Earnings</h2>
             </div>
 
             <div className="bg-white border border-slate-200 shadow-lg rounded-2xl p-6">
               <div className="flex justify-between items-center mb-6">
-                <label
-                  className="text-lg font-medium text-slate-600"
-                  htmlFor="earnings"
-                >
+                <label className="text-lg font-medium text-slate-600" htmlFor="earnings">
                   Yearly Income
                 </label>
                 <span className="text-2xl font-bold text-primary tabular-nums">
