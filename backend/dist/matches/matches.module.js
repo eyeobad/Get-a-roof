@@ -14,6 +14,7 @@ const matches_service_1 = require("./matches.service");
 const match_schema_1 = require("./schemas/match.schema");
 const users_module_1 = require("../users/users.module");
 const properties_module_1 = require("../properties/properties.module");
+const message_schema_1 = require("../chat/schemas/message.schema");
 let MatchesModule = class MatchesModule {
 };
 exports.MatchesModule = MatchesModule;
@@ -21,6 +22,7 @@ exports.MatchesModule = MatchesModule = __decorate([
     (0, common_1.Module)({
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: message_schema_1.Message.name, schema: message_schema_1.MessageSchema }]),
             users_module_1.UsersModule,
             properties_module_1.PropertiesModule,
         ],

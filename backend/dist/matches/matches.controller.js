@@ -29,6 +29,9 @@ let MatchesController = class MatchesController {
         dto.tenantId = req.user?.sub;
         return this.matchesService.createMatch(dto);
     }
+    getTenantMatches(req) {
+        return this.matchesService.getTenantMatches(req.user?.sub);
+    }
     update(id, dto, req) {
         return this.matchesService.updateMatchForLandlord(id, dto, req.user?.sub);
     }
@@ -44,6 +47,15 @@ __decorate([
     __metadata("design:paramtypes", [create_match_dto_1.CreateMatchDto, Object]),
     __metadata("design:returntype", void 0)
 ], MatchesController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)("tenant"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "getTenantMatches", null);
 __decorate([
     (0, common_1.Patch)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

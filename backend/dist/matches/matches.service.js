@@ -21,9 +21,11 @@ const enums_1 = require("../common/enums");
 const users_service_1 = require("../users/users.service");
 const properties_service_1 = require("../properties/properties.service");
 const match_utils_1 = require("../common/utils/match.utils");
+const message_schema_1 = require("../chat/schemas/message.schema");
 let MatchesService = class MatchesService {
-    constructor(matchModel, usersService, propertiesService) {
+    constructor(matchModel, messageModel, usersService, propertiesService) {
         this.matchModel = matchModel;
+        this.messageModel = messageModel;
         this.usersService = usersService;
         this.propertiesService = propertiesService;
     }
@@ -36,6 +38,7 @@ let MatchesService = class MatchesService {
         const matchInput = {
             propertyType: property.propertyType,
             monthlyPrice: property.monthlyPrice,
+            petFriendly: property.petFriendly,
             landlordRequirements: property.landlordRequirements,
         };
         const matchScoreData = (0, match_utils_1.computeMatchScore)(tenant.preferences?.tenant, matchInput);
@@ -89,12 +92,84 @@ let MatchesService = class MatchesService {
             .distinct("propertyId")
             .exec();
     }
+    async getTenantMatches(tenantId) {
+        const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
+        const pipeline = [
+            { $match: { tenantId: tenantObjectId } },
+            {
+                $lookup: {
+                    from: "properties",
+                    localField: "propertyId",
+                    foreignField: "_id",
+                    as: "property",
+                },
+            },
+            { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "messages",
+                    let: { matchId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$matchId", "$$matchId"] } } },
+                        { $sort: { timestamp: -1 } },
+                        {
+                            $group: {
+                                _id: null,
+                                lastMessage: { $first: "$$ROOT" },
+                                unreadCount: {
+                                    $sum: {
+                                        $cond: [
+                                            {
+                                                $and: [
+                                                    { $eq: ["$receiverId", tenantObjectId] },
+                                                    { $eq: ["$isRead", false] },
+                                                ],
+                                            },
+                                            1,
+                                            0,
+                                        ],
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            $project: {
+                                _id: 0,
+                                lastMessage: 1,
+                                unreadCount: 1,
+                            },
+                        },
+                    ],
+                    as: "messageMeta",
+                },
+            },
+            {
+                $addFields: {
+                    lastMessage: {
+                        $ifNull: [{ $arrayElemAt: ["$messageMeta.lastMessage", 0] }, null],
+                    },
+                    unreadCount: {
+                        $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
+                    },
+                },
+            },
+            {
+                $project: {
+                    messageMeta: 0,
+                },
+            },
+            { $sort: { updatedAt: -1 } },
+        ];
+        return this.matchModel.aggregate(pipeline).exec();
+    }
 };
 exports.MatchesService = MatchesService;
 exports.MatchesService = MatchesService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(match_schema_1.Match.name)),
+    __param(1, (0, mongoose_1.InjectModel)(message_schema_1.Message.name)),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         users_service_1.UsersService,
         properties_service_1.PropertiesService])
 ], MatchesService);

@@ -95,6 +95,10 @@ __decorate([
 ], TenantPreferences.prototype, "hasPets", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
+    __metadata("design:type", Boolean)
+], TenantPreferences.prototype, "petFriendlyRequired", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], TenantPreferences.prototype, "smokingHabits", void 0);
 __decorate([
@@ -154,6 +158,10 @@ __decorate([
     (0, mongoose_1.Prop)({ unique: true, sparse: true }),
     __metadata("design:type", String)
 ], User.prototype, "phoneNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], User.prototype, "photoUrl", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: Address }),
     __metadata("design:type", Address)

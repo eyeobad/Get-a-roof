@@ -1,10 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 export default function SetNewPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetPassword = useAppStore((state) => state.resetPassword);
+  const token = searchParams.get("token") || "";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -12,6 +16,7 @@ export default function SetNewPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const passwordMeetsRules = useMemo(() => {
     const p = password.trim();
@@ -23,20 +28,19 @@ export default function SetNewPasswordPage() {
     return password === confirmPassword;
   }, [password, confirmPassword]);
 
-  const canSubmit = passwordMeetsRules && password === confirmPassword && !isSubmitting;
+  const canSubmit =
+    passwordMeetsRules && password === confirmPassword && !isSubmitting && !!token;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
     try {
       setIsSubmitting(true);
-
-      // TODO: Call your reset password API here
-      // await fetch("/api/auth/reset-password", { method:"POST", body: JSON.stringify({ password }) })
-
-      await new Promise((r) => setTimeout(r, 650));
-      // TODO: Route wherever you want after success
-      // router.push("/login");
+      setError(null);
+      await resetPassword(token, password);
+      router.push("/login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reset failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -140,6 +144,11 @@ export default function SetNewPasswordPage() {
           <div className="flex-1 min-h-[40px]" />
 
           <div className="mt-auto pt-4">
+            {error && (
+              <p className="text-center text-sm font-medium text-red-600 mb-3">
+                {error}
+              </p>
+            )}
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}

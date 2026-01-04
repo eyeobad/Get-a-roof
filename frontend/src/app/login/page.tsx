@@ -1,11 +1,38 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const login = useAppStore((state) => state.login);
+  const router = useRouter();
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!email || !password || isSubmitting) return;
+    setError(null);
+    try {
+      setIsSubmitting(true);
+      const result = await login(email, password);
+      if (!result) {
+        setError("Login failed.");
+        return;
+      }
+      router.push("/explore");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-[#f5f6f8] text-[#1A1A1A] font-display antialiased">
@@ -28,10 +55,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form
-          className="flex flex-col gap-6"
-          onSubmit={(event) => event.preventDefault()}
-        >
+        <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2">
             <label className="text-lg font-medium text-[#1A1A1A]" htmlFor="email">
               Email Address
@@ -40,6 +64,8 @@ export default function LoginPage() {
               id="email"
               type="email"
               placeholder="Enter your email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20 transition"
             />
           </div>
@@ -56,6 +82,8 @@ export default function LoginPage() {
                 id="loginPassword"
                 type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20 transition pr-14"
               />
               <button
@@ -107,15 +135,20 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {error && (
+            <p className="text-sm font-medium text-red-600 text-center">{error}</p>
+          )}
+
           <button
             type="submit"
+            disabled={isSubmitting}
             className="flex h-14 items-center justify-center rounded-[1.75rem] bg-[#0a44b8] text-white text-base font-bold transition hover:bg-[#082485]"
           >
-            Log In
+            {isSubmitting ? "Logging in..." : "Log In"}
           </button>
           <div className="text-center">
             <Link
-              href="#"
+              href="/auth/forgot-password"
               className="text-base font-medium text-[#555] hover:text-[#0a44b8]"
             >
               Forgot Password?

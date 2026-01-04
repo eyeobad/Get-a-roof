@@ -8,6 +8,7 @@ export type TenantPreferences = {
   maritalStatus?: string;
   vehicles?: VehiclePreference | string;
   hasPets?: boolean;
+  petFriendlyRequired?: boolean;
   smokingHabits?: string;
   drinkingHabits?: string;
   religionPreference?: string;
@@ -32,6 +33,7 @@ export type LandlordRequirements = {
 export type PropertyMatchInput = {
   propertyType?: PropertyType | string;
   monthlyPrice?: number;
+  petFriendly?: boolean;
   landlordRequirements?: LandlordRequirements;
 };
 
@@ -119,6 +121,13 @@ function computePreferencesMatch(
   if (requirements?.petsAllowed !== undefined && tenant?.hasPets !== undefined) {
     considered += 1;
     if (!tenant.hasPets || requirements.petsAllowed) {
+      matched += 1;
+    }
+  }
+
+  if (tenant?.petFriendlyRequired !== undefined && property.petFriendly !== undefined) {
+    considered += 1;
+    if (!tenant.petFriendlyRequired || property.petFriendly) {
       matched += 1;
     }
   }

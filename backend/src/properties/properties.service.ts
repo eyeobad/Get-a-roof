@@ -8,11 +8,14 @@ import { UsersService } from "../users/users.service";
 import { computeMatchScore, PropertyMatchInput } from "../common/utils/match.utils";
 import { haversineDistanceKm } from "../common/utils/geo.utils";
 import { toNumber } from "../common/utils/match.helpers";
+import { Match, MatchDocument } from "../matches/schemas/match.schema";
+import { MatchStatus } from "../common/enums";
 
 @Injectable()
 export class PropertiesService {
   constructor(
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
+    @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     private readonly usersService: UsersService
   ) {}
 
@@ -51,7 +54,18 @@ export class PropertiesService {
     }
   ) {
     const limit = options?.limit ?? 50;
-    const properties = await this.propertyModel.find(filters).limit(limit).exec();
+    const queryFilters = { ...filters };
+    if (options?.userId) {
+      const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
+      if (excludedIds.length) {
+        if (queryFilters._id && typeof queryFilters._id === "object") {
+          (queryFilters._id as any).$nin = excludedIds;
+        } else {
+          queryFilters._id = { $nin: excludedIds };
+        }
+      }
+    }
+    const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
     return this.applyScoringAndFilters(properties, options);
   }
 
@@ -66,11 +80,20 @@ export class PropertiesService {
       limit?: number;
     }
   ) {
+    const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
+    if (!matchIds.length) {
+      return [];
+    }
     const withCoords = {
       ...filters,
       "address.lat": { $ne: null },
       "address.lng": { $ne: null },
     };
+    if (withCoords._id && typeof withCoords._id === "object") {
+      (withCoords._id as any).$in = matchIds;
+    } else {
+      withCoords._id = { $in: matchIds };
+    }
     const limit = options?.limit ?? 50;
     const properties = await this.propertyModel
       .find(withCoords)
@@ -131,6 +154,7 @@ export class PropertiesService {
       const matchInput: PropertyMatchInput = {
         propertyType: plain.propertyType,
         monthlyPrice: plain.monthlyPrice,
+        petFriendly: plain.petFriendly,
         landlordRequirements: plain.landlordRequirements,
       };
 
@@ -171,6 +195,10 @@ export class PropertiesService {
       );
     }
 
+    if (tenantPreferences?.petFriendlyRequired) {
+      filtered = filtered.filter((property) => property.petFriendly === true);
+    }
+
     const minMatchScore = toNumber(options?.minMatchScore);
     if (minMatchScore !== undefined) {
       filtered = filtered.filter(
@@ -179,5 +207,16 @@ export class PropertiesService {
     }
 
     return filtered;
+  }
+
+  private async getTenantMatchPropertyIds(tenantId?: string, includeDismissed?: boolean) {
+    if (!tenantId) {
+      return [];
+    }
+    const filter: Record<string, unknown> = { tenantId };
+    if (!includeDismissed) {
+      filter.status = { $ne: MatchStatus.Dismissed };
+    }
+    return this.matchModel.find(filter).distinct("propertyId").exec();
   }
 }

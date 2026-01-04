@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 type SectionKey =
   | "employment"
@@ -107,6 +108,8 @@ type SectionWithSelection = SectionConfig & { selectedIndex: number };
 
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
+  const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const router = useRouter();
 
   const [selections, setSelections] = useState<Selections>(() => {
     const initial = {} as Selections;
@@ -124,6 +127,44 @@ export default function TenantMoreAboutYou() {
       selectedIndex: selections[section.key],
     }));
   }, [selections]);
+
+  const handleNext = async () => {
+    const pickLabel = (key: SectionKey) =>
+      sections.find((section) => section.key === key)?.buttonLabels[
+        selections[key]
+      ];
+
+    const petsLabel = pickLabel("pets");
+    const childrenLabel = pickLabel("children");
+
+    const payload: Record<string, unknown> = {
+      employmentStatus: pickLabel("employment"),
+      maritalStatus: pickLabel("marital"),
+      vehicles: pickLabel("vehicles"),
+      hasPets: petsLabel ? petsLabel === "I have pets" : undefined,
+      smokingHabits: pickLabel("smoking"),
+      drinkingHabits: pickLabel("drinking"),
+      religionPreference: pickLabel("religion"),
+      educationLevel: pickLabel("education"),
+      socialHabits: pickLabel("social"),
+      annualEarnings: earnings,
+    };
+
+    if (childrenLabel === "I have children") {
+      payload.hasChildren = true;
+    } else if (childrenLabel === "I don't have children") {
+      payload.hasChildren = false;
+    }
+
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === undefined) {
+        delete payload[key];
+      }
+    });
+
+    await updatePreferences({ tenant: payload });
+    router.push("/tenant-onboarding/review");
+  };
 
   return (
     <div className="min-h-screen bg-background-light text-slate-900 font-display antialiased">
@@ -233,13 +274,14 @@ export default function TenantMoreAboutYou() {
 
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 backdrop-blur-md border-t border-slate-200 z-10 flex justify-center">
           <div className="max-w-md w-full">
-            <Link
-              href="/tenant-onboarding/review"
+            <button
+              type="button"
+              onClick={handleNext}
               className="w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
             >
               Next Step
               <span className="material-icons-round text-xl">arrow_forward</span>
-            </Link>
+            </button>
           </div>
         </div>
       </main>

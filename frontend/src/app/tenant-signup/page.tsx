@@ -1,11 +1,80 @@
  "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showVerifyPassword, setShowVerifyPassword] = useState(false);
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    password: "",
+    verifyPassword: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const registerTenant = useAppStore((state) => state.registerTenant);
+  const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
+  const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
+  const login = useAppStore((state) => state.login);
+  const router = useRouter();
+
+  const updateField = (key: keyof typeof form, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setError(null);
+
+    if (!form.email || !form.password || !form.firstName || !form.lastName) {
+      setError("Please complete all required fields.");
+      return;
+    }
+    if (form.password !== form.verifyPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const user = await registerTenant({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phoneNumber: form.phoneNumber,
+        password: form.password,
+      });
+      let userId = user?.id || user?._id;
+      if (userId) {
+        await Promise.all([sendEmailOtp(userId), sendPhoneOtp(userId)]);
+      }
+
+      const authResponse = await login(form.email, form.password);
+      if (!authResponse) {
+        throw new Error("Login failed.");
+      }
+      if (!userId) {
+        userId = authResponse.user?.id || authResponse.user?._id;
+      }
+      const query = new URLSearchParams({
+        userId: userId ?? "",
+        email: form.email,
+        phone: form.phoneNumber,
+      });
+      router.push(`/auth/email-verification?${query.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign up failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   return (
     <div className="relative min-h-screen bg-[#f5f6f8] text-[#1A1A1A] font-display antialiased">
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-8">
@@ -28,10 +97,7 @@ export default function TenantSignupPage() {
             Create your tenant account
           </p>
         </div>
-        <form
-          className="mt-8 flex flex-col gap-5"
-          onSubmit={(event) => event.preventDefault()}
-        >
+        <form className="mt-8 flex flex-col gap-5" onSubmit={handleSubmit}>
           {[
             { id: "firstName", label: "First Name", placeholder: "Enter your first name", type: "text" },
             { id: "lastName", label: "Last Name", placeholder: "Enter your last name", type: "text" },
@@ -45,6 +111,10 @@ export default function TenantSignupPage() {
                 id={field.id}
                 type={field.type}
                 placeholder={field.placeholder}
+                value={form[field.id as keyof typeof form]}
+                onChange={(event) =>
+                  updateField(field.id as keyof typeof form, event.target.value)
+                }
                 className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"
               />
             </div>
@@ -58,6 +128,8 @@ export default function TenantSignupPage() {
                 id="phone"
                 type="tel"
                 placeholder="(555) 000-0000"
+                value={form.phoneNumber}
+                onChange={(event) => updateField("phoneNumber", event.target.value)}
                 className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"
               />
               <div className="pointer-events-none absolute inset-y-0 right-5 flex items-center">
@@ -96,6 +168,15 @@ export default function TenantSignupPage() {
                     id={field.id}
                     type={visible ? "text" : "password"}
                     placeholder={field.placeholder}
+                    value={
+                      field.id === "password" ? form.password : form.verifyPassword
+                    }
+                    onChange={(event) =>
+                      updateField(
+                        field.id === "password" ? "password" : "verifyPassword",
+                        event.target.value
+                      )
+                    }
                     className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"
                   />
                   <button
@@ -151,11 +232,13 @@ export default function TenantSignupPage() {
               </div>
             );
           })}
+          {error && <p className="text-sm font-medium text-red-600 text-center">{error}</p>}
             <button
               type="submit"
+              disabled={isSubmitting}
               className="flex h-14 items-center justify-center gap-2 rounded-[2rem] bg-[#0a44b8] text-lg font-bold text-white shadow-lg transition hover:bg-[#082485] active:scale-[0.98]"
             >
-              Sign Up
+              {isSubmitting ? "Signing up..." : "Sign Up"}
               <svg
                 width={24}
                 height={24}

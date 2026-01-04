@@ -15,6 +15,18 @@ export class ChatController {
     return this.chatService.createMessage(dto);
   }
 
+  @Post("start")
+  @UseGuards(JwtAuthGuard)
+  startThread(
+    @Body() body: { propertyId?: string; message?: string },
+    @Req() req: Request & { user?: any }
+  ) {
+    if (!body?.propertyId) {
+      return { matchId: null };
+    }
+    return this.chatService.startThread(req.user?.sub, body.propertyId, body.message);
+  }
+
   @Get("conversations")
   @UseGuards(JwtAuthGuard)
   getConversations(
@@ -35,6 +47,7 @@ export class ChatController {
   @Get("messages")
   @UseGuards(JwtAuthGuard)
   getMessages(
+    @Req() req: Request & { user?: any },
     @Query("matchId") matchId: string,
     @Query("limit") limit?: string,
     @Query("before") before?: string
@@ -51,6 +64,7 @@ export class ChatController {
         : undefined;
     return this.chatService.getMessagesForMatch(
       matchId,
+      req.user?.sub,
       parsedLimit,
       validBefore
     );

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -72,6 +73,30 @@ export class UsersController {
       throw new ForbiddenException("Access denied");
     }
     return this.usersService.addSavedProperty(id, dto.propertyId).then((user) => this.usersService.sanitizeUser(user));
+  }
+
+  @Get(":id/saved-properties")
+  @UseGuards(JwtAuthGuard)
+  getSavedProperties(@Param("id") id: string, @Req() req: Request & { user?: any }) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService.getSavedProperties(id);
+  }
+
+  @Delete(":id/saved-properties/:propertyId")
+  @UseGuards(JwtAuthGuard)
+  removeSavedProperty(
+    @Param("id") id: string,
+    @Param("propertyId") propertyId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService
+      .removeSavedProperty(id, propertyId)
+      .then((user) => this.usersService.sanitizeUser(user));
   }
 
   @Get(":id/verification-status")

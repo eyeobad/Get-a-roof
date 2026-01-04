@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import { useAppStore } from "@/store/useAppStore";
 
 type Conversation = {
   id: string;
@@ -11,6 +13,8 @@ type Conversation = {
   time: string;
   image: string;
   unread?: boolean;
+  tenantId?: string;
+  landlordId?: string;
 };
 
 type Message = {
@@ -20,81 +24,6 @@ type Message = {
   text: string;
   time: string;
 };
-
-const conversations: Conversation[] = [
-  {
-    id: "convo-1",
-    name: "123 Maple St",
-    preview: "Hi, when are you available to view the property?",
-    time: "10:42 AM",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBnA6YW67ntfEuqnMOSWzVaD1K1Q1skfZSRnyd4LtWmxBfQoLwvnGwcA9n_1wT05sokh7ilLW5kYDSXeCy2IpZJzifVJtgbmn0MoPAVOyu9Pl6_IkJKyl-NEAKrIGKKPtlkvSLUtUCJthjp_VVKFpQAYBxiEaf3Ojr58k4qqLVtTnFtyKyrCj6SKvPjGuP9lw4uOy1gbmmW2Gg2wagvZqaST1RpGhet6PRvRJgrSfoA-MCEeebPTxYZsm3UrvbAgv5Ud6ttkolVUmBR",
-    unread: true,
-  },
-  {
-    id: "convo-2",
-    name: "John Smith",
-    preview: "Thanks for the application. I'll review it shortly.",
-    time: "Yesterday",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuClBOwibdwWto3BED8-CUa5jhc3DIU_0Y1IyggfYnC9Tlzme7JFnFrZ_wwAhPWWJsq0jD_FsqHcObP4WIECWQQlIlc1p0ev307oib5dmz9nO6nwD78IrVvHIqLbhtoHl_78jROgLM5UlxeZ_40AYT7gAmzWCNzacdAvAzqvktxJE1L5gfjdxCM-sFZi3AyYMWGB-C_UPvudaCHlT8MttMpx7Oz8C5Mi18UJgPWmLGxyD81y64dCibzdnTNiNlamPjKyFdfTdtS6-Zlw",
-  },
-  {
-    id: "convo-3",
-    name: "Sunset Apartments",
-    preview: "Let me check the lease terms for you.",
-    time: "Monday",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuC3MriWzu1VrFnfCCLxgO8GNqoBpTokcV8kecTDcCZsLuT7KN2Z9_mhmcVsmroQo6yFZF7bMOTvJJThWQByKgj-GQ7W09ozqZbIIsZaFWLhRl-tXhFIusSTDRwEfzT6kCi5xo5NZOjoB1Bi_AqAyEjq95-vcmAzBfKpvCC5XVbEEZPqZA4CPJTpL-ICcHbQSTPA70C_QTYKStnj11UcoqlHJ1RoVeMBPmJ4wA5uuE4b6LX_s88vKIUhc2zndKP12-i0QYDJR2GD_nkD",
-  },
-  {
-    id: "convo-4",
-    name: "Martha Garden",
-    preview: "Is the parking spot included in the rent?",
-    time: "Sunday",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAUUz679dmV9a4mjgH4e_iJ-U-CSewiEz7u-O5kzW-m1MQ5aBMWtqGWSNs2m4TlQNqlfIaA30AaztmmgHMFS4SmkkQ0qRU5C7EKknZUcCa9rHddPyqkUqoiN-w-tmySGixbjJF0KS6su4iUp0fNrqRdyBcxJ59hBMdBFO8yavo33oeuekSCAM7THt2yHyDROPGtdA2Eb1eBA2kzqek_HeveMLyM6tQ79ayjApPr9uTdCnFJEIo8g43E9zLwNyWlyr7NXyOxW4G77zNb",
-  },
-  {
-    id: "convo-5",
-    name: "The Height Listings",
-    preview: "We have a new unit opening up on the 5th floor.",
-    time: "Oct 24",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAtcCG0_iuWPf4sIUrOnIP1Klrko3ruUfUuFgIB2zNaohMmkMeApooY9uc8UvCUs-BRdu8JUy3xnQ4yIexocbyD0jXo2bZ24F6HX1amKNAlnjNokNNcHDdggh4Ku-BcQEpbqjcF8Yd21CNVzwnVXkGiarsQ20K2YUeBaOTm70Gtyp1obpFJWl2m-mf93lkAv4GXxXhEfmnfxQUOTv2-mO6zVtLSoVlEbhJcewL6T2chJWgD-zBeplmlTe-HhfRmr5CHmwNSh2TJDDxt",
-  },
-];
-
-const seedMessages: Message[] = [
-  {
-    id: "m1",
-    convoId: "convo-1",
-    from: "them",
-    text: "Hi, when are you available to view the property?",
-    time: "10:42 AM",
-  },
-  {
-    id: "m2",
-    convoId: "convo-1",
-    from: "me",
-    text: "Tomorrow afternoon works. Does 2pm suit you?",
-    time: "10:44 AM",
-  },
-  {
-    id: "m3",
-    convoId: "convo-2",
-    from: "them",
-    text: "Thanks for the application. I'll review it shortly.",
-    time: "Yesterday",
-  },
-  {
-    id: "m4",
-    convoId: "convo-3",
-    from: "them",
-    text: "Let me check the lease terms for you.",
-    time: "Monday",
-  },
-];
 
 function Icon({ name, filled }: { name: string; filled?: boolean }) {
   return (
@@ -125,43 +54,80 @@ function ConversationAvatar({ src, alt }: { src: string; alt: string }) {
 }
 
 export default function MessagesPage() {
-  const [activeId, setActiveId] = useState(conversations[0]?.id ?? "convo-1");
+  const searchParams = useSearchParams();
+  const storeConversations = useAppStore((state) => state.conversations);
+  const messagesByMatch = useAppStore((state) => state.messagesByMatch);
+  const loadConversations = useAppStore((state) => state.loadConversations);
+  const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
+  const sendMessageToApi = useAppStore((state) => state.sendMessage);
+  const markMatchRead = useAppStore((state) => state.markMatchRead);
+  const userId = useAppStore((state) => state.userId);
+
+  const conversations = useMemo<Conversation[]>(
+    () =>
+      storeConversations.map((conversation) => ({
+        id: conversation.id,
+        name: conversation.title,
+        preview: conversation.preview ?? "Start a conversation",
+        time: conversation.time ?? "",
+        image: conversation.image ?? "/hero.png",
+        unread: conversation.unread,
+        tenantId: conversation.tenantId,
+        landlordId: conversation.landlordId,
+      })),
+    [storeConversations]
+  );
+
+  const [activeId, setActiveId] = useState(conversations[0]?.id ?? "");
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [messageText, setMessageText] = useState("");
-  const [messages, setMessages] = useState<Message[]>(seedMessages);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? conversations[0],
-    [activeId]
+    [conversations, activeId]
   );
 
   const activeMessages = useMemo(
-    () => messages.filter((m) => m.convoId === activeId),
-    [messages, activeId]
+    () => {
+      const thread = messagesByMatch[activeId] ?? [];
+      return thread.map((message) => ({
+        id: message.id,
+        convoId: activeId,
+        from: message.senderId === userId ? "me" : "them",
+        text: message.content,
+        time: new Date(message.timestamp).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      }));
+    },
+    [messagesByMatch, activeId, userId]
   );
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
-  const openConversation = (id: string) => {
+  const selectConversation = (id: string, openChat?: boolean) => {
     setActiveId(id);
-    setMobileView("chat");
+    if (openChat) {
+      setMobileView("chat");
+    }
+    void loadMessagesForMatch(id);
+    void markMatchRead(id);
   };
 
   const sendMessage = () => {
+    if (!activeConversation || !activeId) return;
     const trimmed = messageText.trim();
     if (!trimmed) return;
+    const receiverId =
+      userId === activeConversation.tenantId
+        ? activeConversation.landlordId
+        : activeConversation.tenantId;
+    if (!receiverId) return;
 
-    const next: Message = {
-      id: `m-${Date.now()}`,
-      convoId: activeId,
-      from: "me",
-      text: trimmed,
-      time: "Now",
-    };
-
-    setMessages((prev) => [...prev, next]);
     setMessageText("");
+    void sendMessageToApi(activeId, receiverId, trimmed);
 
     requestAnimationFrame(() => {
       chatRef.current?.scrollTo({
@@ -170,6 +136,33 @@ export default function MessagesPage() {
       });
     });
   };
+
+  useEffect(() => {
+    void loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (conversations.length && !activeId) {
+      setActiveId(conversations[0].id);
+    }
+  }, [conversations, activeId]);
+
+  useEffect(() => {
+    if (activeId && !messagesByMatch[activeId]) {
+      void loadMessagesForMatch(activeId);
+      void markMatchRead(activeId);
+    }
+  }, [activeId, messagesByMatch, loadMessagesForMatch, markMatchRead]);
+
+  useEffect(() => {
+    const threadId = searchParams.get("thread");
+    if (threadId) {
+      setActiveId(threadId);
+      setMobileView("chat");
+      void loadMessagesForMatch(threadId);
+      void markMatchRead(threadId);
+    }
+  }, [searchParams, loadMessagesForMatch, markMatchRead]);
 
   return (
     <>
@@ -195,7 +188,7 @@ export default function MessagesPage() {
               {conversations.map((conversation) => (
                 <button
                   key={conversation.id}
-                  onClick={() => openConversation(conversation.id)}
+                  onClick={() => selectConversation(conversation.id, true)}
                   className="group flex w-full cursor-pointer border-b border-slate-200 bg-background-light px-5 py-4 transition-colors hover:bg-white hover:text-primary"
                 >
                   <div className="flex items-center gap-4 w-full">
@@ -401,7 +394,7 @@ export default function MessagesPage() {
                     return (
                       <button
                         key={conversation.id}
-                        onClick={() => setActiveId(conversation.id)}
+                        onClick={() => selectConversation(conversation.id)}
                         className={`w-full px-6 py-4 border-b border-slate-100 text-left transition-colors ${
                           isActive
                             ? "bg-primary/5"

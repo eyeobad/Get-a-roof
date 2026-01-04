@@ -59,6 +59,12 @@ function computePreferencesMatch(tenant, property) {
             matched += 1;
         }
     }
+    if (tenant?.petFriendlyRequired !== undefined && property.petFriendly !== undefined) {
+        considered += 1;
+        if (!tenant.petFriendlyRequired || property.petFriendly) {
+            matched += 1;
+        }
+    }
     const reqTenantPrefs = requirements?.idealTenantPreferences || requirements?.tenantPreferences || {};
     for (const key of tenantPreferenceKeys) {
         const reqValue = reqTenantPrefs[key];

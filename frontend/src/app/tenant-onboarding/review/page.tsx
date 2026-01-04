@@ -1,22 +1,73 @@
 "use client";
 import Link from "next/link";
-const preferenceTags = ["Non-owner-occupied", "Self compound", "Shared apartment"];
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
-const personal = [
-  ["Employment", "Self-Employed"],
-  ["Annual Earnings", "$85,000"],
-  ["Marital Status", "Single"],
-  ["Vehicle", "Yes"],
-  ["Pets", "None"],
-  ["Smoking", "No"],
-  ["Drinking", "Socially"],
-  ["Religion", "Christian"],
-  ["Education", "Masters"],
-  ["Social Habits", "Occasionally"],
-  ["Children", "None"],
-];
+const propertyLabelMap: Record<string, string> = {
+  NonOwnerOccupied: "Non-owner-occupied",
+  SharedApartment: "Shared apartment",
+  Shortlet: "Shortlet",
+  SelfCompound: "Self compound",
+  SharedCompound: "Shared compound",
+};
 
 export default function TenantReview() {
+  const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
+  const [profile, setProfile] = useState<any | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUserProfile()
+      .then((user) => {
+        if (mounted) setProfile(user);
+      })
+      .catch(() => {
+        if (mounted) setProfile(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [fetchUserProfile]);
+
+  const preferenceTags = useMemo(() => {
+    const lookingFor: string[] = profile?.preferences?.tenant?.lookingFor ?? [];
+    const tags = lookingFor.map((type) => propertyLabelMap[type] || type);
+    if (profile?.preferences?.tenant?.petFriendlyRequired) {
+      tags.push("Pets allowed");
+    }
+    return tags.length ? tags : ["No preferences set"];
+  }, [profile]);
+
+  const personal = useMemo(() => {
+    const tenant = profile?.preferences?.tenant ?? {};
+    const currency = (value?: number) =>
+      value !== undefined && value !== null
+        ? new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          }).format(value)
+        : "Not set";
+
+    const pets = tenant.hasPets === undefined ? "Not set" : tenant.hasPets ? "Yes" : "No";
+    const children =
+      tenant.hasChildren === undefined ? "Not set" : tenant.hasChildren ? "Yes" : "No";
+
+    return [
+      ["Employment", tenant.employmentStatus ?? "Not set"],
+      ["Annual Earnings", currency(tenant.annualEarnings)],
+      ["Marital Status", tenant.maritalStatus ?? "Not set"],
+      ["Vehicle", tenant.vehicles ?? "Not set"],
+      ["Pets", pets],
+      ["Smoking", tenant.smokingHabits ?? "Not set"],
+      ["Drinking", tenant.drinkingHabits ?? "Not set"],
+      ["Religion", tenant.religionPreference ?? "Not set"],
+      ["Education", tenant.educationLevel ?? "Not set"],
+      ["Social Habits", tenant.socialHabits ?? "Not set"],
+      ["Children", children],
+    ];
+  }, [profile]);
+
   return (
     <div className="min-h-screen bg-background-light text-slate-900 dark:bg-background-dark dark:text-slate-100 font-display antialiased transition-colors duration-200">
       <main className="max-w-md mx-auto min-h-screen relative pb-36">
@@ -65,9 +116,13 @@ export default function TenantReview() {
             </div>
             <div className="space-y-4">
               {[
-                ["Full Name", "James Anderson"],
-                ["Email Address", "james.anderson@email.com"],
-                ["Phone Number", "+1 (555) 123-4567"],
+                [
+                  "Full Name",
+                  `${profile?.firstName ?? ""} ${profile?.lastName ?? ""}`.trim() ||
+                    "Not set",
+                ],
+                ["Email Address", profile?.email ?? "Not set"],
+                ["Phone Number", profile?.phoneNumber ?? "Not set"],
               ].map(([label, value]) => (
                 <div key={label} className="border-b border-slate-50  pb-3 last:border-0">
                   <p className="text-sm text-slate-500 uppercase tracking-wider font-bold mb-1">{label}</p>

@@ -25,6 +25,12 @@ let ChatController = class ChatController {
         dto.senderId = req.user?.sub;
         return this.chatService.createMessage(dto);
     }
+    startThread(body, req) {
+        if (!body?.propertyId) {
+            return { matchId: null };
+        }
+        return this.chatService.startThread(req.user?.sub, body.propertyId, body.message);
+    }
     getConversations(req, limit, offset) {
         const parsedLimit = limit && !Number.isNaN(Number(limit)) ? Number(limit) : 20;
         const parsedOffset = offset && !Number.isNaN(Number(offset)) ? Number(offset) : 0;
@@ -33,7 +39,7 @@ let ChatController = class ChatController {
             offset: parsedOffset,
         });
     }
-    getMessages(matchId, limit, before) {
+    getMessages(req, matchId, limit, before) {
         if (!matchId) {
             return [];
         }
@@ -42,7 +48,7 @@ let ChatController = class ChatController {
         const validBefore = parsedBefore && !Number.isNaN(parsedBefore.getTime())
             ? parsedBefore
             : undefined;
-        return this.chatService.getMessagesForMatch(matchId, parsedLimit, validBefore);
+        return this.chatService.getMessagesForMatch(matchId, req.user?.sub, parsedLimit, validBefore);
     }
     markRead(body, req) {
         if (!body?.matchId) {
@@ -62,6 +68,15 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], ChatController.prototype, "create", null);
 __decorate([
+    (0, common_1.Post)("start"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "startThread", null);
+__decorate([
     (0, common_1.Get)("conversations"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Req)()),
@@ -74,11 +89,12 @@ __decorate([
 __decorate([
     (0, common_1.Get)("messages"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __param(0, (0, common_1.Query)("matchId")),
-    __param(1, (0, common_1.Query)("limit")),
-    __param(2, (0, common_1.Query)("before")),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)("matchId")),
+    __param(2, (0, common_1.Query)("limit")),
+    __param(3, (0, common_1.Query)("before")),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", void 0)
 ], ChatController.prototype, "getMessages", null);
 __decorate([

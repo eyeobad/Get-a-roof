@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 export default function TenantOnboarding() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
+  const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const router = useRouter();
 
   const options = [
     { label: "Non-owner occupied", icon: "apartment", accent: "text-primary" },
@@ -18,6 +21,24 @@ export default function TenantOnboarding() {
       wide: true,
     },
   ];
+
+  const handleNext = async () => {
+    if (selectedIndex === null) {
+      router.push("/tenant-onboarding/more-about-you");
+      return;
+    }
+    const label = options[selectedIndex]?.label;
+    const map: Record<string, string> = {
+      "Non-owner occupied": "NonOwnerOccupied",
+      "Shared apartment": "SharedApartment",
+      Shortlet: "Shortlet",
+      "Self compound": "SelfCompound",
+      "Shared compound": "SharedCompound",
+    };
+    const lookingFor = label && map[label] ? [map[label]] : [];
+    await updatePreferences({ tenant: { lookingFor } });
+    router.push("/tenant-onboarding/more-about-you");
+  };
 
   return (
     <div className="min-h-screen bg-background-light text-text-main-light dark:bg-background-dark dark:text-text-main-dark font-display antialiased">
@@ -109,9 +130,13 @@ export default function TenantOnboarding() {
         </main>
 
         <div className="mt-4 pt-4 pb-2">
-        <Link href={'/tenant-onboarding/more-about-you'} className="block text-center w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none ">
+          <button
+            type="button"
+            onClick={handleNext}
+            className="block text-center w-full bg-primary hover:bg-primary-hover text-white text-xl font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform active:scale-[0.98] focus:outline-none"
+          >
             Next
-          </Link>
+          </button>
         </div>
       </div>
     </div>

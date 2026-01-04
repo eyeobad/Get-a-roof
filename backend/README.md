@@ -30,6 +30,8 @@ Default port: `3001`
 - `PATCH /api/users/:id`
 - `PATCH /api/users/:id/preferences`
 - `POST /api/users/:id/saved-properties`
+- `GET /api/users/:id/saved-properties`
+- `DELETE /api/users/:id/saved-properties/:propertyId`
 - `GET /api/users/:id/verification-status`
 
 - `POST /api/properties/upload-image`
@@ -40,9 +42,11 @@ Default port: `3001`
 - `GET /api/properties/:id`
 
 - `POST /api/matches`
+- `GET /api/matches/tenant`
 - `PATCH /api/matches/:id`
 
 - `POST /api/chat`
+- `POST /api/chat/start`
 - `GET /api/chat/conversations?limit=...&offset=...`
 - `GET /api/chat/messages?matchId=...&limit=...&before=...`
 - `PATCH /api/chat/mark-read`

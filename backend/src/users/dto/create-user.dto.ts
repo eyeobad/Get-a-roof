@@ -30,6 +30,10 @@ export class CreateUserDto {
   @IsString()
   phoneNumber?: string;
 
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
   @IsNotEmpty()
   @IsString()
   password: string;

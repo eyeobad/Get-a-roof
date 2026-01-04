@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 type Option = { label: string };
 type PreferenceGroup = {
   key: string;
@@ -134,6 +135,15 @@ function Modal({
 export default function ProfilePage() {
   // ---- SOURCE OF TRUTH (enterprise pattern) ----
   const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const userId = useAppStore((state) => state.userId);
+  const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
+  const updateUser = useAppStore((state) => state.updateUser);
+  const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const clearAuth = useAppStore((state) => state.clearAuth);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [profile, setProfile] = useState<ProfileState>(() => ({
     fullName: "Sarah Jenkins",
     email: "sarah.jenkins@example.com",
@@ -186,6 +196,128 @@ export default function ProfilePage() {
     }));
   }, [profile.preferences]);
 
+  const mapUserToProfile = (user: any): ProfileState => {
+    const tenant = user?.preferences?.tenant ?? {};
+    const lookingFor = Array.isArray(tenant.lookingFor) ? tenant.lookingFor : [];
+    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
+
+    const apartmentPrefs: Record<string, boolean> = {
+      "Pets Allowed": Boolean(tenant.petFriendlyRequired),
+      "Non-owner-occupied": lookingFor.includes("NonOwnerOccupied"),
+      "Shared Apartment": lookingFor.includes("SharedApartment"),
+      Shortlet: lookingFor.includes("Shortlet"),
+      "Self Compound": lookingFor.includes("SelfCompound"),
+      "Shared Compound": lookingFor.includes("SharedCompound"),
+    };
+
+    return {
+      fullName: fullName || profile.fullName,
+      email: user?.email ?? profile.email,
+      phone: user?.phoneNumber ?? profile.phone,
+      photoUrl: user?.photoUrl ?? profile.photoUrl,
+      annualEarnings: tenant.annualEarnings ?? profile.annualEarnings,
+      commuteRadius: tenant.maxCommuteRadius ?? profile.commuteRadius,
+      preferences: {
+        employment: tenant.employmentStatus ?? "",
+        marital: tenant.maritalStatus ?? "",
+        vehicle: tenant.vehicles ?? "",
+        smoking: tenant.smokingHabits ?? "",
+        drinking: tenant.drinkingHabits ?? "",
+        religion: tenant.religionPreference ?? "",
+        education: tenant.educationLevel ?? "",
+        social: tenant.socialHabits ?? "",
+      },
+      apartmentPrefs,
+    };
+  };
+
+  useEffect(() => {
+    if (!authToken || !userId) return;
+    let mounted = true;
+    setIsLoading(true);
+    fetchUserProfile()
+      .then((user) => {
+        if (!mounted || !user) return;
+        const nextProfile = mapUserToProfile(user);
+        setProfile(nextProfile);
+        setDraft(nextProfile);
+      })
+      .catch(() => {
+        if (mounted) setProfile((prev) => ({ ...prev }));
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [authToken, userId, fetchUserProfile]);
+
+  const handleSaveProfile = async () => {
+    if (!authToken || !userId) {
+      router.push("/login");
+      return;
+    }
+    setIsSaving(true);
+    setSaveError(null);
+
+    const nameParts = profile.fullName.trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts.shift() || "";
+    const lastName = nameParts.join(" ");
+
+    const lookingForMap: Record<string, string> = {
+      "Non-owner-occupied": "NonOwnerOccupied",
+      "Shared Apartment": "SharedApartment",
+      Shortlet: "Shortlet",
+      "Self Compound": "SelfCompound",
+      "Shared Compound": "SharedCompound",
+    };
+    const lookingFor = Object.entries(lookingForMap)
+      .filter(([label]) => profile.apartmentPrefs[label])
+      .map(([, value]) => value);
+
+    const tenantPayload: Record<string, unknown> = {
+      employmentStatus: profile.preferences.employment || undefined,
+      maritalStatus: profile.preferences.marital || undefined,
+      vehicles: profile.preferences.vehicle || undefined,
+      smokingHabits: profile.preferences.smoking || undefined,
+      drinkingHabits: profile.preferences.drinking || undefined,
+      religionPreference: profile.preferences.religion || undefined,
+      educationLevel: profile.preferences.education || undefined,
+      socialHabits: profile.preferences.social || undefined,
+      annualEarnings: profile.annualEarnings,
+      maxCommuteRadius: profile.commuteRadius,
+      petFriendlyRequired: profile.apartmentPrefs["Pets Allowed"] || false,
+      lookingFor,
+    };
+
+    Object.keys(tenantPayload).forEach((key) => {
+      const value = tenantPayload[key];
+      if (
+        value === undefined ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0)
+      ) {
+        delete tenantPayload[key];
+      }
+    });
+
+    try {
+      await updateUser({
+        firstName,
+        lastName,
+        email: profile.email,
+        phoneNumber: profile.phone,
+        photoUrl: profile.photoUrl,
+      });
+      await updatePreferences({ tenant: tenantPayload });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-background-light text-slate-900">
       {/* Responsive container */}
@@ -202,7 +334,15 @@ export default function ProfilePage() {
 
           <h2 className="flex-1 text-center text-2xl font-bold tracking-tight text-primary">My Profile</h2>
 
-          <button className="text-right text-primary font-bold tracking-tight">Logout</button>
+          <button
+            onClick={() => {
+              clearAuth();
+              router.push("/login");
+            }}
+            className="text-right text-primary font-bold tracking-tight"
+          >
+            Logout
+          </button>
         </header>
 
         {/* Layout: mobile = single column, desktop = two columns */}
@@ -482,9 +622,18 @@ export default function ProfilePage() {
 
         {/* Footer (mobile sticky) */}
         <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-background-light/95 px-4 py-4 backdrop-blur-sm lg:static lg:bg-transparent lg:border-0 lg:px-0 lg:py-0">
-          <button className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 lg:max-w-md lg:ml-auto">
+          {saveError && (
+            <p className="text-center text-sm font-medium text-red-600 mb-3">
+              {saveError}
+            </p>
+          )}
+          <button
+            onClick={handleSaveProfile}
+            disabled={isSaving || isLoading}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 lg:max-w-md lg:ml-auto disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             <span className="material-symbols-outlined">save</span>
-            Save Profile
+            {isSaving ? "Saving..." : "Save Profile"}
           </button>
         </footer>
       </div>

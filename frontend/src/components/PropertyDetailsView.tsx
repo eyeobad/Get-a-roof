@@ -73,19 +73,20 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
   const tapSlide = () => setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
-  const handleToggleSave = () => {
+  const handleToggleSave = async () => {
+    const shouldEnsureMatch = !isSaved;
     // Best: store provides toggleLikeListing
     if (typeof toggleLikeListing === "function") {
-      toggleLikeListing(listing.id);
+      await toggleLikeListing(listing.id);
     } else if (isSaved) {
       // Next best: store provides unlikeListing
-      if (typeof unlikeListing === "function") unlikeListing(listing.id);
+      if (typeof unlikeListing === "function") await unlikeListing(listing.id);
     } else {
-      likeListing(listing.id);
+      await likeListing(listing.id);
     }
 
     // You only want matches when saved/liked
-    if (!isSaved) ensureMatchForListing(listing.id);
+    if (shouldEnsureMatch) await ensureMatchForListing(listing.id);
   };
 
   const progressPct = useMemo(() => {
@@ -245,9 +246,13 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
                 </button>
 
                 <button
-                  onClick={() => {
-                    const threadId = ensureThreadForListing(listing.id);
-                    router.push(`/messages?thread=${threadId}`);
+                  onClick={async () => {
+                    const threadId = await ensureThreadForListing(listing.id);
+                    if (threadId) {
+                      router.push(`/messages?thread=${threadId}`);
+                    } else {
+                      router.push(`/messages`);
+                    }
                   }}
                   className="flex items-center gap-2 rounded-2xl border border-primary px-4 py-2 text-sm font-bold text-primary transition hover:bg-primary/10 active:scale-95"
                 >

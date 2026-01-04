@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  useEffect,
   useMemo,
   useState,
   type Dispatch,
@@ -71,6 +72,7 @@ export default function ExploreCards() {
   const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
   const ensureMatchForListing = useAppStore((state) => state.ensureMatchForListing);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
+  const loadExploreListings = useAppStore((state) => state.loadExploreListings);
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
 
@@ -87,7 +89,32 @@ export default function ExploreCards() {
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
+    void loadExploreListings({
+      budget,
+      distance,
+      apartmentType,
+      toggles,
+    });
   };
+
+  const applyFilters = () => {
+    void loadExploreListings({
+      budget,
+      distance,
+      apartmentType,
+      toggles,
+    });
+    setFiltersOpen(false);
+  };
+
+  useEffect(() => {
+    void loadExploreListings({
+      budget,
+      distance,
+      apartmentType,
+      toggles,
+    });
+  }, [loadExploreListings]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (isSwipeAnimating || visibleCards.length === 0) return;
@@ -521,7 +548,10 @@ function FilterModal({
                 Reset
               </button>
 
-              <button className="flex-[2] rounded-xl bg-primary px-3 py-3.5 text-xs font-bold text-white shadow-sm hover:brightness-110 active:scale-95 transition-all">
+              <button
+                onClick={applyFilters}
+                className="flex-[2] rounded-xl bg-primary px-3 py-3.5 text-xs font-bold text-white shadow-sm hover:brightness-110 active:scale-95 transition-all"
+              >
                 Apply Filters
               </button>
             </div>

@@ -26,6 +26,7 @@ var PropertyType;
     PropertyType["Condo"] = "Condo";
     PropertyType["Townhouse"] = "Townhouse";
     PropertyType["SelfCompound"] = "SelfCompound";
+    PropertyType["SharedApartment"] = "SharedApartment";
     PropertyType["SharedCompound"] = "SharedCompound";
     PropertyType["Shortlet"] = "Shortlet";
     PropertyType["NonOwnerOccupied"] = "NonOwnerOccupied";

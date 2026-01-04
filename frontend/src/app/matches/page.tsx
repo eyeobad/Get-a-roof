@@ -1,14 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import { useMotionScheme } from "@/lib/motion";
+import { useAppStore } from "@/store/useAppStore";
 
 type Match = {
   id: string;
+  listingId: string;
   title: string;
   location: string;
   price: string;
@@ -21,66 +23,63 @@ type Match = {
   unread?: boolean;
 };
 
-const matchesSeed: Match[] = [
-  {
-    id: "match-1",
-    title: "4 Bed Duplex",
-    location: "Lekki Phase 1, Lagos",
-    price: "₦85,000,000",
-    image: "/p5.png",
-    tags: ["Serviced", "Gym"],
-    online: true,
-    badge: "New",
-    lastMessage: "Hi, when are you available to view the property?",
-    time: "10:42 AM",
-    unread: true,
-  },
-  {
-    id: "match-2",
-    title: "5 Bed Villa",
-    location: "Ikoyi, Lagos",
-    price: "₦120,000,000",
-    image: "/p6.png",
-    tags: ["Pool", "Security"],
-    online: true,
-    lastMessage: "Thanks for the application. I'll review it shortly.",
-    time: "Yesterday",
-  },
-  {
-    id: "match-3",
-    title: "3 Bed Apartment",
-    location: "Victoria Island, Lagos",
-    price: "₦45,000,000",
-    image: "/p7.png",
-    tags: ["Furnished"],
-    online: false,
-    lastMessage: "Let me check the lease terms for you.",
-    time: "Monday",
-  },
-  {
-    id: "match-4",
-    title: "3 Bed Terrace",
-    location: "Ajah, Lagos",
-    price: "₦60,000,000",
-    image: "/p8.png",
-    tags: ["New Build", "Parking"],
-    online: false,
-    lastMessage: "Is the parking spot included in the rent?",
-    time: "Sunday",
-  },
-];
+const formatTime = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+};
 
 export default function MatchesPage() {
   const router = useRouter();
-  const matches = useMemo(() => matchesSeed, []);
+  const matchSummaries = useAppStore((state) => state.matchSummaries);
+  const listingsById = useAppStore((state) => state.listingsById);
+  const loadMatches = useAppStore((state) => state.loadMatches);
+
+  useEffect(() => {
+    void loadMatches();
+  }, [loadMatches]);
+
+  const matches = useMemo(() => {
+    return matchSummaries
+      .map((summary) => {
+        const listing = listingsById[summary.listingId];
+        if (!listing) return null;
+        return {
+          id: summary.id,
+          listingId: summary.listingId,
+          title: `${listing.bedrooms} Bed ${listing.highlight || "Home"}`,
+          location: listing.address,
+          price: listing.price,
+          image: listing.image,
+          tags: [listing.highlight, listing.tag].filter(Boolean),
+          badge: summary.matchScore ? `${summary.matchScore}%` : undefined,
+          lastMessage: summary.lastMessage,
+          time: formatTime(summary.lastMessageAt),
+          unread: (summary.unreadCount ?? 0) > 0,
+        };
+      })
+      .filter((match): match is Match => Boolean(match));
+  }, [matchSummaries, listingsById]);
+
   const [selectedId, setSelectedId] = useState(matches[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!selectedId && matches[0]) {
+      setSelectedId(matches[0].id);
+    }
+  }, [matches, selectedId]);
+
   const selected = matches.find((m) => m.id === selectedId) ?? matches[0];
   const { effects } = useMotionScheme();
   const tapToken = effects.tap;
 
   const openChat = (id: string) => {
     setSelectedId(id);
-    router.push(`/property-details/${id}`);
+    const match = matches.find((item) => item.id === id);
+    if (match?.listingId) {
+      router.push(`/property-details/${match.listingId}`);
+    }
   };
 
   return (

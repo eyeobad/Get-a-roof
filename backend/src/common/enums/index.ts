@@ -22,6 +22,7 @@ export enum PropertyType {
   Condo = "Condo",
   Townhouse = "Townhouse",
   SelfCompound = "SelfCompound",
+  SharedApartment = "SharedApartment",
   SharedCompound = "SharedCompound",
   Shortlet = "Shortlet",
   NonOwnerOccupied = "NonOwnerOccupied",

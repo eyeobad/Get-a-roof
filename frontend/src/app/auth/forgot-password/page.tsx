@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestPasswordReset = useAppStore((state) => state.requestPasswordReset);
 
   const isEmailValid = useMemo(() => {
     // Simple + safe email check for UI gating (backend must still validate)
@@ -19,14 +22,13 @@ export default function ForgotPasswordPage() {
 
     try {
       setIsSubmitting(true);
-      // TODO: call your API here:
-      // await fetch("/api/auth/request-password-reset", { method: "POST", body: JSON.stringify({ email }) })
-
-      // For now: just a UX-friendly fake delay
-      await new Promise((r) => setTimeout(r, 650));
-
-      // TODO: route to a "Check your email" screen if you have one
-      // router.push("/auth/check-email");
+      setError(null);
+      const response = await requestPasswordReset(email.trim());
+      const token = response?.token ?? "";
+      const query = new URLSearchParams({ token, email });
+      router.push(`/auth/set-new-password?${query.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -105,6 +107,12 @@ export default function ForgotPasswordPage() {
             <span className="truncate">{isSubmitting ? "Sending..." : "Send Reset Link"}</span>
           </button>
         </div>
+
+        {error && (
+          <p className="text-center text-sm font-medium text-red-600 px-6 pb-4">
+            {error}
+          </p>
+        )}
 
         <div className="px-6 pb-10">
           <p className="text-sm text-near-black/60">

@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 import { MatchesService } from "./matches.service";
 import { CreateMatchDto } from "./dto/create-match.dto";
@@ -18,6 +18,13 @@ export class MatchesController {
   create(@Body() dto: CreateMatchDto, @Req() req: Request & { user?: any }) {
     dto.tenantId = req.user?.sub;
     return this.matchesService.createMatch(dto);
+  }
+
+  @Get("tenant")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Tenant)
+  getTenantMatches(@Req() req: Request & { user?: any }) {
+    return this.matchesService.getTenantMatches(req.user?.sub);
   }
 
   @Patch(":id")

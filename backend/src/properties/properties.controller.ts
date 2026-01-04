@@ -81,6 +81,7 @@ export class PropertiesController {
 
   private buildFilters(query: Record<string, string>) {
     const filters: Record<string, unknown> = {};
+    const propertyTypes = new Set<string>();
 
     if (query.minPrice || query.maxPrice || query.budget) {
       filters.monthlyPrice = {} as any;
@@ -100,8 +101,54 @@ export class PropertiesController {
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean);
-      if (types.length) {
-        filters.propertyType = { $in: types } as any;
+      types.forEach((type) => propertyTypes.add(type));
+    }
+
+    const toggleMap: Record<string, string> = {
+      selfCompound: "SelfCompound",
+      shortlets: "Shortlet",
+      sharedCompound: "SharedCompound",
+      nonOwner: "NonOwnerOccupied",
+      nonOwnerOccupied: "NonOwnerOccupied",
+      sharedApartment: "SharedApartment",
+    };
+
+    Object.entries(toggleMap).forEach(([key, value]) => {
+      if (query[key] === "true") {
+        propertyTypes.add(value);
+      }
+    });
+
+    if (propertyTypes.size) {
+      filters.propertyType = { $in: Array.from(propertyTypes) };
+    }
+
+    if (query.apartmentType) {
+      const type = query.apartmentType;
+      if (type === "two") {
+        filters.bedCount = 2;
+      } else if (type === "threePlus") {
+        filters.bedCount = { $gte: 3 };
+      } else if (type === "fourPlus") {
+        filters.bedCount = { $gte: 4 };
+      } else if (type === "singleRoom" || type === "miniflat" || type === "studio1") {
+        filters.bedCount = { $lte: 1 };
+      } else if (type === "duplex") {
+        filters.propertyType = { $in: ["House", "Townhouse"] };
+      }
+    }
+
+    if (query.minBeds || query.maxBeds) {
+      if (typeof filters.bedCount === "number") {
+        filters.bedCount = { $eq: filters.bedCount };
+      } else {
+        filters.bedCount = filters.bedCount ?? {};
+      }
+      if (query.minBeds) {
+        (filters.bedCount as any).$gte = Number(query.minBeds);
+      }
+      if (query.maxBeds) {
+        (filters.bedCount as any).$lte = Number(query.maxBeds);
       }
     }
 

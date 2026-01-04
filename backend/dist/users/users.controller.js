@@ -51,6 +51,12 @@ let UsersController = class UsersController {
         }
         return this.usersService.addSavedProperty(id, dto.propertyId).then((user) => this.usersService.sanitizeUser(user));
     }
+    getSavedProperties(id, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.usersService.getSavedProperties(id);
+    }
     async getVerificationStatus(id, req) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
@@ -109,6 +115,15 @@ __decorate([
     __metadata("design:paramtypes", [String, save_property_dto_1.SavePropertyDto, Object]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "saveProperty", null);
+__decorate([
+    (0, common_1.Get)(":id/saved-properties"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "getSavedProperties", null);
 __decorate([
     (0, common_1.Get)(":id/verification-status"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

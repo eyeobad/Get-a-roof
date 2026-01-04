@@ -1,50 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { useAppStore } from "@/store/useAppStore";
 
-const markers = [
+const fallbackMarkers = [
   { price: "$325k", top: "25%", left: "20%" },
   { price: "$450k", top: "40%", left: "50%", spotlight: true },
   { price: "$550k", top: "60%", right: "15%" },
 ];
 
-const listItems = [
-  {
-    price: "$450,000",
-    address: "123 Maple Drive, Springfield",
-    beds: 3,
-    baths: 2,
-    sqft: "1,850",
-    tag: "New Listing",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuADVf7CMctt9ac5GQTm8NvzyaOzpBBnntgegZEqCI63ycAL9eKoDLU4VUlaDej8Nf79JvuC8BeRZvbBooVnnk9QmTMHFAzPf0pYKQglUvzV8A9226VnbKLfXmqsufiOXNqWLUorp5Ofgduos34a35B6FjJZmfnesdp7YWvX082SJDEo-fdrmwGo2qkAr_ntWD3vPm8nru7KfXc-crvuiL6ntVNBnvBKJNnQ6ZZ6wp6w-sX9bUFKiszubOqZJFtL3ZbIBJQBK9RGh5M",
-  },
-  {
-    price: "$325,000",
-    address: "842 Oak Avenue, Springfield",
-    beds: 2,
-    baths: 2,
-    sqft: "1,400",
-    tag: "Cozy Find",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuCX6vHVzQMyw0HHHV7zc97b_eMesxXlEMLlhmmoJCYejt5a7Ilmd0GQBD2sYpMlYK4h3EuGXq4HAOEFv9LH9LGQ3F7zpEpMu6_vLuKFOshQ4egHqD7yyb9dUG13phhyX1AYs41o9EUV9THzBqm4BjoKFajSsmAcKsH-KxTJVtoRWa8jTy8C1SnlZTl-xxremlObYPuixt3uZAxdG7zHxetW2taW-eCKfSYmRGsMpTGISY1JOYfRpKbzRB_JeuDLh2q_-K7bCGi7pVw",
-  },
-  {
-    price: "$550,000",
-    address: "55 Lakeview Dr, Springfield",
-    beds: 4,
-    baths: 3,
-    sqft: "2,200",
-    tag: "Luxury",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAMpTZEWaLXCjhwmwWTGPX4UymC7fWJwCmP42BtvfZ3c3uEXRRmcSI9L5cCkyspk3Yn8cKL9OqtU8l-NffXxXpxrNq6v08MsDwg64F6qrHtyWfqJq-WgyzuiWC_dcm9DKEyemCHP2o-BJSGgwr-KMBjwlXqEvcu5mN5hZFZrUrb3G3_H3ILXApL0Pus0DZFpeTxSL4xKLB47sRa0R3Oi13L6yUlj_ED4PoXtpUiHfD2nLkx5dalv3gJhk6z-az7rOIHOmFoOHqu_dQ",
-  },
-];
+type ListingCard = {
+  id: string;
+  price: string;
+  address: string;
+  beds: number;
+  baths: number;
+  sqft: string;
+  tag?: string;
+  image: string;
+};
 
-function PropertyCard({ item }: { item: (typeof listItems)[number] }) {
+type Marker = {
+  id?: string;
+  index?: number;
+  price: string;
+  top?: string;
+  left?: string;
+  right?: string;
+  spotlight?: boolean;
+};
+
+function PropertyCard({ item }: { item: ListingCard }) {
   return (
     <article className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden group cursor-pointer transform transition active:scale-[0.99]">
       <div className="relative h-48 overflow-hidden">
@@ -60,7 +49,7 @@ function PropertyCard({ item }: { item: (typeof listItems)[number] }) {
           </span>
         </div>
         <div className="absolute bottom-3 left-3 bg-primary text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
-          {item.tag}
+          {item.tag ?? "Listing"}
         </div>
       </div>
 
@@ -70,7 +59,9 @@ function PropertyCard({ item }: { item: (typeof listItems)[number] }) {
             <h3 className="text-2xl font-bold text-[#0c141d]">{item.price}</h3>
             <p className="text-sm text-gray-500 mt-1">{item.address}</p>
           </div>
-          <button className="text-sm text-primary font-semibold">View</button>
+          <Link href={`/property-details/${item.id}`} className="text-sm text-primary font-semibold">
+            View
+          </Link>
         </div>
 
         <div className="flex items-center space-x-4 mt-4 text-gray-500 text-sm border-t border-gray-100 pt-4">
@@ -99,6 +90,62 @@ function PropertyCard({ item }: { item: (typeof listItems)[number] }) {
 
 export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const mapMatches = useAppStore((state) => state.mapMatches);
+  const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    void loadMapMatches();
+  }, [loadMapMatches]);
+
+  const listItems = useMemo<ListingCard[]>(() => {
+    return mapMatches.map((listing) => ({
+      id: listing.id,
+      price: listing.price,
+      address: listing.address,
+      beds: listing.bedrooms,
+      baths: listing.bathrooms,
+      sqft: listing.sqft,
+      tag: listing.tag,
+      image: listing.image,
+    }));
+  }, [mapMatches]);
+
+  const markers = useMemo<Marker[]>(() => {
+    if (!mapMatches.length) return fallbackMarkers;
+    const coords = mapMatches.filter((listing) => listing.lat || listing.lng);
+    if (!coords.length) return fallbackMarkers;
+
+    const lats = coords.map((listing) => listing.lat);
+    const lngs = coords.map((listing) => listing.lng);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    return coords.map((listing, index) => {
+      const latRatio = maxLat === minLat ? 0.5 : (listing.lat - minLat) / (maxLat - minLat);
+      const lngRatio = maxLng === minLng ? 0.5 : (listing.lng - minLng) / (maxLng - minLng);
+      const top = 15 + (1 - latRatio) * 70;
+      const left = 15 + lngRatio * 70;
+      return {
+        id: listing.id,
+        index,
+        price: listing.price,
+        top: `${top}%`,
+        left: `${left}%`,
+        spotlight: index === selectedIndex,
+      };
+    });
+  }, [mapMatches, selectedIndex]);
+
+  const activeListing = listItems[selectedIndex] ?? listItems[0];
+
+  useEffect(() => {
+    if (selectedIndex >= listItems.length && listItems.length > 0) {
+      setSelectedIndex(0);
+    }
+  }, [listItems, selectedIndex]);
 
   return (
     <>
@@ -187,7 +234,13 @@ export default function MapView() {
 
             {markers.map((marker) => (
               <button
-                key={marker.price}
+                key={marker.id ?? marker.price}
+                type="button"
+                onClick={() => {
+                  if (typeof (marker as any).index === "number") {
+                    setSelectedIndex((marker as any).index);
+                  }
+                }}
                 className={`absolute z-10 ${
                   marker.spotlight ? "animate-bounce-short" : "opacity-90"
                 }`}
@@ -213,19 +266,21 @@ export default function MapView() {
               <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-100 relative">
                 <div className="flex gap-4 items-start">
                   <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
-                    <Image
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8uS7JBp8sTMhuN6_myhV6B1wT-IuHLW9tTikzzwWA2eJhUhxwiPi4ZeWlIt1xqykV6nUTzm4382HY_0d4RHkgItJrYTPgpbhRTFg6C3wt5OlEzBqFaj5hslnkgdq-lMyZ4pDoenDIed--gYp1vHaR8ji5Mmjr-R6on8mBfOvo1X9Z47iDtFJOKqlCOwxvex3U00VlWfFfurSnYfHIfOijGuwSSpdBD-EYiPFSo6y6aFRM27tFySO9i40tb6NbbvL8FKsh0fiMVNUE"
-                      alt="Modern suburban house"
-                      fill
-                      className="object-cover"
-                    />
+                    {activeListing ? (
+                      <Image
+                        src={activeListing.image}
+                        alt={activeListing.address}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : null}
                   </div>
 
                   <div className="flex-1 flex flex-col justify-between h-24 py-0.5">
                     <div>
                       <div className="flex justify-between items-start">
                         <h2 className="text-xl font-bold text-primary leading-none">
-                          $450,000
+                          {activeListing?.price ?? "$0"}
                         </h2>
                         <button className="text-gray-400 hover:text-red-500 transition-colors">
                           <span className="material-symbols-outlined text-[20px]">
@@ -235,15 +290,15 @@ export default function MapView() {
                       </div>
 
                       <p className="text-gray-600 text-sm mt-1 truncate">
-                        123 Maple Drive, Springfield
+                        {activeListing?.address ?? "No matched properties yet"}
                       </p>
                     </div>
 
                     <div className="flex items-center gap-3 text-gray-500 mt-1">
                       {[
-                        { icon: "bed", value: "3" },
-                        { icon: "bathtub", value: "2" },
-                        { icon: "", value: "1,850 sqft" },
+                        { icon: "bed", value: activeListing?.beds ?? 0 },
+                        { icon: "bathtub", value: activeListing?.baths ?? 0 },
+                        { icon: "", value: `${activeListing?.sqft ?? "0"} sqft` },
                       ].map((item) => (
                         <div
                           key={item.value}
@@ -257,27 +312,28 @@ export default function MapView() {
                           <span>{item.value}</span>
                         </div>
                       ))}
-                      <div className="text-xs text-gray-400">| 1,850 sqft</div>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/property-details/listing-1"
-                  className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                >
-                  <span>View Home Details</span>
-                  <span className="material-symbols-outlined text-sm">
-                    arrow_forward
-                  </span>
-                </Link>
+                {activeListing && (
+                  <Link
+                    href={`/property-details/${activeListing.id}`}
+                    className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  >
+                    <span>View Home Details</span>
+                    <span className="material-symbols-outlined text-sm">
+                      arrow_forward
+                    </span>
+                  </Link>
+                )}
               </div>
             </div>
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto bg-background-light px-4 py-5 space-y-5">
             {listItems.map((item) => (
-              <PropertyCard key={item.price} item={item} />
+              <PropertyCard key={item.id} item={item} />
             ))}
             <div className="h-8" />
           </main>
@@ -292,7 +348,7 @@ export default function MapView() {
           <div className="p-6 border-b border-gray-200 shrink-0">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-bold text-text-light">
-                3 Properties Found
+                {listItems.length} Properties Found
               </h2>
               <span className="text-xs font-medium text-text-muted-light bg-gray-100 px-2 py-1 rounded">
                 Springfield, IL
@@ -308,7 +364,7 @@ export default function MapView() {
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
             {listItems.map((item) => (
-              <PropertyCard key={item.price} item={item} />
+              <PropertyCard key={item.id} item={item} />
             ))}
             <div className="h-10" />
           </div>
@@ -346,25 +402,28 @@ export default function MapView() {
             </button>
           </div>
 
-          <div className="absolute inset-0 pointer-events-none z-10">
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 translate-y-5">
-              <div className="marker-pulse bg-primary text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-full shadow-xl font-bold text-sm">
-                $450k
+          {markers.map((marker) => (
+            <div
+              key={marker.id ?? marker.price}
+              className="absolute z-10"
+              style={{
+                top: marker.top,
+                left: marker.left,
+                right: marker.right,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <div
+                className={`${
+                  marker.spotlight
+                    ? "marker-pulse bg-primary text-white"
+                    : "marker-pulse-white bg-white text-gray-800"
+                } px-3 py-2 sm:px-4 sm:py-2.5 rounded-full shadow-xl font-bold text-sm border border-gray-200`}
+              >
+                {marker.price}
               </div>
             </div>
-          </div>
-
-          <div className="absolute top-1/3 left-1/3 z-10">
-            <div className="marker-pulse-white bg-white text-gray-800 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full shadow-md font-semibold text-xs border border-gray-200">
-              $325k
-            </div>
-          </div>
-
-          <div className="absolute bottom-1/3 right-1/3 z-10">
-            <div className="marker-pulse-white bg-white text-gray-800 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full shadow-md font-semibold text-xs border border-gray-200">
-              $550k
-            </div>
-          </div>
+          ))}
         </section>
       </div>
 

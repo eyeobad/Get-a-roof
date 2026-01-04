@@ -27,6 +27,10 @@ export class UpdateUserDto {
   phoneNumber?: string;
 
   @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => AddressDto)
   address?: AddressDto;

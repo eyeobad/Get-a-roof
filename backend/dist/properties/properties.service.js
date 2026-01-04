@@ -101,6 +101,7 @@ let PropertiesService = class PropertiesService {
             const matchInput = {
                 propertyType: plain.propertyType,
                 monthlyPrice: plain.monthlyPrice,
+                petFriendly: plain.petFriendly,
                 landlordRequirements: plain.landlordRequirements,
             };
             const match = tenantPreferences
@@ -129,6 +130,9 @@ let PropertiesService = class PropertiesService {
         if (distanceLimit !== undefined) {
             filtered = filtered.filter((property) => property.distanceKm !== undefined &&
                 property.distanceKm <= distanceLimit);
+        }
+        if (tenantPreferences?.petFriendlyRequired) {
+            filtered = filtered.filter((property) => property.petFriendly === true);
         }
         const minMatchScore = (0, match_helpers_1.toNumber)(options?.minMatchScore);
         if (minMatchScore !== undefined) {

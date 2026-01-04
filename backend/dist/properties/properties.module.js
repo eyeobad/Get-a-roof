@@ -13,6 +13,7 @@ const properties_controller_1 = require("./properties.controller");
 const properties_service_1 = require("./properties.service");
 const property_schema_1 = require("./schemas/property.schema");
 const users_module_1 = require("../users/users.module");
+const match_schema_1 = require("../matches/schemas/match.schema");
 let PropertiesModule = class PropertiesModule {
 };
 exports.PropertiesModule = PropertiesModule;
@@ -20,6 +21,7 @@ exports.PropertiesModule = PropertiesModule = __decorate([
     (0, common_1.Module)({
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
             users_module_1.UsersModule,
         ],
         controllers: [properties_controller_1.PropertiesController],

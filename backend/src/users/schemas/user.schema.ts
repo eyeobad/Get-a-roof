@@ -71,6 +71,9 @@ class TenantPreferences {
   hasPets?: boolean;
 
   @Prop()
+  petFriendlyRequired?: boolean;
+
+  @Prop()
   smokingHabits?: string;
 
   @Prop()
@@ -116,6 +119,9 @@ export class User {
 
   @Prop({ unique: true, sparse: true })
   phoneNumber?: string;
+
+  @Prop()
+  photoUrl?: string;
 
   @Prop({ type: Address })
   address?: Address;

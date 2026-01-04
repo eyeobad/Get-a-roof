@@ -131,6 +131,31 @@ export class UsersService {
     return updated;
   }
 
+  async getSavedProperties(id: string) {
+    const user = await this.userModel
+      .findById(id)
+      .populate("savedProperties")
+      .exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    return user.savedProperties ?? [];
+  }
+
+  async removeSavedProperty(id: string, propertyId: string) {
+    const updated = await this.userModel
+      .findByIdAndUpdate(
+        id,
+        { $pull: { savedProperties: propertyId } },
+        { new: true }
+      )
+      .exec();
+    if (!updated) {
+      throw new NotFoundException("User not found");
+    }
+    return updated;
+  }
+
   sanitizeUser(user: UserDocument) {
     const obj = user.toObject();
     delete obj.loginCredentials;

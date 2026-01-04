@@ -28,6 +28,10 @@ export class TenantPreferencesDto {
   hasPets?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  petFriendlyRequired?: boolean;
+
+  @IsOptional()
   @IsString()
   smokingHabits?: string;
 

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 const DIGITS = 6;
 
@@ -10,7 +11,15 @@ export default function EmailVerificationPage() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const [values, setValues] = useState<string[]>(Array(DIGITS).fill(""));
   const [timer, setTimer] = useState(59);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const verifyEmailOtp = useAppStore((state) => state.verifyEmailOtp);
+  const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
+  const userId = searchParams.get("userId") || "";
+  const email = searchParams.get("email") || "user@example.com";
+  const phone = searchParams.get("phone") || "";
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
@@ -36,6 +45,34 @@ export default function EmailVerificationPage() {
     return () => clearTimeout(timeout);
   }, [timer]);
 
+  const otp = values.join("");
+  const canSubmit = otp.length === DIGITS && !isSubmitting && !!userId;
+
+  const handleVerify = async () => {
+    if (!userId || !canSubmit) return;
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      await verifyEmailOtp(userId, otp);
+      const query = new URLSearchParams({ userId, phone });
+      router.push(`/auth/phone-verification?${query.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!userId || timer > 0) return;
+    try {
+      await sendEmailOtp(userId);
+      setTimer(59);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resend failed");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background-light font-display text-text-main">
       <div className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
@@ -59,7 +96,7 @@ export default function EmailVerificationPage() {
 
           <p className="mt-2 text-lg font-medium text-[#0d121c]/80">
             We sent a 6-digit code to{" "}
-            <span className="font-bold text-text-main">user@example.com</span>.
+            <span className="font-bold text-text-main">{email}</span>.
             Please enter it below to verify your account.
           </p>
 
@@ -96,6 +133,7 @@ export default function EmailVerificationPage() {
 
             <button
               disabled={timer > 0}
+              onClick={handleResend}
               className="text-lg font-bold text-primary underline decoration-2 underline-offset-4 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Resend Code
@@ -103,7 +141,16 @@ export default function EmailVerificationPage() {
           </div>
 
           <div className="mt-10">
-            <button className="flex w-full items-center justify-center gap-3 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg shadow-primary/30 transition hover:bg-blue-700 active:scale-[0.98]">
+            {error && (
+              <p className="text-center text-sm font-medium text-red-600 mb-3">
+                {error}
+              </p>
+            )}
+            <button
+              onClick={handleVerify}
+              disabled={!canSubmit}
+              className="flex w-full items-center justify-center gap-3 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg shadow-primary/30 transition hover:bg-blue-700 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               <span>Verify</span>
               <span className="material-symbols-outlined text-[24px]">
                 arrow_forward

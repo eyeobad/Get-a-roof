@@ -112,6 +112,16 @@ let UsersService = class UsersService {
         }
         return updated;
     }
+    async getSavedProperties(id) {
+        const user = await this.userModel
+            .findById(id)
+            .populate("savedProperties")
+            .exec();
+        if (!user) {
+            throw new common_1.NotFoundException("User not found");
+        }
+        return user.savedProperties ?? [];
+    }
     sanitizeUser(user) {
         const obj = user.toObject();
         delete obj.loginCredentials;
