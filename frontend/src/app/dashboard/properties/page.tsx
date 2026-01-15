@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 const solidIconStyle: React.CSSProperties = {
@@ -155,6 +155,8 @@ function PropertyCard({
   );
 }
 
+import { usePathname } from "next/navigation";
+
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
   const Item = ({
     id,
@@ -194,6 +196,27 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
       </Link>
     );
   };
+
+  const pathname = usePathname();
+  const isDashboardRoute =
+    pathname?.startsWith("/dashboard/") ||
+    pathname === "/dashboard";
+
+  if (!isDashboardRoute) {
+    return (
+      <nav className="fixed bottom-0 left-0 w-full h-16 bg-white border-t border-gray-200 flex items-center justify-around z-50">
+        <Link href="/messages">
+          <span className="material-symbols-outlined">chat_bubble</span>
+        </Link>
+        <Link href="/properties">
+          <span className="material-symbols-outlined">home</span>
+        </Link>
+        <Link href="/profile">
+          <span className="material-symbols-outlined">person</span>
+        </Link>
+      </nav>
+    );
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 w-full h-20 bg-white border-t border-gray-200 flex items-center justify-around z-50 pb-2 shadow-[0_-4px_10px_rgba(0,0,0,0.06)]">
