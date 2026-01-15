@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -157,6 +157,7 @@ function PropertyCard({
   );
 }
 
+ 
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
   const Item = ({
     id,
@@ -198,11 +199,21 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   };
 
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fromParam = searchParams?.get("from") ?? "";
+  const dashboardSources = new Set(["/dashboard/properties", "/dashboard/matches"]);
   const isDashboardRoute =
-    pathname?.startsWith("/dashboard/") ||
-    pathname === "/dashboard";
+    pathname?.startsWith("/dashboard/") || pathname === "/dashboard";
+  const showDashboardNav =
+    isDashboardRoute ||
+    (pathname === "/messages" && dashboardSources.has(fromParam));
+  const shouldPassFromParam =
+    pathname === "/dashboard/properties" || pathname === "/dashboard/matches";
+  const chatHref = shouldPassFromParam
+    ? `/messages?from=${encodeURIComponent(pathname ?? "")}`
+    : "/messages";
 
-  if (!isDashboardRoute) {
+  if (!showDashboardNav) {
     return (
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-white border-t border-gray-200 flex items-center justify-around z-50">
         <Link href="/messages">
@@ -223,7 +234,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
       <div className="max-w-md w-full h-full mx-auto flex">
         <Item id="properties" label="Properties" icon="dashboard" href="/dashboard/properties" />
         <Item id="matches" label="Matches" icon="group" href="/dashboard/matches" />
-        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href="/messages" />
+        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href={chatHref} />
         <Item id="profile" label="Profile" icon="person" href="/dashboard/profile" />
       </div>
     </nav>
