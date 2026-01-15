@@ -1,43 +1,19 @@
 import Link from "next/link";
+import { MdApartment,  MdHomeWork,MdHome } from "react-icons/md";
 
 const roles = [
   {
     title: "Landlord",
     description: "I want to list properties",
-    icon: (
-      <svg
-        width={24}
-        height={24}
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M19 22H5V3H19V22ZM7 20H17V5H7V20ZM11 7H13V9H11V7ZM11 11H13V13H11V11ZM11 15H13V17H11V15Z"
-          fill="white"
-        />
-      </svg>
-    ),
+    icon: < MdHomeWork size={24} color="white" />,
   },
   {
     title: "Tenant",
     description: "I'm looking for a home",
-    icon: (
-      <svg
-        width={24}
-        height={24}
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M12 2L3 10V12H5V20H10V14H14V20H19V12H21L12 2ZM12 6.5L16.5 10.5H7.5L12 6.5Z"
-          fill="white"
-        />
-      </svg>
-    ),
+    icon: <MdHome size={24} color="white" />,
   },
 ];
+
 
 export default function CreateAccountPage() {
   return (
@@ -76,7 +52,7 @@ export default function CreateAccountPage() {
             <div className="mt-10 flex flex-col gap-5">
               {roles.map((role) => {
                 const href =
-                  role.title === "Tenant" ? "/tenant-signup" : "/signup/landlord";
+                  role.title === "Tenant" ? "/tenant-signup" : "/landlord-signup";
                 return (
                   <Link
                     key={role.title}

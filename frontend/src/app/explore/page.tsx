@@ -26,6 +26,7 @@ import type { Listing } from "@/lib/listings";
 type FilterModalProps = {
   isOpen: boolean;
   close: () => void;
+  onApply: () => void;
   budget: number;
   setBudget: Dispatch<SetStateAction<number>>;
   distance: number;
@@ -295,6 +296,7 @@ export default function ExploreCards() {
       <FilterModal
         isOpen={filtersOpen}
         close={() => setFiltersOpen(false)}
+        onApply={applyFilters}
         budget={budget}
         setBudget={setBudget}
         distance={distance}
@@ -400,6 +402,7 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
 function FilterModal({
   isOpen,
   close,
+  onApply,
   budget,
   setBudget,
   distance,
@@ -549,7 +552,7 @@ function FilterModal({
               </button>
 
               <button
-                onClick={applyFilters}
+                onClick={onApply}
                 className="flex-[2] rounded-xl bg-primary px-3 py-3.5 text-xs font-bold text-white shadow-sm hover:brightness-110 active:scale-95 transition-all"
               >
                 Apply Filters
