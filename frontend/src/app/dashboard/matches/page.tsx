@@ -166,7 +166,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
       <div className="flex justify-between items-end h-14 max-w-md mx-auto">
         <Item id="properties" label="Properties" icon="grid_view" href="/dashboard/properties" />
         <Item id="matches" label="Matches" icon="group" href="/dashboard/matches" />
-        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href="/messages" />
+        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href="/messages?from=/dashboard/matches" />
         <Item id="profile" label="Profile" icon="person" href="/dashboard/profile" />
       </div>
       <div className="h-5 w-full" />

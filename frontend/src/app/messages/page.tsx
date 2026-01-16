@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import BottomNav from "@/components/BottomNav";
+import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 
 type Conversation = {
@@ -219,7 +219,7 @@ export default function MessagesPage() {
               ))}
             </main>
 
-            <BottomNav className="lg:hidden" />
+            <AdaptiveBottomNav activeTab="messages" layout="fixed" className="lg:hidden" />
           </>
         )}
 
@@ -433,7 +433,7 @@ export default function MessagesPage() {
               </main>
 
               {/* BottomNav pinned to the bottom of the LEFT column only */}
-              <BottomNav className="hidden lg:block" />
+              <AdaptiveBottomNav activeTab="chat" layout="inline" className="hidden lg:block" />
             </aside>
 
             {/* RIGHT: chat panel (NO BottomNav under here) */}
