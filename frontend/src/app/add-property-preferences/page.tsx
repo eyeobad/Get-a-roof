@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -66,6 +68,14 @@ function SectionHeader({
 }
 
 export default function TenantPreferencesPage() {
+  const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const draft = useAppStore((state) => state.landlordDraft);
+  const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
+  const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
+  const [initialized, setInitialized] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const employment: Option[] = useMemo(
     () => [
       { key: "employed", label: "Employed" },
@@ -163,6 +173,99 @@ export default function TenantPreferencesPage() {
   const [socialValue, setSocialValue] = useState("occasionally");
   const [childrenValue, setChildrenValue] = useState("dont");
 
+  const resolveOptionKey = (value: unknown, options: Option[], fallback: string) => {
+    if (!value) return fallback;
+    const normalized = String(value).toLowerCase();
+    const match =
+      options.find((o) => o.key.toLowerCase() === normalized) ||
+      options.find((o) => o.label.toLowerCase() === normalized);
+    return match?.key ?? fallback;
+  };
+
+  const resolveLabel = (options: Option[], key: string) =>
+    options.find((o) => o.key === key)?.label ?? key;
+
+  useEffect(() => {
+    if (initialized) return;
+    const prefs = draft.landlordRequirements?.idealTenantPreferences;
+    setEmploymentValue(resolveOptionKey(prefs?.employmentStatus, employment, "employed"));
+    setMaritalValue(resolveOptionKey(prefs?.maritalStatus, marital, "married"));
+    setVehicleValue(resolveOptionKey(prefs?.vehicles, vehicles, "yes"));
+    setSmokingValue(resolveOptionKey(prefs?.smokingHabits, smoking, "no"));
+    setDrinkingValue(resolveOptionKey(prefs?.drinkingHabits, drinking, "occasionally"));
+    setReligionValue(resolveOptionKey(prefs?.religionPreference, religion, "muslim"));
+    setEducationValue(resolveOptionKey(prefs?.educationLevel, education, "bachelors"));
+    setSocialValue(resolveOptionKey(prefs?.socialHabits, social, "occasionally"));
+    if (prefs?.hasChildren === true) {
+      setChildrenValue("have");
+    } else if (prefs?.hasChildren === false) {
+      setChildrenValue("dont");
+    } else {
+      setChildrenValue("na");
+    }
+    setInitialized(true);
+  }, [
+    draft,
+    initialized,
+    employment,
+    marital,
+    vehicles,
+    smoking,
+    drinking,
+    religion,
+    education,
+    social,
+  ]);
+
+  const handleSave = async (nextPath?: string) => {
+    setIsSaving(true);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to save your draft.");
+      setIsSaving(false);
+      return;
+    }
+    const idealTenantPreferences: Record<string, any> = {
+      employmentStatus: resolveLabel(employment, employmentValue),
+      maritalStatus: resolveLabel(marital, maritalValue),
+      vehicles: resolveLabel(vehicles, vehicleValue),
+      smokingHabits: resolveLabel(smoking, smokingValue),
+      drinkingHabits: resolveLabel(drinking, drinkingValue),
+      religionPreference: resolveLabel(religion, religionValue),
+      educationLevel: resolveLabel(education, educationValue),
+      socialHabits: resolveLabel(social, socialValue),
+    };
+
+    if (childrenValue === "have") {
+      idealTenantPreferences.hasChildren = true;
+    } else if (childrenValue === "dont") {
+      idealTenantPreferences.hasChildren = false;
+    }
+
+    Object.keys(idealTenantPreferences).forEach((key) => {
+      if (idealTenantPreferences[key] === undefined) {
+        delete idealTenantPreferences[key];
+      }
+    });
+
+    setLandlordDraft({
+      landlordRequirements: {
+        idealTenantPreferences,
+      },
+    });
+
+    try {
+      await saveLandlordDraft();
+      if (nextPath) {
+        router.push(nextPath);
+      }
+    } catch (err) {
+      setError((err as Error).message || "Unable to save. Try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white/95 font-display text-[#1A1A1A] antialiased">
       <div className="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-white/95 overflow-hidden">
@@ -189,8 +292,9 @@ export default function TenantPreferencesPage() {
             <button
               type="button"
               className="p-2 -mr-2 text-[#0a44b8] text-[13px] font-semibold hover:opacity-80"
+              onClick={() => void handleSave()}
             >
-              Save
+              {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
         </header>
@@ -362,18 +466,22 @@ export default function TenantPreferencesPage() {
 
         {/* Bottom CTA */}
         <div className="fixed bottom-0 left-0 right-0 z-20 max-w-md mx-auto p-5 pb-8 bg-gradient-to-t from-white/95 via-white/95 to-transparent">
-          <Link
-            href="/add-property-review"
+          <button
+            type="button"
+            onClick={() => void handleSave("/add-property-review")}
             className="w-full h-14 rounded-full bg-[#0a44b8] text-white font-bold text-[15px] shadow-lg shadow-[#0a44b8]/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <span>Continue</span>
+            <span>{isSaving ? "Saving..." : "Continue"}</span>
             <span
               className="material-symbols-outlined text-[20px]"
               style={solidIconStyle}
             >
               arrow_forward
             </span>
-          </Link>
+          </button>
+          {error ? (
+            <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
+          ) : null}
         </div>
       </div>
     </div>

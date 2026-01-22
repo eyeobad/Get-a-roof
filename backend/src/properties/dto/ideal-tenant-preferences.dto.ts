@@ -1,5 +1,7 @@
 import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
+import { Transform } from "class-transformer";
 import { VehiclePreference } from "../../common/enums";
+import { normalizeVehiclePreference } from "../../common/utils/property.utils";
 
 export class IdealTenantPreferencesDto {
   @IsOptional()
@@ -12,6 +14,7 @@ export class IdealTenantPreferencesDto {
 
   @IsOptional()
   @IsEnum(VehiclePreference)
+  @Transform(({ value }) => normalizeVehiclePreference(value))
   vehicles?: VehiclePreference;
 
   @IsOptional()
@@ -40,5 +43,21 @@ export class IdealTenantPreferencesDto {
 
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === "") {
+      return undefined;
+    }
+    if (typeof value === "boolean") {
+      return value;
+    }
+    const normalized = String(value).trim().toLowerCase();
+    if (["have", "yes", "true"].includes(normalized)) {
+      return true;
+    }
+    if (["dont", "don't", "no", "false"].includes(normalized)) {
+      return false;
+    }
+    return undefined;
+  })
   hasChildren?: boolean;
 }

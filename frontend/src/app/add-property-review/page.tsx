@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -56,6 +59,101 @@ function MiniChip({ icon, label }: { icon: string; label: string }) {
 }
 
 export default function ReviewPublishPage() {
+  const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const draft = useAppStore((state) => state.landlordDraft);
+  const publishLandlordDraft = useAppStore((state) => state.publishLandlordDraft);
+  const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const address = useMemo(() => {
+    const parts = [
+      draft.address?.street,
+      draft.address?.city,
+      draft.address?.state,
+      draft.address?.zip,
+    ].filter(Boolean);
+    return parts.join(", ");
+  }, [draft.address]);
+
+  const rentLabel = useMemo(() => {
+    if (draft.monthlyPrice === undefined) return "—";
+    return `$${draft.monthlyPrice.toLocaleString()}`;
+  }, [draft.monthlyPrice]);
+
+  const propertyTypeLabel = useMemo(() => {
+    if (!draft.propertyType) return "Not set";
+    const spaced = draft.propertyType.replace(/([a-z])([A-Z])/g, "$1 $2");
+    return spaced.replace(/\b\w/g, (char) => char.toUpperCase());
+  }, [draft.propertyType]);
+
+  const preferenceChips = useMemo(() => {
+    const prefs = draft.landlordRequirements?.idealTenantPreferences;
+    if (!prefs) return [];
+    const chips: { icon: string; label: string }[] = [];
+    if (prefs.employmentStatus) chips.push({ icon: "work", label: prefs.employmentStatus });
+    if (prefs.maritalStatus) chips.push({ icon: "favorite", label: prefs.maritalStatus });
+    if (prefs.vehicles) chips.push({ icon: "directions_car", label: `Vehicle: ${prefs.vehicles}` });
+    if (prefs.smokingHabits) chips.push({ icon: "smoking_rooms", label: prefs.smokingHabits });
+    if (prefs.drinkingHabits) chips.push({ icon: "local_bar", label: prefs.drinkingHabits });
+    if (prefs.religionPreference) chips.push({ icon: "church", label: prefs.religionPreference });
+    if (prefs.educationLevel) chips.push({ icon: "school", label: prefs.educationLevel });
+    if (prefs.socialHabits) chips.push({ icon: "celebration", label: prefs.socialHabits });
+    if (prefs.hasChildren !== undefined) {
+      chips.push({
+        icon: "group",
+        label: prefs.hasChildren ? "Has Children" : "No Children",
+      });
+    }
+    return chips;
+  }, [draft.landlordRequirements?.idealTenantPreferences]);
+
+  const requirementSummary = useMemo(() => {
+    const requirements = draft.landlordRequirements;
+    const budget =
+      requirements?.budgetRange?.max !== undefined
+        ? `$${requirements.budgetRange.max.toLocaleString()}`
+        : "Not set";
+    const income =
+      requirements?.annualIncome?.min !== undefined
+        ? `$${requirements.annualIncome.min.toLocaleString()}`
+        : "Not set";
+    const pets =
+      requirements?.petsAllowed === undefined
+        ? "Not set"
+        : requirements.petsAllowed
+          ? "Allowed"
+          : "Not allowed";
+    const types: string[] = [];
+    if (requirements?.nonOwnerOccupied) types.push("Non-owner");
+    if (requirements?.sharedApartment) types.push("Shared Apartment");
+    if (requirements?.shortlet) types.push("Shortlet");
+    if (requirements?.selfCompound) types.push("Self Compound");
+    if (requirements?.sharedCompound) types.push("Shared Compound");
+    const typeLabel = types.length ? types.join(", ") : "Any";
+    return { budget, income, pets, typeLabel };
+  }, [draft.landlordRequirements]);
+
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to publish your listing.");
+      setIsPublishing(false);
+      return;
+    }
+    try {
+      await publishLandlordDraft();
+      clearLandlordDraft();
+      router.push("/dashboard/properties");
+    } catch (err) {
+      setError((err as Error).message || "Unable to publish. Try again.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white/95 font-display text-[#1A1A1A] antialiased">
       <div className="relative flex min-h-screen w-full max-w-md mx-auto flex-col bg-white/95 pb-36">
@@ -100,31 +198,33 @@ export default function ReviewPublishPage() {
           <section className="space-y-3">
             <SectionTitle title="Property Photos" editHref="/add-property-photos" />
             <div className="flex gap-4 overflow-x-auto pb-2 [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {/* Cover */}
-              <div className="shrink-0">
-                <div className="relative w-[210px] h-[132px] rounded-2xl overflow-hidden bg-black/10">
-                  <img
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjuF3xgiher5Wod-710qDd3xB1y2v8iCki0oJSiwVIDE3ZtMRuGhCnb8ju1CZHyRReziTslravvwlKv4kSXZr3QrX-Hjdkdf7rfaa_o_ocWqwruS6Tt1lBGXMrToSh4DP4c_2bL09KlfExuwlSRn6b4PAdr_yB5lYkkBJU_1ko5oq0rkdeqfijcuJCMGqLZ9pmMGRo-IVoKjA4g1nB7aKcQs7R4t5CsuiP33RdAvZkrk9Z9b8KRwMbhjxXfnQlL42GNtgD9Jelnsa1"
-                    alt="Living Room"
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-2 left-2 text-[11px] font-semibold text-white bg-black/55 backdrop-blur px-2 py-1 rounded-full">
-                    Cover Photo
-                  </span>
+              {(draft.images ?? []).length ? (
+                (draft.images ?? []).map((src, index) => (
+                  <div className="shrink-0" key={`${src}-${index}`}>
+                    <div className="relative w-[210px] h-[132px] rounded-2xl overflow-hidden bg-black/10">
+                      <img
+                        src={src}
+                        alt={`Property photo ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {index === 0 ? (
+                        <span className="absolute top-2 left-2 text-[11px] font-semibold text-white bg-black/55 backdrop-blur px-2 py-1 rounded-full">
+                          Cover Photo
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-[13px] font-medium">
+                      Photo {index + 1}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="shrink-0">
+                  <div className="relative w-[210px] h-[132px] rounded-2xl overflow-hidden bg-black/5 flex items-center justify-center text-sm text-black/40">
+                    No photos yet
+                  </div>
                 </div>
-                <p className="mt-2 text-[13px] font-medium">Living Room</p>
-              </div>
-
-              <div className="shrink-0">
-                <div className="relative w-[210px] h-[132px] rounded-2xl overflow-hidden bg-black/10">
-                  <img
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_Oz3LVTvmcH-aZn43JKGNHjaGGGHq41ghywVZSRVX_qP0jAtqhuor2bllXgFgTKgFAx_yvkrFJ5zMMcblQ-Nk46INIiErf-YkV8IEEXdP96zu6WD0r5JdPz_pgaDugQTkJ0fXFldcHPe2CXSP5_Y2Co7qN_0sH5t9XzfMSMI7yp3WdrkSF_9Z2C1ykUs5g-nvHCCOrhW4O3mB7i5GBGibYBqqgEuFBqL8lVwkoudoBf98S72412ULwPWAWY9VIjEmZDve4bmecD8k"
-                    alt="Kitchen"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <p className="mt-2 text-[13px] font-medium">Kitchen</p>
-              </div>
+              )}
             </div>
           </section>
 
@@ -148,7 +248,9 @@ export default function ReviewPublishPage() {
                     <div className="text-[10px] font-bold tracking-widest text-black/45 uppercase">
                       Type of Property
                     </div>
-                    <div className="text-[15px] font-semibold mt-1">Apartment</div>
+                    <div className="text-[15px] font-semibold mt-1">
+                      {propertyTypeLabel}
+                    </div>
                   </div>
                 </div>
 
@@ -167,7 +269,7 @@ export default function ReviewPublishPage() {
                       Monthly Rent
                     </div>
                     <div className="text-[15px] font-semibold mt-1">
-                      $2,500{" "}
+                      {rentLabel}{" "}
                       <span className="text-[13px] font-medium text-black/45">
                         /month
                       </span>
@@ -190,10 +292,7 @@ export default function ReviewPublishPage() {
                       Property Address
                     </div>
                     <div className="text-[13px] font-semibold mt-1">
-                      123 Maple Avenue, Apt 4B
-                    </div>
-                    <div className="text-[13px] text-black/60">
-                      Springfield, IL 62704
+                      {address || "Address not set"}
                     </div>
                   </div>
                 </div>
@@ -214,9 +313,8 @@ export default function ReviewPublishPage() {
                       Description
                     </div>
                     <p className="text-[13px] text-black/70 leading-relaxed mt-2">
-                      Charming 2-bedroom apartment with natural light, hardwood
-                      floors, and modern appliances. Located in a quiet
-                      neighborhood close to parks and public transport...
+                      {draft.description ||
+                        "No description yet. Add details to help tenants understand your listing."}
                     </p>
                   </div>
                 </div>
@@ -234,11 +332,13 @@ export default function ReviewPublishPage() {
                     className="material-symbols-outlined text-[20px] text-black/40"
                     style={solidIconStyle}
                   >
-                    credit_score
+                    payments
                   </span>
-                  <span className="text-[13px] font-medium">Credit Score</span>
+                  <span className="text-[13px] font-medium">Budget</span>
                 </div>
-                <span className="text-[13px] font-semibold">700+</span>
+                <span className="text-[13px] font-semibold">
+                  {requirementSummary.budget}
+                </span>
               </div>
 
               <div className="flex items-center justify-between px-5 py-4 border-b border-black/5">
@@ -247,11 +347,13 @@ export default function ReviewPublishPage() {
                     className="material-symbols-outlined text-[20px] text-black/40"
                     style={solidIconStyle}
                   >
-                    pets
+                    workspace_premium
                   </span>
-                  <span className="text-[13px] font-medium">Pets Policy</span>
+                  <span className="text-[13px] font-medium">Annual Income</span>
                 </div>
-                <span className="text-[13px] font-semibold">Cats Only</span>
+                <span className="text-[13px] font-semibold">
+                  {requirementSummary.income}
+                </span>
               </div>
 
               <div className="flex items-center justify-between px-5 py-4">
@@ -260,12 +362,27 @@ export default function ReviewPublishPage() {
                     className="material-symbols-outlined text-[20px] text-black/40"
                     style={solidIconStyle}
                   >
-                    smoke_free
+                    pets
                   </span>
-                  <span className="text-[13px] font-medium">Smoking</span>
+                  <span className="text-[13px] font-medium">Pets</span>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-[#FFE7E7] text-[#C62828] text-[12px] font-semibold">
-                  Strictly No
+                <span className="text-[13px] font-semibold">
+                  {requirementSummary.pets}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between px-5 py-4 border-t border-black/5">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="material-symbols-outlined text-[20px] text-black/40"
+                    style={solidIconStyle}
+                  >
+                    home_work
+                  </span>
+                  <span className="text-[13px] font-medium">Property Type</span>
+                </div>
+                <span className="text-[12px] font-semibold text-right max-w-[160px]">
+                  {requirementSummary.typeLabel}
                 </span>
               </div>
             </div>
@@ -279,12 +396,17 @@ export default function ReviewPublishPage() {
                 These preferences help us find the best matches.
               </p>
 
-              <div className="flex flex-col gap-3">
-                <MiniChip icon="work" label="Full-time Employed" />
-                <MiniChip icon="volume_off" label="Quiet Lifestyle" />
-                <MiniChip icon="school" label="Student Friendly" />
-                <MiniChip icon="directions_car" label="Has Vehicle" />
-              </div>
+              {preferenceChips.length ? (
+                <div className="flex flex-col gap-3">
+                  {preferenceChips.map((chip) => (
+                    <MiniChip key={chip.label} icon={chip.icon} label={chip.label} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-black/45">
+                  No preferences set yet.
+                </p>
+              )}
             </div>
           </section>
         </main>
@@ -294,7 +416,7 @@ export default function ReviewPublishPage() {
           <div className="px-5 pt-3 pb-7">
             <div className="flex items-center justify-between text-[12px] mb-3">
               <div className="text-black/55">
-                Posting as <span className="font-semibold text-black/85">John Doe</span>
+                Posting as <span className="font-semibold text-black/85">You</span>
               </div>
               <button
                 type="button"
@@ -310,18 +432,22 @@ export default function ReviewPublishPage() {
               </button>
             </div>
 
-            <Link
-              href="/dashboard/properties"
+            <button
+              type="button"
+              onClick={() => void handlePublish()}
               className="w-full h-14 rounded-full bg-[#0a44b8] text-white font-bold text-[15px] shadow-lg shadow-[#0a44b8]/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
-              <span>Publish Property</span>
+              <span>{isPublishing ? "Publishing..." : "Publish Property"}</span>
               <span
                 className="material-symbols-outlined text-[20px]"
                 style={solidIconStyle}
               >
                 arrow_forward
               </span>
-            </Link>
+            </button>
+            {error ? (
+              <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
+            ) : null}
           </div>
         </div>
       </div>

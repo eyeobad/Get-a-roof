@@ -1,16 +1,129 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
 };
 
 export default function AddPropertyDetailsPage() {
+  const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const draft = useAppStore((state) => state.landlordDraft);
+  const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
+  const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
+  const uploadLandlordProof = useAppStore((state) => state.uploadLandlordProof);
+  const [initialized, setInitialized] = useState(false);
+  const [location, setLocation] = useState("");
+  const [rent, setRent] = useState("");
+  const [propertyType, setPropertyType] = useState("");
   const [desc, setDesc] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [proofName, setProofName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const count = useMemo(() => desc.length, [desc]);
+
+  useEffect(() => {
+    if (initialized) return;
+    setLocation(draft.address?.street ?? "");
+    setRent(draft.monthlyPrice !== undefined ? String(draft.monthlyPrice) : "");
+    const rawType = draft.propertyType ?? "";
+    const normalizedType = rawType ? rawType.toLowerCase() : "";
+    const allowedTypes = ["apartment", "house", "condo", "townhouse", "other"];
+    if (!rawType) {
+      setPropertyType("");
+    } else {
+      setPropertyType(
+        allowedTypes.includes(normalizedType) ? normalizedType : "other"
+      );
+    }
+    setDesc(draft.description ?? "");
+    setLat(
+      draft.address?.lat !== undefined ? String(draft.address.lat) : ""
+    );
+    setLng(
+      draft.address?.lng !== undefined ? String(draft.address.lng) : ""
+    );
+    if (draft.proofOfOwnership) {
+      setProofName("Document uploaded");
+    }
+    setInitialized(true);
+  }, [draft, initialized]);
+
+  const handleUseLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser.");
+      return;
+    }
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLat(position.coords.latitude.toFixed(6));
+        setLng(position.coords.longitude.toFixed(6));
+      },
+      () => {
+        setError("Unable to access your location.");
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const handleSave = async (nextPath?: string) => {
+    setIsSaving(true);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to save your draft.");
+      setIsSaving(false);
+      return;
+    }
+    const rentValue = rent ? Number(rent) : undefined;
+    const latValue = lat ? Number(lat) : undefined;
+    const lngValue = lng ? Number(lng) : undefined;
+
+    setLandlordDraft({
+      monthlyPrice: Number.isNaN(rentValue) ? undefined : rentValue,
+      propertyType: propertyType || undefined,
+      description: desc || undefined,
+      address: {
+        street: location || undefined,
+        lat: Number.isNaN(latValue) ? undefined : latValue,
+        lng: Number.isNaN(lngValue) ? undefined : lngValue,
+      },
+    });
+
+    try {
+      await saveLandlordDraft();
+      if (nextPath) {
+        router.push(nextPath);
+      }
+    } catch (err) {
+      setError((err as Error).message || "Unable to save. Try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleProofUpload = async (file: File | null) => {
+    if (!file) return;
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to upload proof documents.");
+      return;
+    }
+    const uploadedUrl = await uploadLandlordProof(file.name);
+    if (!uploadedUrl) {
+      setError("Proof upload failed. Please try again.");
+      return;
+    }
+    setProofName(file.name);
+    setLandlordDraft({ proofOfOwnership: uploadedUrl });
+  };
 
   return (
     <div className="min-h-screen bg-white/95  text-[#1A1A1A] font-display antialiased overflow-x-hidden selection:bg-[#0a44b8]/30">
@@ -90,9 +203,65 @@ export default function AddPropertyDetailsPage() {
                   id="location"
                   type="text"
                   placeholder="123 Main St, Springfield"
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
                   className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
                 />
               </div>
+            </div>
+
+            {/* Coordinates */}
+            <div className="flex flex-col gap-2">
+              <label className="text-base font-semibold pl-1" htmlFor="lat">
+                Pin Location (Optional)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
+                  <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
+                    <span
+                      className="material-symbols-outlined text-2xl"
+                      style={solidIconStyle}
+                    >
+                      north
+                    </span>
+                  </div>
+                  <input
+                    id="lat"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Latitude"
+                    value={lat}
+                    onChange={(event) => setLat(event.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                  />
+                </div>
+                <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
+                  <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
+                    <span
+                      className="material-symbols-outlined text-2xl"
+                      style={solidIconStyle}
+                    >
+                      east
+                    </span>
+                  </div>
+                  <input
+                    id="lng"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Longitude"
+                    value={lng}
+                    onChange={(event) => setLng(event.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleUseLocation}
+                className="self-start text-sm font-semibold text-[#0a44b8] hover:opacity-80"
+              >
+                Use my current location
+              </button>
             </div>
 
             {/* Rent */}
@@ -116,6 +285,8 @@ export default function AddPropertyDetailsPage() {
                   inputMode="numeric"
                   placeholder="0"
                   type="number"
+                  value={rent}
+                  onChange={(event) => setRent(event.target.value)}
                   className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
                 />
               </div>
@@ -144,7 +315,8 @@ export default function AddPropertyDetailsPage() {
                 <select
                   id="property-type"
                   className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] text-lg py-4 pr-10 rounded-r-full cursor-pointer outline-none"
-                  defaultValue=""
+                  value={propertyType}
+                  onChange={(event) => setPropertyType(event.target.value)}
                 >
                   <option value="" disabled>
                     Select property type
@@ -205,6 +377,10 @@ export default function AddPropertyDetailsPage() {
                   accept="image/*,.pdf"
                   type="file"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    void handleProofUpload(file);
+                  }}
                 />
 
                 <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
@@ -218,7 +394,7 @@ export default function AddPropertyDetailsPage() {
                   </div>
 
                   <p className="text-[#1A1A1A] font-medium text-lg">
-                    Upload document
+                    {proofName || "Upload document"}
                   </p>
                   <p className="text-sm text-gray-500 mt-1 max-w-[200px]">
                     Utility bill, deed, or tax record
@@ -235,18 +411,22 @@ export default function AddPropertyDetailsPage() {
 
         {/* Bottom CTA */}
         <div className="fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2 bg-[#f8f6f6]/95 backdrop-blur-sm border-t border-gray-200 p-4 pb-8 z-20">
-          <Link
-            href="/add-property-requirements"
+          <button
+            type="button"
+            onClick={() => void handleSave("/add-property-requirements")}
             className="w-full bg-[#0a44b8] hover:bg-[#083691] active:scale-[0.98] transition-all text-white text-xl font-bold py-4 rounded-full shadow-lg shadow-[#0a44b8]/20 flex items-center justify-center gap-2 group"
           >
-            <span>Next Step</span>
+            <span>{isSaving ? "Saving..." : "Next Step"}</span>
             <span
               className="material-symbols-outlined group-hover:translate-x-1 transition-transform"
               style={solidIconStyle}
             >
               arrow_forward
             </span>
-          </Link>
+          </button>
+          {error ? (
+            <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
+          ) : null}
         </div>
       </div>
     </div>

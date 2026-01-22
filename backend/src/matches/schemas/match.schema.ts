@@ -29,6 +29,9 @@ export class Match {
 
   @Prop({ default: () => new Date() })
   timestamp: Date;
+
+  @Prop()
+  landlordSeenAt?: Date;
 }
 
 export const MatchSchema = SchemaFactory.createForClass(Match);

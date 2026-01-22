@@ -1,10 +1,23 @@
 import { IsArray, IsBoolean, IsEnum, IsNumber, IsOptional, IsString } from "class-validator";
+import { Transform } from "class-transformer";
 import { PropertyType, VehiclePreference } from "../../common/enums";
+import {
+  normalizePropertyType,
+  normalizeVehiclePreference,
+} from "../../common/utils/property.utils";
 
 export class TenantPreferencesDto {
   @IsOptional()
   @IsArray()
   @IsEnum(PropertyType, { each: true })
+  @Transform(({ value }) => {
+    if (!Array.isArray(value)) {
+      return value;
+    }
+    return value
+      .map((item) => normalizePropertyType(item) ?? item)
+      .filter(Boolean);
+  })
   lookingFor?: PropertyType[];
 
   @IsOptional()
@@ -21,6 +34,7 @@ export class TenantPreferencesDto {
 
   @IsOptional()
   @IsEnum(VehiclePreference)
+  @Transform(({ value }) => normalizeVehiclePreference(value))
   vehicles?: VehiclePreference;
 
   @IsOptional()

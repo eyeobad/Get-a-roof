@@ -1,4 +1,5 @@
 import { PropertyType, VehiclePreference } from "../enums";
+import { normalizePropertyType } from "./property.utils";
 import { computePercentage, isInRange, toLower, valuesMatch } from "./match.helpers";
 
 export type TenantPreferences = {
@@ -80,16 +81,36 @@ function computeApartmentPreferenceMatch(
   tenant: TenantPreferences | undefined,
   property: PropertyMatchInput
 ) {
-  const lookingFor = tenant?.lookingFor?.map((value) => value.toString());
+  const lookingFor = tenant?.lookingFor
+    ?.map((value) => normalizePropertyType(value)?.toString() ?? value.toString())
+    .filter(Boolean);
   if (!lookingFor || !lookingFor.length) {
     return 100;
   }
 
-  if (!property.propertyType) {
-    return 0;
+  const matches = new Set<string>();
+  const normalizedType = normalizePropertyType(property.propertyType);
+  if (normalizedType) {
+    matches.add(normalizedType.toString());
   }
 
-  return lookingFor.includes(property.propertyType.toString()) ? 100 : 0;
+  if (property.landlordRequirements?.nonOwnerOccupied) {
+    matches.add(PropertyType.NonOwnerOccupied);
+  }
+  if (property.landlordRequirements?.sharedApartment) {
+    matches.add(PropertyType.SharedApartment);
+  }
+  if (property.landlordRequirements?.shortlet) {
+    matches.add(PropertyType.Shortlet);
+  }
+  if (property.landlordRequirements?.selfCompound) {
+    matches.add(PropertyType.SelfCompound);
+  }
+  if (property.landlordRequirements?.sharedCompound) {
+    matches.add(PropertyType.SharedCompound);
+  }
+
+  return lookingFor.some((type) => matches.has(type)) ? 100 : 0;
 }
 
 function computePreferencesMatch(

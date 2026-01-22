@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -11,64 +12,87 @@ type Photo = {
   id: string;
   src: string;
   alt: string;
-  isObjectUrl?: boolean;
 };
 
-const initialPhotos: Photo[] = [
-  {
-    id: "living-room",
-    src: "https://lh3.googleusercontent.com/aida-public/AB6AXuA7I5PMR_eQloldzLN7LJQ84VKbKD7jHkmBKsmpHTjKTpxvOgRMBpPEOt74HxgdwOO-4_gngivlqiR1dvYwL0UjClgAErIBxh2Hv5ElCBN1y5xIxCoXhq7h1rwtyb4PPDKe--Jy_Em0mopDtWmq9-e87D_fEkO3JRqjOfDiATT0264n38U2UTxGvcGlQk0q068wyYUcnzbzmeecYvTC_FSuo4reZcM5CgZCS_DckNwMshfh2H5t6NsHGff0HzWDeCscKMzWI8boEWpD",
-    alt: "Bright modern living room with beige sofa and plants",
-  },
-  {
-    id: "kitchen",
-    src: "https://lh3.googleusercontent.com/aida-public/AB6AXuC0T_BDBs8V5RXCP4IzxAyqLpC6AxzD1IG6hpqU5wifPW8kqvTJbL2HX_cF8soFFlf3kb5EBSjYCmzQ2xQYPa7_USzdyoixsmdvY3nXoP_KVTNmrQXBmD6XNcmuaiEqtoaa6xBZdYu6nzifJSgEfjyc7Qw_fdtKehQsgxl8ITh9OLJb21-vTPjwvjAdxK-njvG7Ntk6TayT1bt4Y7rI13TlynghnVJwXQJd0Kn7uko0cNT44Ojgt92G6kyyNy1DRs0Y_HA75YscQQ9P",
-    alt: "Modern kitchen with white island and wooden stools",
-  },
-];
-
-const createId = () =>
-  `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-
 export default function AddPropertyPhotosPage() {
-  const [photos, setPhotos] = useState<Photo[]>(() => initialPhotos);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const propertyId = searchParams.get("propertyId") || "";
+  const authToken = useAppStore((state) => state.authToken);
+  const draft = useAppStore((state) => state.landlordDraft);
+  const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
+  const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
+  const uploadLandlordImage = useAppStore((state) => state.uploadLandlordImage);
+  const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const objectUrlsRef = useRef<string[]>([]);
 
-  const handleAddFiles = (files: FileList | null) => {
+  const photos = useMemo<Photo[]>(
+    () =>
+      (draft.images ?? []).map((src, index) => ({
+        id: `${index}-${src}`,
+        src,
+        alt: `Property photo ${index + 1}`,
+      })),
+    [draft.images]
+  );
+
+  const handleAddFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const nextPhotos: Photo[] = Array.from(files).map((file) => {
-      const objectUrl = URL.createObjectURL(file);
-      objectUrlsRef.current.push(objectUrl);
-      return {
-        id: createId(),
-        src: objectUrl,
-        alt: file.name || "Uploaded property photo",
-        isObjectUrl: true,
-      };
-    });
-    setPhotos((prev) => [...prev, ...nextPhotos]);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to upload photos.");
+      return;
+    }
+    const uploads = await Promise.all(
+      Array.from(files).map(async (file) => {
+        const url = await uploadLandlordImage(file.name);
+        if (!url) {
+          return null;
+        }
+        return url;
+      })
+    );
+    const validUrls = uploads.filter((url): url is string => Boolean(url));
+    if (!validUrls.length) {
+      setError("Upload failed. Please try again.");
+      return;
+    }
+    const nextImages = [...(draft.images ?? []), ...validUrls];
+    setLandlordDraft({ images: nextImages });
   };
 
-  const handleRemove = (id: string) => {
-    setPhotos((prev) => {
-      const target = prev.find((photo) => photo.id === id);
-      if (target?.isObjectUrl) {
-        URL.revokeObjectURL(target.src);
-        objectUrlsRef.current = objectUrlsRef.current.filter(
-          (url) => url !== target.src
-        );
-      }
-      return prev.filter((photo) => photo.id !== id);
-    });
+  const handleRemove = (src: string) => {
+    const nextImages = (draft.images ?? []).filter((url) => url !== src);
+    setLandlordDraft({ images: nextImages });
   };
 
   useEffect(() => {
-    return () => {
-      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      objectUrlsRef.current = [];
-    };
-  }, []);
+    if (propertyId && propertyId !== draft.id) {
+      void loadLandlordDraftById(propertyId);
+    }
+  }, [propertyId, draft.id, loadLandlordDraftById]);
+
+  const handleSave = async (nextPath?: string) => {
+    setIsSaving(true);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to save your draft.");
+      setIsSaving(false);
+      return;
+    }
+    try {
+      await saveLandlordDraft();
+      if (nextPath) {
+        router.push(nextPath);
+      }
+    } catch (err) {
+      setError((err as Error).message || "Unable to save. Try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen font-display antialiased text-[#1b100d]">
@@ -96,8 +120,9 @@ export default function AddPropertyPhotosPage() {
             <button
               type="button"
               className="text-[#0a44b8] text-base font-bold leading-normal tracking-[0.015em] shrink-0"
+              onClick={() => void handleSave()}
             >
-              Save
+              {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
@@ -153,7 +178,7 @@ export default function AddPropertyPhotosPage() {
                   type="button"
                   className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors backdrop-blur-md"
                   aria-label="Remove photo"
-                  onClick={() => handleRemove(photo.id)}
+                  onClick={() => handleRemove(photo.src)}
                 >
                   <span
                     className="material-symbols-outlined text-[16px]"
@@ -196,6 +221,10 @@ export default function AddPropertyPhotosPage() {
               }}
             />
           </div>
+
+          {error ? (
+            <p className="text-sm text-red-600 font-medium mb-4">{error}</p>
+          ) : null}
 
           {/* Drag & drop */}
           <div
@@ -242,8 +271,9 @@ export default function AddPropertyPhotosPage() {
 
         {/* Bottom CTA */}
         <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-black/5 p-4 z-40 pb-8">
-          <Link
-            href="/add-property-details"
+          <button
+            type="button"
+            onClick={() => void handleSave("/add-property-details")}
             className="w-full flex items-center justify-center rounded-full h-14 bg-[#0a44b8] text-white text-lg font-bold tracking-wide shadow-lg shadow-[#0a44b8]/30 active:scale-[0.98] transition-transform hover:brightness-105"
           >
             <span>Next Step</span>
@@ -253,7 +283,7 @@ export default function AddPropertyPhotosPage() {
             >
               arrow_forward
             </span>
-          </Link>
+          </button>
         </div>
 
         {/* Fade above CTA */}

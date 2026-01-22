@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -12,6 +14,12 @@ function formatMoney(n: number) {
 }
 
 export default function AddPropertyRequirementsPage() {
+  const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const draft = useAppStore((state) => state.landlordDraft);
+  const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
+  const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
+  const [initialized, setInitialized] = useState(false);
   const [budget, setBudget] = useState(2500);
   const [income, setIncome] = useState("80000");
 
@@ -21,8 +29,63 @@ export default function AddPropertyRequirementsPage() {
   const [shortlet, setShortlet] = useState(false);
   const [selfCompound, setSelfCompound] = useState(false);
   const [sharedCompound, setSharedCompound] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const budgetLabel = useMemo(() => `$${formatMoney(budget)}`, [budget]);
+
+  useEffect(() => {
+    if (initialized) return;
+    if (draft.landlordRequirements?.budgetRange?.max !== undefined) {
+      setBudget(draft.landlordRequirements.budgetRange.max);
+    }
+    if (draft.landlordRequirements?.annualIncome?.min !== undefined) {
+      setIncome(String(draft.landlordRequirements.annualIncome.min));
+    }
+    setPets(draft.landlordRequirements?.petsAllowed ?? true);
+    setNonOwner(draft.landlordRequirements?.nonOwnerOccupied ?? false);
+    setSharedApt(draft.landlordRequirements?.sharedApartment ?? false);
+    setShortlet(draft.landlordRequirements?.shortlet ?? false);
+    setSelfCompound(draft.landlordRequirements?.selfCompound ?? false);
+    setSharedCompound(draft.landlordRequirements?.sharedCompound ?? false);
+    setInitialized(true);
+  }, [draft, initialized]);
+
+  const handleSave = async (nextPath?: string) => {
+    setIsSaving(true);
+    setError(null);
+    if (!authToken) {
+      setError("Sign in to save your draft.");
+      setIsSaving(false);
+      return;
+    }
+    const incomeValue = income ? Number(income) : undefined;
+    setLandlordDraft({
+      landlordRequirements: {
+        budgetRange: { max: budget },
+        annualIncome: Number.isNaN(incomeValue)
+          ? undefined
+          : { min: incomeValue },
+        petsAllowed: pets,
+        nonOwnerOccupied: nonOwner,
+        sharedApartment: sharedApt,
+        shortlet,
+        selfCompound,
+        sharedCompound,
+      },
+    });
+
+    try {
+      await saveLandlordDraft();
+      if (nextPath) {
+        router.push(nextPath);
+      }
+    } catch (err) {
+      setError((err as Error).message || "Unable to save. Try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen font-display  bg-white/95 text-[#1A1A1A] antialiased selection:bg-[#0a44b8]/30">
@@ -215,18 +278,22 @@ export default function AddPropertyRequirementsPage() {
 
         {/* Bottom CTA */}
         <div className="fixed bottom-0 left-0 right-0 z-10 p-6 pb-8 max-w-md mx-auto bg-gradient-to-t from-white/95 via-white/95 to-transparent">
-          <Link
-            href="/add-property-preferences"
+          <button
+            type="button"
+            onClick={() => void handleSave("/add-property-preferences")}
             className="w-full bg-[#0a44b8] hover:bg-[#083691] text-white text-xl font-bold py-5 rounded-full shadow-lg shadow-[#0a44b8]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <span>Next Step</span>
+            <span>{isSaving ? "Saving..." : "Next Step"}</span>
             <span
               className="material-symbols-outlined text-2xl"
               style={solidIconStyle}
             >
               arrow_forward
             </span>
-          </Link>
+          </button>
+          {error ? (
+            <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
+          ) : null}
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -18,7 +20,7 @@ type PropertyCard = {
   tone?: "primary" | "warning";
 };
 
-const properties: PropertyCard[] = [
+const sampleProperties: PropertyCard[] = [
   {
     id: "maple",
     title: "123 Maple Avenue",
@@ -173,6 +175,43 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
 }
 
 export default function LandlordMatchesPropertyListPage() {
+  const authToken = useAppStore((state) => state.authToken);
+  const landlordProperties = useAppStore((state) => state.landlordPropertiesWithMatches);
+  const loadLandlordPropertiesWithMatches = useAppStore(
+    (state) => state.loadLandlordPropertiesWithMatches
+  );
+  const [sort, setSort] = useState<"newDesc" | "matchesDesc">("newDesc");
+
+  const mappedProperties: PropertyCard[] = useMemo(
+    () =>
+      (authToken ? landlordProperties : sampleProperties).map((property) => ({
+        id: property.id,
+        title: property.title ?? "Untitled property",
+        area: property.area ?? "",
+        type: property.type ?? "Property",
+        beds: property.beds ?? 0,
+        baths: property.baths ?? 0,
+        newCount: property.newCount ?? 0,
+        coverUrl: property.coverUrl ?? "/hero.png",
+        tone: (property.newCount ?? 0) > 0 ? "primary" : undefined,
+      })),
+    [authToken, landlordProperties]
+  );
+
+  const totalNew = useMemo(
+    () => mappedProperties.reduce((sum, item) => sum + (item.newCount ?? 0), 0),
+    [mappedProperties]
+  );
+
+  useEffect(() => {
+    if (!authToken) return;
+    void loadLandlordPropertiesWithMatches({ sort });
+  }, [authToken, sort, loadLandlordPropertiesWithMatches]);
+
+  const handleSort = () => {
+    setSort((prev) => (prev === "newDesc" ? "matchesDesc" : "newDesc"));
+  };
+
   return (
     <div className="min-h-screen bg-[#fcfbf8] text-[#1a1a1a] font-display antialiased flex flex-col pb-24">
       <header className="sticky top-0 z-50 bg-[#0a44b8] px-4 py-4 shadow-md text-white">
@@ -182,6 +221,7 @@ export default function LandlordMatchesPropertyListPage() {
             aria-label="Sort Properties"
             className="flex items-center justify-center h-12 w-12 rounded-full hover:bg-white/10 transition-colors"
             type="button"
+            onClick={handleSort}
           >
             <span className="material-symbols-outlined text-[28px]" style={solidIconStyle}>
               sort
@@ -189,14 +229,25 @@ export default function LandlordMatchesPropertyListPage() {
           </button>
         </div>
         <p className="text-white/80 text-sm mt-1">
-          Select a property to view 8 new candidates
+          Select a property to view {totalNew} new candidate
+          {totalNew === 1 ? "" : "s"}
         </p>
       </header>
 
       <main className="flex-1 px-4 py-6 flex flex-col gap-4">
-        {properties.map((card) => (
-          <PropertyListCard key={card.id} card={card} />
-        ))}
+        {mappedProperties.length ? (
+          mappedProperties.map((card) => (
+            <PropertyListCard key={card.id} card={card} />
+          ))
+        ) : authToken ? (
+          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
+            No matches yet. Keep your listings active to attract tenants.
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
+            Sign in to view your matches.
+          </div>
+        )}
       </main>
 
       <BottomNav active="matches" />

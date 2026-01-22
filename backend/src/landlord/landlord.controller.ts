@@ -1,4 +1,13 @@
-import { Controller, ForbiddenException, Get, Param, Req, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { Request } from "express";
 import { LandlordService } from "./landlord.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -13,11 +22,17 @@ export class LandlordController {
   @Get(":id/properties")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Landlord)
-  getProperties(@Param("id") id: string, @Req() req: Request & { user?: any }) {
+  getProperties(
+    @Param("id") id: string,
+    @Req() req: Request & { user?: any },
+    @Query("q") q?: string,
+    @Query("status") status?: string,
+    @Query("sort") sort?: string
+  ) {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getLandlordProperties(id);
+    return this.landlordService.getLandlordProperties(id, { q, status, sort });
   }
 
   @Get(":id/properties/:propertyId/new-matches-count")
@@ -31,7 +46,7 @@ export class LandlordController {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getNewMatchesCount(propertyId);
+    return this.landlordService.getNewMatchesCount(id, propertyId);
   }
 
   @Get(":id/properties-with-matches")
@@ -39,12 +54,15 @@ export class LandlordController {
   @Roles(UserRole.Landlord)
   getPropertiesWithMatches(
     @Param("id") id: string,
-    @Req() req: Request & { user?: any }
+    @Req() req: Request & { user?: any },
+    @Query("q") q?: string,
+    @Query("status") status?: string,
+    @Query("sort") sort?: string
   ) {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getPropertiesWithMatches(id);
+    return this.landlordService.getPropertiesWithMatches(id, { q, status, sort });
   }
 
   @Get(":id/properties/:propertyId/matches")
@@ -58,6 +76,34 @@ export class LandlordController {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getPropertyMatches(propertyId);
+    return this.landlordService.getPropertyMatches(id, propertyId);
+  }
+
+  @Patch(":id/properties/:propertyId/mark-seen")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Landlord)
+  markPropertyMatchesSeen(
+    @Param("id") id: string,
+    @Param("propertyId") propertyId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.landlordService.markPropertyMatchesSeen(id, propertyId);
+  }
+
+  @Get(":id/tenants/:tenantId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Landlord)
+  getTenantProfile(
+    @Param("id") id: string,
+    @Param("tenantId") tenantId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.landlordService.getTenantProfile(id, tenantId);
   }
 }

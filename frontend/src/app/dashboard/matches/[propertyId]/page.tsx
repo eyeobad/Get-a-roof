@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -24,46 +27,8 @@ type MatchCard = {
   noteTone?: NoteTone;
   avatarUrl: string;
   verified?: boolean;
+  tenantId?: string;
 };
-
-const matches: MatchCard[] = [
-  {
-    id: "john",
-    name: "John Doe",
-    role: "Software Engineer",
-    time: "2h ago",
-    tags: [
-      { label: "Preferences 100% Match" },
-      { label: "Apartment Preference 100% Match" },
-    ],
-    note:
-      'Perfect match for your property\'s strict "No Pets" policy and income requirements.',
-    noteTone: "info",
-    avatarUrl: "https://i.pravatar.cc/100?img=12",
-    verified: true,
-  },
-  {
-    id: "jane",
-    name: "Jane Smith",
-    role: "Nurse Practitioner",
-    time: "Yesterday",
-    tags: [
-      { label: "$ 3x Rent Income", tone: "success" },
-      { label: "Preferences 100% Match" },
-    ],
-    note: "Looking for a 12-month lease. Has excellent landlord references.",
-    noteTone: "neutral",
-    avatarUrl: "https://i.pravatar.cc/100?img=47",
-  },
-  {
-    id: "robert",
-    name: "Robert Brown",
-    role: "Retired Teacher",
-    time: "2d ago",
-    tags: [{ label: "Preferences 100% Match" }],
-    avatarUrl: "https://i.pravatar.cc/100?img=65",
-  },
-];
 
 function MatchCardView({ match }: { match: MatchCard }) {
   return (
@@ -127,15 +92,24 @@ function MatchCardView({ match }: { match: MatchCard }) {
 
       <div className="flex gap-3">
         <Link
-          href="/messages"
+          href={`/messages?thread=${match.id}`}
           className="w-14 h-14 rounded-full border-2 border-[#0a44b8]/30 flex items-center justify-center text-[#0a44b8]"
           aria-label={`Chat with ${match.name}`}
         >
           <span className="material-symbols-outlined">chat</span>
         </Link>
-        <button className="flex-1 h-14 rounded-full bg-[#0a44b8] text-white font-bold text-lg shadow active:scale-95">
-          View Profile
-        </button>
+        {match.tenantId ? (
+          <Link
+            href={`/dashboard/tenants/${match.tenantId}`}
+            className="flex-1 h-14 rounded-full bg-[#0a44b8] text-white font-bold text-lg shadow active:scale-95 flex items-center justify-center"
+          >
+            View Profile
+          </Link>
+        ) : (
+          <button className="flex-1 h-14 rounded-full bg-[#0a44b8] text-white font-bold text-lg shadow active:scale-95">
+            View Profile
+          </button>
+        )}
       </div>
     </section>
   );
@@ -193,6 +167,85 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
 }
 
 export default function LandlordMatchesPage() {
+  const params = useParams<{ propertyId: string }>();
+  const propertyId = params?.propertyId as string;
+  const authToken = useAppStore((state) => state.authToken);
+  const landlordMatches = useAppStore(
+    (state) => state.landlordMatchesByProperty[propertyId] ?? []
+  );
+  const loadLandlordPropertyMatches = useAppStore(
+    (state) => state.loadLandlordPropertyMatches
+  );
+  const markLandlordPropertyMatchesSeen = useAppStore(
+    (state) => state.markLandlordPropertyMatchesSeen
+  );
+
+  const matches = useMemo<MatchCard[]>(() => {
+    return landlordMatches.map((match) => {
+      const tenant = match.tenant;
+      const name = tenant
+        ? `${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim()
+        : "Tenant";
+      const role =
+        tenant?.preferences?.tenant?.employmentStatus ||
+        tenant?.preferences?.tenant?.educationLevel ||
+        "Tenant";
+      const tags: MatchTag[] = [];
+      if (match.isNewForLandlord) {
+        tags.push({ label: "New" });
+      }
+      if (match.preferencesMatchPercentage !== undefined) {
+        tags.push({
+          label: `Preferences ${Math.round(match.preferencesMatchPercentage)}% Match`,
+        });
+      }
+      if (match.apartmentPreferenceMatchPercentage !== undefined) {
+        tags.push({
+          label: `Apartment Preference ${Math.round(
+            match.apartmentPreferenceMatchPercentage
+          )}% Match`,
+        });
+      }
+      if (match.matchScore !== undefined && match.matchScore >= 80) {
+        tags.push({ label: `${match.matchScore}% Match Score`, tone: "success" });
+      }
+
+      const time = match.updatedAt
+        ? new Date(match.updatedAt).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "";
+      const note = match.matchScore
+        ? `Overall match score: ${match.matchScore}%`
+        : undefined;
+
+      return {
+        id: match.id,
+        name: name || "Tenant",
+        role,
+        time,
+        tags: tags.length ? tags : [{ label: "New match" }],
+        note,
+        noteTone: note ? "info" : undefined,
+        avatarUrl: tenant?.photoUrl ?? "https://i.pravatar.cc/100?img=32",
+        verified: tenant?.isVerified ?? false,
+        tenantId: tenant?.id ?? match.tenantId,
+      };
+    });
+  }, [landlordMatches]);
+
+  const newCount = useMemo(
+    () => landlordMatches.filter((match) => match.isNewForLandlord).length,
+    [landlordMatches]
+  );
+
+  useEffect(() => {
+    if (!authToken || !propertyId) return;
+    void loadLandlordPropertyMatches(propertyId);
+    void markLandlordPropertyMatchesSeen(propertyId);
+  }, [authToken, propertyId, loadLandlordPropertyMatches, markLandlordPropertyMatchesSeen]);
+
   return (
     <div className="min-h-screen bg-[#fcfbf8] text-gray-900 font-display antialiased pb-24">
       {/* Header */}
@@ -207,19 +260,31 @@ export default function LandlordMatchesPage() {
             <span className="material-symbols-outlined text-2xl">tune</span>
           </button>
         </div>
-        <p className="text-sm opacity-80 mt-1">3 new matches waiting for review</p>
+        <p className="text-sm opacity-80 mt-1">
+          {newCount} new match{newCount === 1 ? "" : "es"} waiting for review
+        </p>
       </header>
 
       {/* Content */}
       <main className="px-4 py-6 space-y-6">
-        {matches.map((match) => (
-          <MatchCardView key={match.id} match={match} />
-        ))}
+        {matches.length ? (
+          matches.map((match) => <MatchCardView key={match.id} match={match} />)
+        ) : authToken ? (
+          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
+            No matches yet for this property.
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
+            Sign in to view property matches.
+          </div>
+        )}
 
-        <div className="text-center text-gray-500 mt-6">
-          <span className="material-symbols-outlined text-4xl">check</span>
-          <p className="mt-2 font-medium">You&apos;re all caught up!</p>
-        </div>
+        {!matches.length ? (
+          <div className="text-center text-gray-500 mt-6">
+            <span className="material-symbols-outlined text-4xl">check</span>
+            <p className="mt-2 font-medium">You&apos;re all caught up!</p>
+          </div>
+        ) : null}
       </main>
 
       <BottomNav active="matches" />

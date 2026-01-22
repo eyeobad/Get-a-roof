@@ -207,6 +207,39 @@ export class ChatService {
     return { matchId: match.id, message: createdMessage };
   }
 
+  async startLandlordThread(matchId: string, landlordId: string, message?: string) {
+    const match = await this.matchModel.findById(matchId).exec();
+    if (!match) {
+      throw new NotFoundException("Match not found");
+    }
+    const property = await this.propertyModel
+      .findById(match.propertyId)
+      .exec();
+    if (!property) {
+      throw new NotFoundException("Property not found");
+    }
+    if (property.landlordId.toString() !== landlordId) {
+      throw new ForbiddenException("Access denied");
+    }
+
+    if (match.status !== MatchStatus.ChatInitiated) {
+      match.status = MatchStatus.ChatInitiated;
+      await match.save();
+    }
+
+    let createdMessage;
+    if (message) {
+      createdMessage = await this.createMessage({
+        matchId: match.id,
+        senderId: landlordId,
+        receiverId: match.tenantId.toString(),
+        content: message,
+      });
+    }
+
+    return { matchId: match.id, message: createdMessage };
+  }
+
   private async assertMatchMembership(matchId: string, userId: string) {
     const match = await this.matchModel.findById(matchId).exec();
     if (!match) {

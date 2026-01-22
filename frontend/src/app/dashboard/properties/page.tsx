@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -18,6 +19,7 @@ type Property = {
   beds: number;
   baths: number;
   matches?: number; // only for listed
+  newCount?: number;
   coverUrl: string;
 };
 
@@ -155,8 +157,6 @@ function PropertyCard({
   );
 }
 
-import { usePathname } from "next/navigation";
-
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
   const Item = ({
     id,
@@ -233,8 +233,13 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
 export default function LandlordDashboardPage() {
   const [q, setQ] = useState("");
   const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
+  const landlordProperties = useAppStore((state) => state.landlordProperties);
+  const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
+  const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
+  const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
 
-  const properties: Property[] = [
+  const sampleProperties: Property[] = [
     {
       id: "p1",
       status: "Listed",
@@ -269,24 +274,52 @@ export default function LandlordDashboardPage() {
     },
   ];
 
+  const mappedProperties: Property[] = useMemo(
+    () =>
+      (authToken ? landlordProperties : sampleProperties).map((property) => ({
+        id: property.id,
+        status: (property.status as PropertyStatus) ?? "Draft",
+        title: property.title ?? "Untitled property",
+        price: property.price ?? 0,
+        beds: property.beds ?? 0,
+        baths: property.baths ?? 0,
+        matches: property.matches ?? property.matchCount ?? 0,
+        newCount: property.newCount ?? 0,
+        coverUrl: property.coverUrl ?? "/hero.png",
+      })),
+    [authToken, landlordProperties]
+  );
+
+  useEffect(() => {
+    if (!authToken) return;
+    void loadLandlordProperties();
+  }, [authToken, loadLandlordProperties]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    const timer = setTimeout(() => {
+      void loadLandlordProperties({ q: q.trim() || undefined });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [authToken, q, loadLandlordProperties]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return properties;
-    return properties.filter((p) => p.title.toLowerCase().includes(s));
-  }, [q]);
+    if (!s) return mappedProperties;
+    return mappedProperties.filter((p) => p.title.toLowerCase().includes(s));
+  }, [q, mappedProperties]);
 
-  const onEdit = (id: string) => {
-    // wire to your edit route
-    console.log("Edit", id);
+  const openDraft = async (id: string) => {
+    if (authToken) {
+      await loadLandlordDraftById(id);
+    }
+    router.push(`/add-property-photos?propertyId=${id}`);
   };
 
+  const onEdit = (id: string) => void openDraft(id);
+  const onContinue = (id: string) => void openDraft(id);
   const onMatches = (id: string) => {
-    router.push("/dashboard/matches");
-  };
-
-  const onContinue = (id: string) => {
-    // wire to continue flow for draft
-    console.log("Continue", id);
+    router.push(`/dashboard/matches/${id}`);
   };
 
   return (
@@ -333,15 +366,35 @@ export default function LandlordDashboardPage() {
 
         {/* Cards */}
         <div className="flex flex-col gap-6">
-          {filtered.map((p) => (
-            <PropertyCard
-              key={p.id}
-              p={p}
-              onEdit={onEdit}
-              onMatches={onMatches}
-              onContinue={onContinue}
-            />
-          ))}
+          {filtered.length ? (
+            filtered.map((p) => (
+              <PropertyCard
+                key={p.id}
+                p={p}
+                onEdit={onEdit}
+                onMatches={onMatches}
+                onContinue={onContinue}
+              />
+            ))
+          ) : authToken ? (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 space-y-4">
+              <p>No properties yet. Start by adding your first listing.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  clearLandlordDraft();
+                  router.push("/add-property-photos");
+                }}
+                className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm"
+              >
+                Add Property
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+              Sign in to load your properties.
+            </div>
+          )}
         </div>
 
         <div className="h-20" />

@@ -35,6 +35,7 @@ Default port: `3001`
 - `GET /api/users/:id/verification-status`
 
 - `POST /api/properties/upload-image`
+- `POST /api/properties/upload-proof`
 - `POST /api/properties`
 - `PATCH /api/properties/:id`
 - `GET /api/properties/explore`
@@ -47,6 +48,7 @@ Default port: `3001`
 
 - `POST /api/chat`
 - `POST /api/chat/start`
+- `POST /api/chat/start-landlord`
 - `GET /api/chat/conversations?limit=...&offset=...`
 - `GET /api/chat/messages?matchId=...&limit=...&before=...`
 - `PATCH /api/chat/mark-read`
@@ -60,11 +62,15 @@ Default port: `3001`
 - `GET /api/landlord/:id/properties/:propertyId/new-matches-count`
 - `GET /api/landlord/:id/properties-with-matches`
 - `GET /api/landlord/:id/properties/:propertyId/matches`
+- `PATCH /api/landlord/:id/properties/:propertyId/mark-seen`
+- `GET /api/landlord/:id/tenants/:tenantId`
 
 ## Notes
 
 - OTP, identity checks, and media uploads are stubbed and return mock data.
 - JWT auth is wired with role guards on protected routes.
+- Landlord list endpoints accept `q`, `status`, and `sort` (`priceAsc`, `priceDesc`, `matchesDesc`, `matchesAsc`, `newDesc`, `newAsc`).
+- Landlord requirements accept numeric `budgetRange` and `annualIncome` values (converted to max/min ranges).
 
 ## Realtime chat
 

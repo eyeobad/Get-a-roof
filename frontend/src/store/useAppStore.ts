@@ -29,6 +29,83 @@ export type ConversationSummary = {
   landlordId?: string;
 };
 
+type LandlordDraft = {
+  id?: string;
+  images: string[];
+  monthlyPrice?: number;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    lat?: number;
+    lng?: number;
+  };
+  propertyType?: string;
+  description?: string;
+  proofOfOwnership?: string;
+  landlordRequirements?: {
+    budgetRange?: { min?: number; max?: number };
+    annualIncome?: { min?: number; max?: number };
+    petsAllowed?: boolean;
+    nonOwnerOccupied?: boolean;
+    sharedApartment?: boolean;
+    shortlet?: boolean;
+    selfCompound?: boolean;
+    sharedCompound?: boolean;
+    idealTenantPreferences?: {
+      employmentStatus?: string;
+      maritalStatus?: string;
+      vehicles?: string;
+      hasPets?: boolean;
+      smokingHabits?: string;
+      drinkingHabits?: string;
+      religionPreference?: string;
+      educationLevel?: string;
+      socialHabits?: string;
+      hasChildren?: boolean;
+    };
+  };
+  status?: "Draft" | "Listed";
+};
+
+type LandlordPropertySummary = {
+  id: string;
+  status?: string;
+  title?: string;
+  price?: number;
+  beds?: number;
+  baths?: number;
+  matches?: number;
+  newCount?: number;
+  coverUrl?: string;
+  area?: string;
+  type?: string;
+  matchCount?: number;
+};
+
+type LandlordMatch = {
+  id: string;
+  propertyId: string;
+  tenantId: string;
+  status?: string;
+  matchScore?: number;
+  preferencesMatchPercentage?: number;
+  apartmentPreferenceMatchPercentage?: number;
+  updatedAt?: string;
+  isNewForLandlord?: boolean;
+  tenant?: {
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phoneNumber?: string;
+    photoUrl?: string;
+    isVerified?: boolean;
+    preferences?: Record<string, any>;
+  };
+};
+
 export type ChatMessage = {
   id: string;
   senderId: string;
@@ -66,11 +143,22 @@ type AppState = {
   messagesByMatch: Record<string, ChatMessage[]>;
   authToken: string | null;
   userId: string | null;
+  landlordDraft: LandlordDraft;
+  landlordProperties: LandlordPropertySummary[];
+  landlordPropertiesWithMatches: LandlordPropertySummary[];
+  landlordMatchesByProperty: Record<string, LandlordMatch[]>;
   setSelectedListingId: (id: string | null) => void;
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
   login: (email: string, password: string) => Promise<{ accessToken: string; user: any } | null>;
   registerTenant: (payload: {
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    phoneNumber?: string;
+    password: string;
+  }) => Promise<any>;
+  registerLandlord: (payload: {
     firstName?: string;
     lastName?: string;
     email: string;
@@ -102,6 +190,25 @@ type AppState = {
   sendMessage: (matchId: string, receiverId: string, content: string) => Promise<void>;
   markMatchRead: (matchId: string) => Promise<void>;
   fetchPropertyById: (listingId: string) => Promise<void>;
+  setLandlordDraft: (payload: Partial<LandlordDraft>) => void;
+  clearLandlordDraft: () => void;
+  loadLandlordDraftById: (propertyId: string) => Promise<void>;
+  saveLandlordDraft: (payload?: Partial<LandlordDraft>) => Promise<LandlordDraft | null>;
+  publishLandlordDraft: () => Promise<LandlordDraft | null>;
+  uploadLandlordImage: (fileName: string) => Promise<string | null>;
+  uploadLandlordProof: (fileName: string) => Promise<string | null>;
+  loadLandlordProperties: (options?: {
+    q?: string;
+    status?: string;
+    sort?: string;
+  }) => Promise<void>;
+  loadLandlordPropertiesWithMatches: (options?: {
+    q?: string;
+    status?: string;
+    sort?: string;
+  }) => Promise<void>;
+  loadLandlordPropertyMatches: (propertyId: string) => Promise<void>;
+  markLandlordPropertyMatchesSeen: (propertyId: string) => Promise<void>;
 };
 
 const listingMap = listingSeed.reduce<Record<string, Listing>>((acc, listing) => {
@@ -187,6 +294,103 @@ const createThreadObject = (listingId: string, threadId: string): Thread => ({
   messages: [],
 });
 
+const emptyLandlordDraft: LandlordDraft = {
+  images: [],
+  status: "Draft",
+};
+
+const mapLandlordPropertySummary = (property: any): LandlordPropertySummary => ({
+  id: property?._id ?? property?.id ?? "",
+  status: property?.status,
+  title: property?.title ?? property?.address?.street ?? property?.neighborhood,
+  price: property?.price ?? property?.monthlyPrice,
+  beds: property?.beds ?? property?.bedCount ?? 0,
+  baths: property?.baths ?? property?.bathCount ?? 0,
+  matches: property?.matches ?? property?.matchCount ?? 0,
+  newCount: property?.newCount ?? 0,
+  coverUrl: property?.coverUrl ?? property?.images?.[0] ?? "/hero.png",
+  area: property?.area ?? property?.neighborhood ?? property?.address?.city,
+  type: property?.type ?? property?.propertyType,
+  matchCount: property?.matchCount ?? property?.matches ?? 0,
+});
+
+const mapPropertyToLandlordDraft = (property: any): LandlordDraft => ({
+  id: property?._id ?? property?.id,
+  images: property?.images ?? [],
+  monthlyPrice: property?.monthlyPrice,
+  address: property?.address,
+  propertyType: property?.propertyType,
+  description: property?.description,
+  proofOfOwnership: property?.proofOfOwnership,
+  landlordRequirements: property?.landlordRequirements,
+  status: property?.status ?? "Draft",
+});
+
+const buildLandlordPayload = (draft: LandlordDraft) => {
+  const payload: Record<string, any> = {};
+
+  if (draft.images) payload.images = draft.images;
+  if (draft.monthlyPrice !== undefined) payload.monthlyPrice = draft.monthlyPrice;
+  if (draft.propertyType) payload.propertyType = draft.propertyType;
+  if (draft.description) payload.description = draft.description;
+  if (draft.proofOfOwnership) payload.proofOfOwnership = draft.proofOfOwnership;
+  if (draft.status) payload.status = draft.status;
+
+  if (draft.address) {
+    const address = Object.fromEntries(
+      Object.entries(draft.address).filter(
+        ([, value]) => value !== undefined && value !== ""
+      )
+    );
+    if (Object.keys(address).length) {
+      payload.address = address;
+    }
+  }
+
+  if (draft.landlordRequirements) {
+    const requirements: Record<string, any> = {};
+    const { budgetRange, annualIncome, idealTenantPreferences, ...rest } =
+      draft.landlordRequirements;
+
+    if (budgetRange?.min !== undefined || budgetRange?.max !== undefined) {
+      requirements.budgetRange = {
+        ...(budgetRange?.min !== undefined ? { min: budgetRange.min } : {}),
+        ...(budgetRange?.max !== undefined ? { max: budgetRange.max } : {}),
+      };
+    }
+
+    if (annualIncome?.min !== undefined || annualIncome?.max !== undefined) {
+      requirements.annualIncome = {
+        ...(annualIncome?.min !== undefined ? { min: annualIncome.min } : {}),
+        ...(annualIncome?.max !== undefined ? { max: annualIncome.max } : {}),
+      };
+    }
+
+    Object.entries(rest).forEach(([key, value]) => {
+      if (value !== undefined) {
+        requirements[key] = value;
+      }
+    });
+
+    if (idealTenantPreferences) {
+      const preferences = Object.fromEntries(
+        Object.entries(idealTenantPreferences).filter(
+          ([, value]) => value !== undefined && value !== ""
+        )
+      );
+      if (Object.keys(preferences).length) {
+        requirements.idealTenantPreferences = preferences;
+      }
+    }
+
+    if (Object.keys(requirements).length) {
+      payload.landlordRequirements = requirements;
+    }
+  }
+
+  return payload;
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -203,9 +407,21 @@ export const useAppStore = create<AppState>()(
       messagesByMatch: {},
       authToken: null,
       userId: null,
+      landlordDraft: emptyLandlordDraft,
+      landlordProperties: [],
+      landlordPropertiesWithMatches: [],
+      landlordMatchesByProperty: {},
       setSelectedListingId: (id) => set({ selectedListingId: id }),
       setAuth: (token, userId) => set({ authToken: token, userId }),
-      clearAuth: () => set({ authToken: null, userId: null }),
+      clearAuth: () =>
+        set({
+          authToken: null,
+          userId: null,
+          landlordDraft: emptyLandlordDraft,
+          landlordProperties: [],
+          landlordPropertiesWithMatches: [],
+          landlordMatchesByProperty: {},
+        }),
       login: async (email, password) => {
         const response = await apiFetch<any>(`/api/auth/login`, {
           method: "POST",
@@ -226,6 +442,12 @@ export const useAppStore = create<AppState>()(
         return apiFetch(`/api/users`, {
           method: "POST",
           body: JSON.stringify({ ...payload, role: "Tenant" }),
+        });
+      },
+      registerLandlord: async (payload) => {
+        return apiFetch(`/api/users`, {
+          method: "POST",
+          body: JSON.stringify({ ...payload, role: "Landlord" }),
         });
       },
       sendEmailOtp: async (userId) => {
@@ -601,6 +823,222 @@ export const useAppStore = create<AppState>()(
             : [...prev.exploreQueue, listing.id],
         }));
       },
+      setLandlordDraft: (payload) =>
+        set((state) => {
+          const prev = state.landlordDraft ?? emptyLandlordDraft;
+          const nextRequirements = {
+            ...(prev.landlordRequirements ?? {}),
+            ...(payload.landlordRequirements ?? {}),
+            budgetRange: {
+              ...(prev.landlordRequirements?.budgetRange ?? {}),
+              ...(payload.landlordRequirements?.budgetRange ?? {}),
+            },
+            annualIncome: {
+              ...(prev.landlordRequirements?.annualIncome ?? {}),
+              ...(payload.landlordRequirements?.annualIncome ?? {}),
+            },
+            idealTenantPreferences: {
+              ...(prev.landlordRequirements?.idealTenantPreferences ?? {}),
+              ...(payload.landlordRequirements?.idealTenantPreferences ?? {}),
+            },
+          };
+
+          return {
+            landlordDraft: {
+              ...prev,
+              ...payload,
+              address: { ...(prev.address ?? {}), ...(payload.address ?? {}) },
+              landlordRequirements: nextRequirements,
+            },
+          };
+        }),
+      clearLandlordDraft: () => set({ landlordDraft: emptyLandlordDraft }),
+      loadLandlordDraftById: async (propertyId) => {
+        const state = get();
+        if (!state.authToken || !propertyId) return;
+        try {
+          const property = await apiFetch<any>(`/api/properties/${propertyId}`, {
+            token: state.authToken,
+          });
+          if (property) {
+            set({ landlordDraft: mapPropertyToLandlordDraft(property) });
+          }
+        } catch {
+          set({ landlordDraft: emptyLandlordDraft });
+        }
+      },
+      saveLandlordDraft: async (payload) => {
+        const state = get();
+        if (!state.authToken) return null;
+        const draft: LandlordDraft = {
+          ...state.landlordDraft,
+          ...payload,
+        };
+        const requestPayload = buildLandlordPayload(draft);
+        if (!Object.keys(requestPayload).length) {
+          return draft;
+        }
+
+        const property = draft.id
+          ? await apiFetch<any>(`/api/properties/${draft.id}`, {
+              method: "PATCH",
+              body: JSON.stringify(requestPayload),
+              token: state.authToken,
+            })
+          : await apiFetch<any>(`/api/properties`, {
+              method: "POST",
+              body: JSON.stringify(requestPayload),
+              token: state.authToken,
+            });
+
+        if (property) {
+          const nextDraft = mapPropertyToLandlordDraft(property);
+          set({ landlordDraft: nextDraft });
+          return nextDraft;
+        }
+
+        return draft;
+      },
+      publishLandlordDraft: async () => {
+        const state = get();
+        return state.saveLandlordDraft({ status: "Listed" });
+      },
+      uploadLandlordImage: async (fileName) => {
+        const state = get();
+        if (!state.authToken || !fileName) return null;
+        const response = await apiFetch<{ url: string }>(
+          `/api/properties/upload-image`,
+          {
+            method: "POST",
+            body: JSON.stringify({ fileName }),
+            token: state.authToken,
+          }
+        );
+        return response?.url ?? null;
+      },
+      uploadLandlordProof: async (fileName) => {
+        const state = get();
+        if (!state.authToken || !fileName) return null;
+        const response = await apiFetch<{ url: string }>(
+          `/api/properties/upload-proof`,
+          {
+            method: "POST",
+            body: JSON.stringify({ fileName }),
+            token: state.authToken,
+          }
+        );
+        return response?.url ?? null;
+      },
+      loadLandlordProperties: async (options) => {
+        const state = get();
+        if (!state.authToken || !state.userId) return;
+        const query = buildQuery({
+          q: options?.q,
+          status: options?.status,
+          sort: options?.sort,
+        });
+        try {
+          const data = await apiFetch<any[]>(
+            `/api/landlord/${state.userId}/properties${query ? `?${query}` : ""}`,
+            { token: state.authToken }
+          );
+          set({ landlordProperties: (data ?? []).map(mapLandlordPropertySummary) });
+        } catch {
+          set({ landlordProperties: [] });
+        }
+      },
+      loadLandlordPropertiesWithMatches: async (options) => {
+        const state = get();
+        if (!state.authToken || !state.userId) return;
+        const query = buildQuery({
+          q: options?.q,
+          status: options?.status,
+          sort: options?.sort,
+        });
+        try {
+          const data = await apiFetch<any[]>(
+            `/api/landlord/${state.userId}/properties-with-matches${
+              query ? `?${query}` : ""
+            }`,
+            { token: state.authToken }
+          );
+          set({
+            landlordPropertiesWithMatches: (data ?? []).map(mapLandlordPropertySummary),
+          });
+        } catch {
+          set({ landlordPropertiesWithMatches: [] });
+        }
+      },
+      loadLandlordPropertyMatches: async (propertyId) => {
+        const state = get();
+        if (!state.authToken || !state.userId || !propertyId) return;
+        try {
+          const data = await apiFetch<any[]>(
+            `/api/landlord/${state.userId}/properties/${propertyId}/matches`,
+            { token: state.authToken }
+          );
+          const matches = (data ?? []).map((match) => ({
+            id: match?._id ?? match?.id ?? "",
+            propertyId: match?.propertyId,
+            tenantId: match?.tenantId,
+            status: match?.status,
+            matchScore: match?.matchScore,
+            preferencesMatchPercentage: match?.preferencesMatchPercentage,
+            apartmentPreferenceMatchPercentage: match?.apartmentPreferenceMatchPercentage,
+            updatedAt: match?.updatedAt,
+            isNewForLandlord: match?.isNewForLandlord,
+            tenant: match?.tenant
+              ? {
+                  id: match.tenant?._id ?? match.tenant?.id,
+                  firstName: match.tenant?.firstName,
+                  lastName: match.tenant?.lastName,
+                  email: match.tenant?.email,
+                  phoneNumber: match.tenant?.phoneNumber,
+                  photoUrl: match.tenant?.photoUrl,
+                  isVerified: match.tenant?.isVerified,
+                  preferences: match.tenant?.preferences,
+                }
+              : undefined,
+          }));
+          set((prev) => ({
+            landlordMatchesByProperty: {
+              ...prev.landlordMatchesByProperty,
+              [propertyId]: matches,
+            },
+          }));
+        } catch {
+          set((prev) => ({
+            landlordMatchesByProperty: {
+              ...prev.landlordMatchesByProperty,
+              [propertyId]: [],
+            },
+          }));
+        }
+      },
+      markLandlordPropertyMatchesSeen: async (propertyId) => {
+        const state = get();
+        if (!state.authToken || !state.userId || !propertyId) return;
+        try {
+          await apiFetch(
+            `/api/landlord/${state.userId}/properties/${propertyId}/mark-seen`,
+            {
+              method: "PATCH",
+              token: state.authToken,
+            }
+          );
+          set((prev) => ({
+            landlordProperties: prev.landlordProperties.map((property) =>
+              property.id === propertyId ? { ...property, newCount: 0 } : property
+            ),
+            landlordPropertiesWithMatches: prev.landlordPropertiesWithMatches.map(
+              (property) =>
+                property.id === propertyId ? { ...property, newCount: 0 } : property
+            ),
+          }));
+        } catch {
+          return;
+        }
+      },
     }),
     {
       name: "get-a-roof-store",
@@ -618,6 +1056,10 @@ export const useAppStore = create<AppState>()(
         messagesByMatch: state.messagesByMatch,
         authToken: state.authToken,
         userId: state.userId,
+        landlordDraft: state.landlordDraft,
+        landlordProperties: state.landlordProperties,
+        landlordPropertiesWithMatches: state.landlordPropertiesWithMatches,
+        landlordMatchesByProperty: state.landlordMatchesByProperty,
       }),
     }
   )

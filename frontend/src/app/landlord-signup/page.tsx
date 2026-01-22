@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -10,6 +12,73 @@ const solidIconStyle: React.CSSProperties = {
 export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    password: "",
+    verifyPassword: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const registerLandlord = useAppStore((state) => state.registerLandlord);
+  const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
+  const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
+  const login = useAppStore((state) => state.login);
+  const router = useRouter();
+
+  const updateField = (key: keyof typeof form, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setError(null);
+
+    if (!form.email || !form.password || !form.firstName || !form.lastName) {
+      setError("Please complete all required fields.");
+      return;
+    }
+    if (form.password !== form.verifyPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const user = await registerLandlord({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phoneNumber: form.phoneNumber,
+        password: form.password,
+      });
+      let userId = user?.id || user?._id;
+      if (userId) {
+        await Promise.all([sendEmailOtp(userId), sendPhoneOtp(userId)]);
+      }
+
+      const authResponse = await login(form.email, form.password);
+      if (!authResponse) {
+        throw new Error("Login failed.");
+      }
+      if (!userId) {
+        userId = authResponse.user?.id || authResponse.user?._id;
+      }
+      const query = new URLSearchParams({
+        userId: userId ?? "",
+        email: form.email,
+        phone: form.phoneNumber,
+      });
+      router.push(`/auth/email-verification?${query.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign up failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F5F0] flex justify-center">
@@ -23,20 +92,24 @@ export default function SignUpPage() {
         </header>
 
         {/* Form */}
-        <form className="flex flex-col gap-5">
+        <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
           {[
-            { label: "First Name", placeholder: "Enter your first name", type: "text" },
-            { label: "Last Name", placeholder: "Enter your last name", type: "text" },
-            { label: "Email Address", placeholder: "name@example.com", type: "email" },
-            { label: "Phone Number", placeholder: "Enter your phone number", type: "tel" },
+            { id: "firstName", label: "First Name", placeholder: "Enter your first name", type: "text" },
+            { id: "lastName", label: "Last Name", placeholder: "Enter your last name", type: "text" },
+            { id: "email", label: "Email Address", placeholder: "name@example.com", type: "email" },
+            { id: "phoneNumber", label: "Phone Number", placeholder: "Enter your phone number", type: "tel" },
           ].map((field) => (
-            <div key={field.label} className="flex flex-col gap-2">
+            <div key={field.id} className="flex flex-col gap-2">
               <label className="text-[#1A1A1A] text-lg font-medium ml-1">
                 {field.label}
               </label>
               <input
                 type={field.type}
                 placeholder={field.placeholder}
+                value={form[field.id as keyof typeof form]}
+                onChange={(event) =>
+                  updateField(field.id as keyof typeof form, event.target.value)
+                }
                 className="h-14 px-5 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />
             </div>
@@ -51,6 +124,8 @@ export default function SignUpPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Min. 8 characters"
+                value={form.password}
+                onChange={(event) => updateField("password", event.target.value)}
                 className="h-14 w-full pl-5 pr-14 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />
               <button
@@ -78,6 +153,10 @@ export default function SignUpPage() {
               <input
                 type={showConfirm ? "text" : "password"}
                 placeholder="Re-enter password"
+                value={form.verifyPassword}
+                onChange={(event) =>
+                  updateField("verifyPassword", event.target.value)
+                }
                 className="h-14 w-full pl-5 pr-14 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />
               <button
@@ -97,11 +176,15 @@ export default function SignUpPage() {
           </div>
 
           {/* Submit */}
+          {error ? (
+            <p className="text-sm font-medium text-red-600 text-center">{error}</p>
+          ) : null}
           <button
             type="submit"
-            className="mt-4 h-14 rounded-full bg-[#0a44b8] text-white text-xl font-bold shadow-md active:scale-[0.98]"
+            disabled={isSubmitting}
+            className="mt-4 h-14 rounded-full bg-[#0a44b8] text-white text-xl font-bold shadow-md active:scale-[0.98] disabled:opacity-60"
           >
-            Sign Up
+            {isSubmitting ? "Signing up..." : "Sign Up"}
           </button>
         </form>
 

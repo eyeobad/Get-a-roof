@@ -16,6 +16,7 @@ import { CreatePropertyDto } from "./dto/create-property.dto";
 import { UpdatePropertyDto } from "./dto/update-property.dto";
 import { toNumber } from "../common/utils/match.helpers";
 import { PropertyStatus } from "../common/enums";
+import { normalizePropertyType } from "../common/utils/property.utils";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { Roles } from "../common/guards/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -29,6 +30,13 @@ export class PropertiesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Landlord)
   uploadImage(@Body() body: { fileName?: string }) {
+    return this.propertiesService.uploadImageStub(body?.fileName);
+  }
+
+  @Post("upload-proof")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Landlord)
+  uploadProof(@Body() body: { fileName?: string }) {
     return this.propertiesService.uploadImageStub(body?.fileName);
   }
 
@@ -82,6 +90,27 @@ export class PropertiesController {
   private buildFilters(query: Record<string, string>) {
     const filters: Record<string, unknown> = {};
     const propertyTypes = new Set<string>();
+    const requirementFilters: Record<string, boolean>[] = [];
+
+    const requirementTypeMap: Record<string, string> = {
+      NonOwnerOccupied: "landlordRequirements.nonOwnerOccupied",
+      SharedApartment: "landlordRequirements.sharedApartment",
+      Shortlet: "landlordRequirements.shortlet",
+      SelfCompound: "landlordRequirements.selfCompound",
+      SharedCompound: "landlordRequirements.sharedCompound",
+    };
+
+    const addPropertyType = (rawType: string) => {
+      const normalized = normalizePropertyType(rawType)?.toString() ?? rawType;
+      if (!normalized) {
+        return;
+      }
+      propertyTypes.add(normalized);
+      const requirementPath = requirementTypeMap[normalized];
+      if (requirementPath) {
+        requirementFilters.push({ [requirementPath]: true });
+      }
+    };
 
     if (query.minPrice || query.maxPrice || query.budget) {
       filters.monthlyPrice = {} as any;
@@ -101,7 +130,7 @@ export class PropertiesController {
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean);
-      types.forEach((type) => propertyTypes.add(type));
+      types.forEach(addPropertyType);
     }
 
     const toggleMap: Record<string, string> = {
@@ -115,13 +144,9 @@ export class PropertiesController {
 
     Object.entries(toggleMap).forEach(([key, value]) => {
       if (query[key] === "true") {
-        propertyTypes.add(value);
+        addPropertyType(value);
       }
     });
-
-    if (propertyTypes.size) {
-      filters.propertyType = { $in: Array.from(propertyTypes) };
-    }
 
     if (query.apartmentType) {
       const type = query.apartmentType;
@@ -134,7 +159,22 @@ export class PropertiesController {
       } else if (type === "singleRoom" || type === "miniflat" || type === "studio1") {
         filters.bedCount = { $lte: 1 };
       } else if (type === "duplex") {
-        filters.propertyType = { $in: ["House", "Townhouse"] };
+        propertyTypes.clear();
+        propertyTypes.add("House");
+        propertyTypes.add("Townhouse");
+      }
+    }
+
+    if (propertyTypes.size || requirementFilters.length) {
+      const typeConditions: Record<string, unknown>[] = [];
+      if (propertyTypes.size) {
+        typeConditions.push({ propertyType: { $in: Array.from(propertyTypes) } });
+      }
+      typeConditions.push(...requirementFilters);
+      if (typeConditions.length === 1) {
+        Object.assign(filters, typeConditions[0]);
+      } else {
+        filters.$or = typeConditions;
       }
     }
 

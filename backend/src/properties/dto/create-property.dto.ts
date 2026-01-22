@@ -8,10 +8,11 @@ import {
   IsString,
   ValidateNested,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { PropertyStatus, PropertyType } from "../../common/enums";
 import { PropertyAddressDto } from "./property-address.dto";
 import { LandlordRequirementsDto } from "./landlord-requirements.dto";
+import { normalizePropertyType } from "../../common/utils/property.utils";
 
 export class CreatePropertyDto {
   @IsOptional()
@@ -29,8 +30,15 @@ export class CreatePropertyDto {
 
   @IsOptional()
   @ValidateNested()
+  @Transform(({ value }) =>
+    typeof value === "string" ? { street: value } : value
+  )
   @Type(() => PropertyAddressDto)
   address?: PropertyAddressDto;
+
+  @IsOptional()
+  @IsString()
+  location?: string;
 
   @IsOptional()
   @IsString()
@@ -54,6 +62,7 @@ export class CreatePropertyDto {
 
   @IsOptional()
   @IsEnum(PropertyType)
+  @Transform(({ value }) => normalizePropertyType(value))
   propertyType?: PropertyType;
 
   @IsOptional()

@@ -108,22 +108,180 @@ export class MatchesService {
     }
 
     match.status = dto.status ?? match.status;
+    match.landlordSeenAt = new Date();
     return match.save();
   }
 
   async findByProperty(propertyId: string) {
-    return this.matchModel.find({ propertyId }).exec();
+    return this.matchModel
+      .find({ propertyId, status: { $ne: MatchStatus.Dismissed } })
+      .exec();
   }
 
   async countByProperty(propertyId: string) {
-    return this.matchModel.countDocuments({ propertyId }).exec();
+    return this.matchModel
+      .countDocuments({ propertyId, status: { $ne: MatchStatus.Dismissed } })
+      .exec();
+  }
+
+  async countNewByProperty(propertyId: string) {
+    return this.matchModel
+      .countDocuments({
+        propertyId,
+        status: { $ne: MatchStatus.Dismissed },
+        $or: [
+          { landlordSeenAt: { $exists: false } },
+          { landlordSeenAt: null },
+          { $expr: { $gt: ["$updatedAt", "$landlordSeenAt"] } },
+        ],
+      })
+      .exec();
+  }
+
+  async getMatchCountsByPropertyIds(propertyIds: string[]) {
+    if (!propertyIds.length) {
+      return [];
+    }
+    const objectIds = propertyIds.map((id) => new Types.ObjectId(id));
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          propertyId: { $in: objectIds },
+          status: { $ne: MatchStatus.Dismissed },
+        },
+      },
+      {
+        $group: {
+          _id: "$propertyId",
+          count: { $sum: 1 },
+        },
+      },
+    ];
+
+    return this.matchModel.aggregate(pipeline).exec();
+  }
+
+  async getNewMatchCountsByPropertyIds(propertyIds: string[]) {
+    if (!propertyIds.length) {
+      return [];
+    }
+    const objectIds = propertyIds.map((id) => new Types.ObjectId(id));
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          propertyId: { $in: objectIds },
+          status: { $ne: MatchStatus.Dismissed },
+          $or: [
+            { landlordSeenAt: { $exists: false } },
+            { landlordSeenAt: null },
+            { $expr: { $gt: ["$updatedAt", "$landlordSeenAt"] } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: "$propertyId",
+          count: { $sum: 1 },
+        },
+      },
+    ];
+
+    return this.matchModel.aggregate(pipeline).exec();
   }
 
   async findPropertyIdsWithMatches(landlordPropertyIds: string[]) {
     return this.matchModel
-      .find({ propertyId: { $in: landlordPropertyIds } })
+      .find({
+        propertyId: { $in: landlordPropertyIds },
+        status: { $ne: MatchStatus.Dismissed },
+      })
       .distinct("propertyId")
       .exec();
+  }
+
+  async getPropertyMatchesWithTenant(propertyId: string) {
+    const propertyObjectId = new Types.ObjectId(propertyId);
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          propertyId: propertyObjectId,
+          status: { $ne: MatchStatus.Dismissed },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "tenantId",
+          foreignField: "_id",
+          as: "tenant",
+        },
+      },
+      { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          propertyId: 1,
+          tenantId: 1,
+          status: 1,
+          matchScore: 1,
+          preferencesMatchPercentage: 1,
+          apartmentPreferenceMatchPercentage: 1,
+          tenantLiked: 1,
+          timestamp: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          landlordSeenAt: 1,
+          isNewForLandlord: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: ["$landlordSeenAt", null] },
+                  { $gt: ["$updatedAt", "$landlordSeenAt"] },
+                ],
+              },
+              true,
+              false,
+            ],
+          },
+          tenant: {
+            _id: "$tenant._id",
+            firstName: "$tenant.firstName",
+            lastName: "$tenant.lastName",
+            email: "$tenant.email",
+            phoneNumber: "$tenant.phoneNumber",
+            photoUrl: "$tenant.photoUrl",
+            isVerified: "$tenant.isVerified",
+            preferences: "$tenant.preferences",
+          },
+        },
+      },
+      { $sort: { updatedAt: -1 } },
+    ];
+
+    return this.matchModel.aggregate(pipeline).exec();
+  }
+
+  async markMatchesSeenForProperty(propertyId: string) {
+    const now = new Date();
+    await this.matchModel.updateMany(
+      { propertyId, status: { $ne: MatchStatus.Dismissed } },
+      { $set: { landlordSeenAt: now } }
+    );
+    return { propertyId, seenAt: now.toISOString() };
+  }
+
+  async landlordHasTenantMatch(landlordPropertyIds: string[], tenantId: string) {
+    if (!landlordPropertyIds.length) {
+      return false;
+    }
+    const exists = await this.matchModel
+      .exists({
+        tenantId,
+        propertyId: { $in: landlordPropertyIds },
+        status: { $ne: MatchStatus.Dismissed },
+      })
+      .exec();
+    return Boolean(exists);
   }
 
   async getTenantMatches(tenantId: string) {

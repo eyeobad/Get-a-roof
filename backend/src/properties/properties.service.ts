@@ -10,6 +10,7 @@ import { haversineDistanceKm } from "../common/utils/geo.utils";
 import { toNumber } from "../common/utils/match.helpers";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { MatchStatus } from "../common/enums";
+import { normalizePropertyType } from "../common/utils/property.utils";
 
 @Injectable()
 export class PropertiesService {
@@ -20,13 +21,15 @@ export class PropertiesService {
   ) {}
 
   async createProperty(dto: CreatePropertyDto) {
-    const created = new this.propertyModel(dto);
+    const normalized = this.normalizePropertyPayload(dto);
+    const created = new this.propertyModel(normalized);
     return created.save();
   }
 
   async updateProperty(id: string, dto: UpdatePropertyDto) {
+    const normalized = this.normalizePropertyPayload(dto);
     const updated = await this.propertyModel
-      .findByIdAndUpdate(id, dto, { new: true })
+      .findByIdAndUpdate(id, normalized, { new: true })
       .exec();
     if (!updated) {
       throw new NotFoundException("Property not found");
@@ -119,8 +122,51 @@ export class PropertiesService {
     return { url };
   }
 
-  async getLandlordProperties(landlordId: string) {
-    return this.propertyModel.find({ landlordId }).exec();
+  async getLandlordProperties(
+    landlordId: string,
+    options?: { q?: string; status?: string; sort?: string }
+  ) {
+    const filters: Record<string, any> = { landlordId };
+    if (options?.status) {
+      filters.status = options.status;
+    }
+    if (options?.q) {
+      const regex = new RegExp(options.q, "i");
+      filters.$or = [
+        { "address.street": regex },
+        { "address.city": regex },
+        { "address.state": regex },
+        { neighborhood: regex },
+      ];
+    }
+
+    let query = this.propertyModel.find(filters);
+    if (options?.sort === "priceAsc") {
+      query = query.sort({ monthlyPrice: 1 });
+    } else if (options?.sort === "priceDesc") {
+      query = query.sort({ monthlyPrice: -1 });
+    } else {
+      query = query.sort({ updatedAt: -1 });
+    }
+    return query.exec();
+  }
+
+  private normalizePropertyPayload<T extends CreatePropertyDto | UpdatePropertyDto>(
+    dto: T
+  ) {
+    const normalized: any = { ...dto };
+
+    if (normalized.location && !normalized.address) {
+      normalized.address = { street: normalized.location };
+    }
+    delete normalized.location;
+
+    if (normalized.propertyType) {
+      normalized.propertyType =
+        normalizePropertyType(normalized.propertyType) ?? normalized.propertyType;
+    }
+
+    return normalized;
   }
 
   private async applyScoringAndFilters(

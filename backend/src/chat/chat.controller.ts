@@ -27,6 +27,22 @@ export class ChatController {
     return this.chatService.startThread(req.user?.sub, body.propertyId, body.message);
   }
 
+  @Post("start-landlord")
+  @UseGuards(JwtAuthGuard)
+  startLandlordThread(
+    @Body() body: { matchId?: string; message?: string },
+    @Req() req: Request & { user?: any }
+  ) {
+    if (!body?.matchId) {
+      return { matchId: null };
+    }
+    return this.chatService.startLandlordThread(
+      body.matchId,
+      req.user?.sub,
+      body.message
+    );
+  }
+
   @Get("conversations")
   @UseGuards(JwtAuthGuard)
   getConversations(
