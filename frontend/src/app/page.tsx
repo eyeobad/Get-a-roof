@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function Home() {
   const router = useRouter();
+  const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "fail">(
+    "checking"
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -12,6 +16,26 @@ export default function Home() {
     }, 4000);
     return () => clearTimeout(timer);
   }, [router]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE_URL}/`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => {
+        if (!active) return;
+        if (data?.status === "ok") {
+          setApiStatus("ok");
+        } else {
+          setApiStatus("fail");
+        }
+      })
+      .catch(() => {
+        if (active) setApiStatus("fail");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="bg-white min-h-screen w-full flex flex-col items-center justify-center overflow-hidden antialiased font-display relative">
@@ -42,6 +66,14 @@ export default function Home() {
           <p className="text-slate-400 text-sm font-medium tracking-wide uppercase">
             THE REAL ESTATE APP
           </p>
+        </div>
+        <div className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Backend:{" "}
+          {apiStatus === "checking"
+            ? "Checking..."
+            : apiStatus === "ok"
+              ? "Connected"
+              : "Unavailable"}
         </div>
       </div>
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#f9f8fc] to-transparent pointer-events-none opacity-50" />

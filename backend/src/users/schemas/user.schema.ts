@@ -64,7 +64,7 @@ class TenantPreferences {
   @Prop()
   maritalStatus?: string;
 
-  @Prop({ enum: VehiclePreference })
+  @Prop({ type: String, enum: VehiclePreference })
   vehicles?: VehiclePreference;
 
   @Prop()
@@ -105,7 +105,7 @@ class Preferences {
 
 @Schema({ timestamps: true })
 export class User {
-  @Prop({ enum: UserRole, default: UserRole.Unassigned })
+  @Prop({ type: String, enum: UserRole, default: UserRole.Unassigned })
   role: UserRole;
 
   @Prop()
@@ -129,7 +129,7 @@ export class User {
   @Prop({ default: false })
   isVerified: boolean;
 
-  @Prop({ enum: VerificationStatus, default: VerificationStatus.None })
+  @Prop({ type: String, enum: VerificationStatus, default: VerificationStatus.None })
   verificationStatus: VerificationStatus;
 
   @Prop({ type: VerificationDetails })

@@ -12,7 +12,7 @@ export class Match {
   @Prop({ type: Types.ObjectId, ref: "Property", required: true })
   propertyId: Types.ObjectId;
 
-  @Prop({ enum: MatchStatus, default: MatchStatus.TenantLiked })
+  @Prop({ type: String, enum: MatchStatus, default: MatchStatus.TenantLiked })
   status: MatchStatus;
 
   @Prop()

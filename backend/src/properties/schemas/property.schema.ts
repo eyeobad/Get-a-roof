@@ -39,7 +39,7 @@ class IdealTenantPreferences {
   @Prop()
   maritalStatus?: string;
 
-  @Prop({ enum: VehiclePreference })
+  @Prop({ type: String, enum: VehiclePreference })
   vehicles?: VehiclePreference;
 
   @Prop()
@@ -126,7 +126,7 @@ export class Property {
   @Prop()
   petFriendly?: boolean;
 
-  @Prop({ enum: PropertyType })
+  @Prop({ type: String, enum: PropertyType })
   propertyType?: PropertyType;
 
   @Prop()
@@ -138,7 +138,7 @@ export class Property {
   @Prop()
   proofOfOwnership?: string;
 
-  @Prop({ enum: PropertyStatus, default: PropertyStatus.Draft })
+  @Prop({ type: String, enum: PropertyStatus, default: PropertyStatus.Draft })
   status: PropertyStatus;
 
   @Prop({ type: LandlordRequirements })
