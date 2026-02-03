@@ -153,12 +153,14 @@ function MapCanvas({
   onSelect,
   onMapReady,
   routeGeojson,
+  onMapError,
 }: {
   points: MapPoint[];
   activeIndex: number;
   onSelect: (index: number) => void;
   onMapReady: (map: mapboxgl.Map) => void;
   routeGeojson: GeoJSON.Feature<GeoJSON.LineString> | null;
+  onMapError: (message: string) => void;
 }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -167,6 +169,11 @@ function MapCanvas({
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
+    if (!mapboxgl.supported()) {
+      onMapError("Mapbox is not supported in this browser.");
+      return;
+    }
+
     const map = new mapboxgl.Map({
       container: mapElementRef.current,
       style: "mapbox://styles/mapbox/streets-v12",
@@ -177,6 +184,14 @@ function MapCanvas({
 
     map.addControl(new mapboxgl.AttributionControl({ compact: true }));
     mapRef.current = map;
+
+    map.on("error", (event) => {
+      const message =
+        typeof event.error?.message === "string"
+          ? event.error.message
+          : "Map failed to load.";
+      onMapError(message);
+    });
 
     map.on("load", () => {
       mapLoadedRef.current = true;
@@ -237,7 +252,7 @@ function MapCanvas({
       mapRef.current = null;
       mapLoadedRef.current = false;
     };
-  }, [onMapReady]);
+  }, [onMapReady, onMapError]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -328,6 +343,7 @@ export default function MapView() {
   const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authToken) {
@@ -406,10 +422,12 @@ export default function MapView() {
 
   const handleMobileMapReady = useCallback((map: mapboxgl.Map) => {
     mobileMapRef.current = map;
+    setMapError(null);
   }, []);
 
   const handleDesktopMapReady = useCallback((map: mapboxgl.Map) => {
     desktopMapRef.current = map;
+    setMapError(null);
   }, []);
 
   const handleZoomIn = (mapRef: { current: mapboxgl.Map | null }) => {
@@ -549,8 +567,17 @@ export default function MapView() {
               onSelect={setSelectedIndex}
               onMapReady={handleMobileMapReady}
               routeGeojson={routeGeojson}
+              onMapError={setMapError}
             />
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/10 via-transparent to-white/40" />
+            {mapError && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
+                <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
+                  <p className="font-semibold text-slate-900">Map failed to load</p>
+                  <p className="mt-1">{mapError}</p>
+                </div>
+              </div>
+            )}
 
             <div className="absolute right-4 top-4 flex flex-col gap-3">
               <div className="flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
@@ -766,8 +793,17 @@ export default function MapView() {
             onSelect={setSelectedIndex}
             onMapReady={handleDesktopMapReady}
             routeGeojson={routeGeojson}
+            onMapError={setMapError}
           />
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 to-slate-100/30" />
+          {mapError && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
+              <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
+                <p className="font-semibold text-slate-900">Map failed to load</p>
+                <p className="mt-1">{mapError}</p>
+              </div>
+            </div>
+          )}
 
           <div className="absolute top-6 right-6 flex flex-col space-y-2 z-10">
             <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Property, PropertyDocument } from "./schemas/property.schema";
@@ -11,13 +11,16 @@ import { toNumber } from "../common/utils/match.helpers";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { MatchStatus } from "../common/enums";
 import { normalizePropertyType } from "../common/utils/property.utils";
+import { AppwriteStorageService } from "../appwrite/appwrite.service";
+import { Express } from "express";
 
 @Injectable()
 export class PropertiesService {
   constructor(
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
+    private readonly appwriteStorage: AppwriteStorageService
   ) {}
 
   async createProperty(dto: CreatePropertyDto) {
@@ -108,6 +111,11 @@ export class PropertiesService {
       address: property.address,
       monthlyPrice: property.monthlyPrice,
       propertyType: property.propertyType,
+      bedCount: property.bedCount,
+      bathCount: property.bathCount,
+      sqFt: property.sqFt,
+      neighborhood: property.neighborhood,
+      amenities: property.amenities,
       images: property.images,
       matchScore: property.matchScore,
       preferencesMatchPercentage: property.preferencesMatchPercentage,
@@ -116,10 +124,27 @@ export class PropertiesService {
     }));
   }
 
-  async uploadImageStub(fileName?: string) {
-    const slug = fileName ? fileName.replace(/\s+/g, "-") : "upload";
-    const url = `https://example.com/uploads/${Date.now()}-${slug}`;
-    return { url };
+  async uploadImage(file?: Express.Multer.File) {
+    return this.uploadToAppwrite(file);
+  }
+
+  async uploadProof(file?: Express.Multer.File) {
+    return this.uploadToAppwrite(file);
+  }
+
+  private async uploadToAppwrite(file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException("File is required");
+    }
+    const result = await this.appwriteStorage.uploadFile(
+      file.originalname ?? file.filename ?? `property-${Date.now()}`,
+      file.buffer,
+      file.mimetype ?? "image/jpeg"
+    );
+    if (!result?.url) {
+      throw new BadRequestException("Unable to upload file");
+    }
+    return { url: result.url };
   }
 
   async getLandlordProperties(
