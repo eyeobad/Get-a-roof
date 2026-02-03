@@ -963,10 +963,10 @@ export default function ProfilePage() {
         </div>
       </Modal>
 
-      {/* Preferences (single-select per group, state-based) */}
+      {/* Profile (single-select per group, state-based) */}
       <Modal
         open={activeModal === "preferences"}
-        title="Edit Preferences"
+        title="Edit Profile"
         onClose={closeModal}
         footer={
           <div className="flex gap-3">
@@ -989,7 +989,7 @@ export default function ProfilePage() {
               onClick={saveDraft}
               className="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white hover:brightness-110 active:scale-[0.98] transition"
             >
-              Save Preferences
+              Save Profile
             </button>
           </div>
         }
