@@ -32,7 +32,7 @@ type MapPoint = {
 };
 
 const MAPBOX_TOKEN =
-  "pk.eyJ1IjoiZXllb2JhZCIsImEiOiJjbWw2dGdnZmQwZ2FlM2NzZmgxeXU3ZjBjIn0.zW2Z7fBnmwQ0TWmzb-XM3w";
+  "pk.eyJ1IjoiZXllb2JhZCIsImEiOiJjbWw2eTFpcGowZzQ1M2NzY2cycjJweHZkIn0.xlR97W8pEWAFRkDEBlxf9g";
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
