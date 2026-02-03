@@ -669,7 +669,7 @@ export default function MapView() {
 
         {/* MOBILE BODY SWITCHES HERE */}
         {viewMode === "map" ? (
-          <main className="relative w-full flex-1 overflow-hidden bg-[#e8e4dc]">
+          <main className="relative w-full flex-1 overflow-hidden">
             <MapCanvas
               points={mapPoints}
               activeIndex={activeIndex}
@@ -896,7 +896,7 @@ export default function MapView() {
           </div>
         </aside>
 
-        <section className="relative flex-1 h-full overflow-hidden bg-gray-200">
+        <section className="relative flex-1 h-full overflow-hidden">
           <MapCanvas
             points={mapPoints}
             activeIndex={activeIndex}
