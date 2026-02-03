@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import L from "leaflet";
+import mapboxgl from "mapbox-gl";
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -11,11 +11,13 @@ type ListingCard = {
   id: string;
   price: string;
   address: string;
+  displayAddress: string;
   beds: number;
   baths: number;
   sqft: string;
   tag?: string;
   image: string;
+  isExact: boolean;
 };
 
 type MapPoint = {
@@ -24,6 +26,42 @@ type MapPoint = {
   price: string;
   lat: number;
   lng: number;
+  displayLat: number;
+  displayLng: number;
+  isExact: boolean;
+};
+
+const MAPBOX_TOKEN =
+  "pk.eyJ1IjoiZXllb2JhZCIsImEiOiJjbWw2dGdnZmQwZ2FlM2NzZmgxeXU3ZjBjIn0.zW2Z7fBnmwQ0TWmzb-XM3w";
+
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+const hashString = (value: string) => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const jitterPoint = (lat: number, lng: number, seed: string) => {
+  const hash = hashString(seed);
+  const angle = (hash % 360) * (Math.PI / 180);
+  const distance = 0.002 + ((hash % 100) / 100) * 0.0015;
+  return {
+    lat: lat + Math.sin(angle) * distance,
+    lng: lng + Math.cos(angle) * distance,
+  };
+};
+
+const buildDisplayAddress = (address: string, neighborhood?: string) => {
+  if (neighborhood) return `Area near ${neighborhood}`;
+  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return `Area near ${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+  }
+  return "Area in this neighborhood";
 };
 
 function EmptyState({
@@ -60,7 +98,7 @@ function PropertyCard({ item }: { item: ListingCard }) {
       <div className="relative h-48 overflow-hidden">
         <Image
           src={item.image}
-          alt={item.address}
+          alt={item.displayAddress}
           fill
           className="object-cover transition duration-500 group-hover:scale-105"
         />
@@ -78,7 +116,7 @@ function PropertyCard({ item }: { item: ListingCard }) {
         <div className="flex justify-between items-start mb-2">
           <div>
             <h3 className="text-2xl font-bold text-[#0c141d]">{item.price}</h3>
-            <p className="text-sm text-gray-500 mt-1">{item.address}</p>
+            <p className="text-sm text-gray-500 mt-1">{item.displayAddress}</p>
           </div>
           <Link href={`/property-details/${item.id}`} className="text-sm text-primary font-semibold">
             View
@@ -118,64 +156,119 @@ function MapCanvas({
   points: MapPoint[];
   activeIndex: number;
   onSelect: (index: number) => void;
-  onMapReady: (map: L.Map) => void;
+  onMapReady: (map: mapboxgl.Map) => void;
 }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const mapLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
-    const map = L.map(mapElementRef.current, {
-      zoomControl: false,
+    const map = new mapboxgl.Map({
+      container: mapElementRef.current,
+      style: "mapbox://styles/mapbox/streets-v12",
+      center: [3.4251, 6.4358],
+      zoom: 12,
       attributionControl: false,
-      scrollWheelZoom: true,
-      doubleClickZoom: true,
-    }).setView([6.4358, 3.4251], 12);
+    });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-    }).addTo(map);
-
-    const layer = L.layerGroup().addTo(map);
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }));
     mapRef.current = map;
-    layerRef.current = layer;
-    onMapReady(map);
+
+    map.on("load", () => {
+      mapLoadedRef.current = true;
+      if (!map.getSource("approx-areas")) {
+        map.addSource("approx-areas", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "approx-area-fill",
+          type: "circle",
+          source: "approx-areas",
+          paint: {
+            "circle-color": "#0a44b8",
+            "circle-opacity": 0.15,
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              10,
+              30,
+              14,
+              70,
+            ],
+            "circle-stroke-color": "#0a44b8",
+            "circle-stroke-width": 1,
+            "circle-stroke-opacity": 0.35,
+          },
+        });
+      }
+      onMapReady(map);
+    });
 
     return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
       map.remove();
       mapRef.current = null;
-      layerRef.current = null;
+      mapLoadedRef.current = false;
     };
   }, [onMapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const layer = layerRef.current;
-    if (!map || !layer) return;
+    if (!map || !mapLoadedRef.current) return;
 
-    layer.clearLayers();
-    if (!points.length) return;
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
 
     points.forEach((point) => {
-      const html = `<div class="map-price-marker ${
-        point.index === activeIndex ? "is-active" : ""
-      }"><span>${point.price}</span></div>`;
-      const icon = L.divIcon({
-        html,
-        className: "map-price-marker-wrapper",
-      });
-      const marker = L.marker([point.lat, point.lng], { icon });
-      marker.on("click", () => onSelect(point.index));
-      marker.addTo(layer);
+      const markerEl = document.createElement("div");
+      markerEl.className = [
+        "map-price-marker",
+        point.index === activeIndex ? "is-active" : "",
+        point.isExact ? "is-exact" : "is-approx",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      markerEl.innerHTML = `<span>${point.price}</span>`;
+      markerEl.addEventListener("click", () => onSelect(point.index));
+      const marker = new mapboxgl.Marker({ element: markerEl })
+        .setLngLat([point.displayLng, point.displayLat])
+        .addTo(map);
+      markersRef.current.push(marker);
     });
+
+    const approxFeatures = points
+      .filter((point) => !point.isExact)
+      .map((point) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [point.displayLng, point.displayLat],
+        },
+        properties: {},
+      }));
+
+    const areaSource = map.getSource("approx-areas") as mapboxgl.GeoJSONSource | undefined;
+    if (areaSource) {
+      areaSource.setData({
+        type: "FeatureCollection",
+        features: approxFeatures,
+      });
+    }
   }, [points, activeIndex, onSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !points.length) return;
-    const bounds = L.latLngBounds(points.map((point) => [point.lat, point.lng]));
-    map.fitBounds(bounds, { padding: [40, 40] });
+    const bounds = new mapboxgl.LngLatBounds();
+    points.forEach((point) => {
+      bounds.extend([point.displayLng, point.displayLat]);
+    });
+    map.fitBounds(bounds, { padding: 60, duration: 0 });
   }, [points]);
 
   return <div ref={mapElementRef} className="absolute inset-0" />;
@@ -185,6 +278,8 @@ export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const mapMatches = useAppStore((state) => state.mapMatches);
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const matchSummaries = useAppStore((state) => state.matchSummaries);
+  const loadMatches = useAppStore((state) => state.loadMatches);
   const authToken = useAppStore((state) => state.authToken);
   const listingsById = useAppStore((state) => state.listingsById);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -192,39 +287,68 @@ export default function MapView() {
   useEffect(() => {
     if (authToken) {
       void loadMapMatches();
+      void loadMatches();
     }
-  }, [authToken, loadMapMatches]);
+  }, [authToken, loadMapMatches, loadMatches]);
 
   const demoListings = useMemo(() => Object.values(listingsById), [listingsById]);
   const sourceListings = authToken ? mapMatches : demoListings;
   const showEmptyState = authToken && mapMatches.length === 0;
 
+  const acceptedIds = useMemo(() => {
+    return new Set(
+      matchSummaries
+        .filter(
+          (match) =>
+            match.status === "ChatInitiated" || match.status === "LandlordQualified"
+        )
+        .map((match) => match.listingId)
+    );
+  }, [matchSummaries]);
+
   const listItems = useMemo<ListingCard[]>(() => {
-    return sourceListings.map((listing) => ({
-      id: listing.id,
-      price: listing.price,
-      address: listing.address,
-      beds: listing.bedrooms,
-      baths: listing.bathrooms,
-      sqft: listing.sqft,
-      tag: listing.tag,
-      image: listing.image,
-    }));
-  }, [sourceListings]);
+    return sourceListings.map((listing) => {
+      const isExact = !authToken || acceptedIds.has(listing.id);
+      return {
+        id: listing.id,
+        price: listing.price,
+        address: listing.address,
+        displayAddress: isExact
+          ? listing.address
+          : buildDisplayAddress(listing.address, listing.neighborhood),
+        beds: listing.bedrooms,
+        baths: listing.bathrooms,
+        sqft: listing.sqft,
+        tag: listing.tag,
+        image: listing.image,
+        isExact,
+      };
+    });
+  }, [sourceListings, acceptedIds, authToken]);
 
   const mapPoints = useMemo<MapPoint[]>(() => {
     return sourceListings
-      .map((listing, index) => ({
-        id: listing.id,
-        index,
-        price: listing.price,
-        lat: listing.lat,
-        lng: listing.lng,
-      }))
-      .filter(
-        (point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)
-      );
-  }, [sourceListings]);
+      .map((listing, index) => {
+        const isExact = !authToken || acceptedIds.has(listing.id);
+        const lat = listing.lat;
+        const lng = listing.lng;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return null;
+        }
+        const display = isExact ? { lat, lng } : jitterPoint(lat, lng, listing.id);
+        return {
+          id: listing.id,
+          index,
+          price: listing.price,
+          lat,
+          lng,
+          displayLat: display.lat,
+          displayLng: display.lng,
+          isExact,
+        };
+      })
+      .filter((point): point is MapPoint => Boolean(point));
+  }, [sourceListings, acceptedIds, authToken]);
 
   const activeIndex =
     listItems.length > 0
@@ -232,31 +356,33 @@ export default function MapView() {
       : 0;
   const activeListing = listItems[activeIndex] ?? listItems[0];
 
-  const mobileMapRef = useRef<L.Map | null>(null);
-  const desktopMapRef = useRef<L.Map | null>(null);
+  const mobileMapRef = useRef<mapboxgl.Map | null>(null);
+  const desktopMapRef = useRef<mapboxgl.Map | null>(null);
 
-  const handleMobileMapReady = useCallback((map: L.Map) => {
+  const handleMobileMapReady = useCallback((map: mapboxgl.Map) => {
     mobileMapRef.current = map;
   }, []);
 
-  const handleDesktopMapReady = useCallback((map: L.Map) => {
+  const handleDesktopMapReady = useCallback((map: mapboxgl.Map) => {
     desktopMapRef.current = map;
   }, []);
 
-  const handleZoomIn = (mapRef: { current: L.Map | null }) => {
+  const handleZoomIn = (mapRef: { current: mapboxgl.Map | null }) => {
     mapRef.current?.zoomIn();
   };
 
-  const handleZoomOut = (mapRef: { current: L.Map | null }) => {
+  const handleZoomOut = (mapRef: { current: mapboxgl.Map | null }) => {
     mapRef.current?.zoomOut();
   };
 
-  const handleLocate = (mapRef: { current: L.Map | null }) => {
+  const handleLocate = (mapRef: { current: mapboxgl.Map | null }) => {
     const target = mapPoints.find((point) => point.index === activeIndex);
     if (!target || !mapRef.current) return;
     const currentZoom = mapRef.current.getZoom();
-    mapRef.current.flyTo([target.lat, target.lng], Math.max(currentZoom, 14), {
-      duration: 0.6,
+    mapRef.current.flyTo({
+      center: [target.displayLng, target.displayLat],
+      zoom: Math.max(currentZoom, 14),
+      duration: 600,
     });
   };
 
@@ -378,7 +504,7 @@ export default function MapView() {
                       {activeListing ? (
                         <Image
                           src={activeListing.image}
-                          alt={activeListing.address}
+                          alt={activeListing.displayAddress}
                           fill
                           className="object-cover"
                         />
@@ -399,7 +525,7 @@ export default function MapView() {
                         </div>
 
                         <p className="text-gray-600 text-sm mt-1 truncate">
-                          {activeListing?.address ?? "No matched properties yet"}
+                          {activeListing?.displayAddress ?? "No matched properties yet"}
                         </p>
                       </div>
 
@@ -548,16 +674,12 @@ export default function MapView() {
       </div>
 
       <style jsx global>{`
-        .leaflet-container {
+        .mapboxgl-map {
           font-family: var(--font-sans);
           background: #e2e8f0;
         }
-        .map-price-marker-wrapper {
-          background: transparent;
-          border: none;
-          width: auto;
-          height: auto;
-          overflow: visible;
+        .mapboxgl-canvas {
+          outline: none;
         }
         .map-price-marker {
           position: relative;
@@ -597,6 +719,10 @@ export default function MapView() {
         }
         .map-price-marker.is-active::after {
           border-top-color: var(--color-primary);
+        }
+        .map-price-marker.is-approx {
+          background: rgba(255, 255, 255, 0.9);
+          border-color: rgba(15, 23, 42, 0.18);
         }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 20px);

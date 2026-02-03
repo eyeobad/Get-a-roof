@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "framer-motion": "^12.23.26",
-    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.18.1",
     "material-icons": "^1.13.14",
     "next": "16.1.1",
     "react": "19.2.3",
