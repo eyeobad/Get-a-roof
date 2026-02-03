@@ -160,6 +160,7 @@ function MapCanvas({
   onMapReady,
   routeGeojson,
   onMapError,
+  onMapStatus,
 }: {
   points: MapPoint[];
   activeIndex: number;
@@ -167,6 +168,13 @@ function MapCanvas({
   onMapReady: (map: mapboxgl.Map) => void;
   routeGeojson: GeoJSON.Feature<GeoJSON.LineString> | null;
   onMapError: (message: string) => void;
+  onMapStatus: (status: {
+    supported: boolean;
+    loaded: boolean;
+    styleLoaded: boolean;
+    zoom: number | null;
+    center: { lat: number; lng: number } | null;
+  }) => void;
 }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -176,7 +184,15 @@ function MapCanvas({
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
-    if (!mapboxgl.supported()) {
+    const supported = mapboxgl.supported();
+    onMapStatus({
+      supported,
+      loaded: false,
+      styleLoaded: false,
+      zoom: null,
+      center: null,
+    });
+    if (!supported) {
       onMapError("Mapbox is not supported in this browser.");
       return;
     }
@@ -265,6 +281,13 @@ function MapCanvas({
         });
         resizeObserverRef.current.observe(mapElementRef.current);
       }
+      onMapStatus({
+        supported: true,
+        loaded: map.loaded(),
+        styleLoaded: map.isStyleLoaded(),
+        zoom: map.getZoom(),
+        center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
+      });
       onMapReady(map);
     });
 
@@ -278,7 +301,29 @@ function MapCanvas({
       mapRef.current = null;
       mapLoadedRef.current = false;
     };
-  }, [onMapReady, onMapError]);
+  }, [onMapReady, onMapError, onMapStatus]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const updateStatus = () => {
+      onMapStatus({
+        supported: true,
+        loaded: map.loaded(),
+        styleLoaded: map.isStyleLoaded(),
+        zoom: map.getZoom(),
+        center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
+      });
+    };
+    map.on("render", updateStatus);
+    map.on("error", updateStatus);
+    map.on("idle", updateStatus);
+    return () => {
+      map.off("render", updateStatus);
+      map.off("error", updateStatus);
+      map.off("idle", updateStatus);
+    };
+  }, [onMapStatus]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -370,6 +415,13 @@ export default function MapView() {
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [mapStatus, setMapStatus] = useState<{
+    supported: boolean;
+    loaded: boolean;
+    styleLoaded: boolean;
+    zoom: number | null;
+    center: { lat: number; lng: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     if (authToken) {
@@ -455,6 +507,19 @@ export default function MapView() {
     desktopMapRef.current = map;
     setMapError(null);
   }, []);
+
+  const handleMapStatus = useCallback(
+    (status: {
+      supported: boolean;
+      loaded: boolean;
+      styleLoaded: boolean;
+      zoom: number | null;
+      center: { lat: number; lng: number } | null;
+    }) => {
+      setMapStatus(status);
+    },
+    []
+  );
 
   const handleZoomIn = (mapRef: { current: mapboxgl.Map | null }) => {
     mapRef.current?.zoomIn();
@@ -594,6 +659,7 @@ export default function MapView() {
               onMapReady={handleMobileMapReady}
               routeGeojson={routeGeojson}
               onMapError={setMapError}
+              onMapStatus={handleMapStatus}
             />
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/10 via-transparent to-white/40" />
             {mapError && (
@@ -821,6 +887,7 @@ export default function MapView() {
             onMapReady={handleDesktopMapReady}
             routeGeojson={routeGeojson}
             onMapError={setMapError}
+            onMapStatus={handleMapStatus}
           />
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 to-slate-100/30" />
           {mapError && (
@@ -870,6 +937,22 @@ export default function MapView() {
                   ctaLabel="Browse listings"
                   ctaHref="/explore"
                 />
+              </div>
+            </div>
+          )}
+
+          {mapStatus && (
+            <div className="absolute top-6 left-6 z-20 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg">
+              <div className="font-semibold text-slate-900">Map Debug</div>
+              <div>supported: {String(mapStatus.supported)}</div>
+              <div>loaded: {String(mapStatus.loaded)}</div>
+              <div>styleLoaded: {String(mapStatus.styleLoaded)}</div>
+              <div>zoom: {mapStatus.zoom?.toFixed(2) ?? "n/a"}</div>
+              <div>
+                center:{" "}
+                {mapStatus.center
+                  ? `${mapStatus.center.lat.toFixed(4)}, ${mapStatus.center.lng.toFixed(4)}`
+                  : "n/a"}
               </div>
             </div>
           )}
