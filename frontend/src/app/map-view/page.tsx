@@ -152,11 +152,13 @@ function MapCanvas({
   activeIndex,
   onSelect,
   onMapReady,
+  routeGeojson,
 }: {
   points: MapPoint[];
   activeIndex: number;
   onSelect: (index: number) => void;
   onMapReady: (map: mapboxgl.Map) => void;
+  routeGeojson: GeoJSON.Feature<GeoJSON.LineString> | null;
 }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -202,6 +204,26 @@ function MapCanvas({
             "circle-stroke-color": "#0a44b8",
             "circle-stroke-width": 1,
             "circle-stroke-opacity": 0.35,
+          },
+        });
+      }
+      if (!map.getSource("route")) {
+        map.addSource("route", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#0a44b8",
+            "line-width": 5,
+            "line-opacity": 0.85,
           },
         });
       }
@@ -263,6 +285,24 @@ function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapLoadedRef.current) return;
+    const routeSource = map.getSource("route") as mapboxgl.GeoJSONSource | undefined;
+    if (!routeSource) return;
+    if (!routeGeojson) {
+      routeSource.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    routeSource.setData(routeGeojson);
+    const coords = routeGeojson.geometry.coordinates;
+    if (coords.length) {
+      const bounds = new mapboxgl.LngLatBounds();
+      coords.forEach((coord) => bounds.extend(coord));
+      map.fitBounds(bounds, { padding: 80, duration: 600 });
+    }
+  }, [routeGeojson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !points.length) return;
     const bounds = new mapboxgl.LngLatBounds();
     points.forEach((point) => {
@@ -283,6 +323,11 @@ export default function MapView() {
   const authToken = useAppStore((state) => state.authToken);
   const listingsById = useAppStore((state) => state.listingsById);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [routeGeojson, setRouteGeojson] =
+    useState<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
+  const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const [isRouting, setIsRouting] = useState(false);
 
   useEffect(() => {
     if (authToken) {
@@ -386,6 +431,56 @@ export default function MapView() {
     });
   };
 
+  const requestDirections = async () => {
+    if (!activeListing || !activeListing.isExact) {
+      setRoutingError("Directions are available after match acceptance.");
+      return;
+    }
+    if (!navigator.geolocation) {
+      setRoutingError("Geolocation is not supported in this browser.");
+      return;
+    }
+    setRoutingError(null);
+    setIsRouting(true);
+    setRouteGeojson(null);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 8000,
+        });
+      });
+      const originLng = position.coords.longitude;
+      const originLat = position.coords.latitude;
+      const target = mapPoints.find((point) => point.index === activeIndex);
+      if (!target) {
+        setRoutingError("Unable to find destination.");
+        return;
+      }
+      const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${originLng},${originLat};${target.lng},${target.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to fetch route.");
+      }
+      const data = (await response.json()) as {
+        routes?: Array<{ geometry?: GeoJSON.LineString }>;
+      };
+      const route = data.routes?.[0]?.geometry;
+      if (!route) {
+        throw new Error("No route found.");
+      }
+      setRouteGeojson({
+        type: "Feature",
+        geometry: route,
+        properties: {},
+      });
+    } catch (err) {
+      setRoutingError(err instanceof Error ? err.message : "Unable to load directions.");
+    } finally {
+      setIsRouting(false);
+    }
+  };
+
   return (
     <>
       {/* Mobile */}
@@ -453,6 +548,7 @@ export default function MapView() {
               activeIndex={activeIndex}
               onSelect={setSelectedIndex}
               onMapReady={handleMobileMapReady}
+              routeGeojson={routeGeojson}
             />
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/10 via-transparent to-white/40" />
 
@@ -562,6 +658,49 @@ export default function MapView() {
                       </span>
                     </Link>
                   )}
+
+                  {activeListing?.isExact ? (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[18px] text-primary">
+                          near_me
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          Directions
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <select
+                          value={routingProfile}
+                          onChange={(event) =>
+                            setRoutingProfile(
+                              event.target.value as "driving" | "walking" | "cycling"
+                            )
+                          }
+                          className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        >
+                          <option value="driving">Driving</option>
+                          <option value="walking">Walking</option>
+                          <option value="cycling">Cycling</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={requestDirections}
+                          disabled={isRouting}
+                          className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          {isRouting ? "Routing..." : "Get Route"}
+                        </button>
+                      </div>
+                      {routingError && (
+                        <p className="mt-2 text-xs text-red-600">{routingError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                      Directions unlock after the landlord accepts your request.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -626,6 +765,7 @@ export default function MapView() {
             activeIndex={activeIndex}
             onSelect={setSelectedIndex}
             onMapReady={handleDesktopMapReady}
+            routeGeojson={routeGeojson}
           />
           <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 to-slate-100/30" />
 
@@ -668,6 +808,44 @@ export default function MapView() {
                   ctaHref="/explore"
                 />
               </div>
+            </div>
+          )}
+
+          {activeListing && (
+            <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
+              <p className="text-sm font-semibold text-slate-700">Directions</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {activeListing.isExact
+                  ? "Get a route to this property."
+                  : "Directions unlock after landlord acceptance."}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={routingProfile}
+                  onChange={(event) =>
+                    setRoutingProfile(
+                      event.target.value as "driving" | "walking" | "cycling"
+                    )
+                  }
+                  className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  disabled={!activeListing.isExact}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={requestDirections}
+                  disabled={isRouting || !activeListing.isExact}
+                  className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {isRouting ? "Routing..." : "Get Route"}
+                </button>
+              </div>
+              {routingError && (
+                <p className="mt-2 text-xs text-red-600">{routingError}</p>
+              )}
             </div>
           )}
         </section>
