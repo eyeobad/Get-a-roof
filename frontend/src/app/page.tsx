@@ -1,14 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/lib/api";
 
 export default function Home() {
   const router = useRouter();
-  const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "fail">(
-    "checking"
-  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -17,64 +13,24 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [router]);
 
-  useEffect(() => {
-    let active = true;
-    fetch(`${API_BASE_URL}/`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => {
-        if (!active) return;
-        if (data?.status === "ok") {
-          setApiStatus("ok");
-        } else {
-          setApiStatus("fail");
-        }
-      })
-      .catch(() => {
-        if (active) setApiStatus("fail");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   return (
     <div className="bg-white min-h-screen w-full flex flex-col items-center justify-center overflow-hidden antialiased font-display relative">
-      <div className="flex flex-col items-center justify-center p-6 gap-2 animate-enter z-10">
-        <div className="relative flex items-center justify-center mb-6 mt-20">
-          <svg
-            className="text-[#0a44b8]"
-            fill="none"
-            height={200}
-            viewBox="0 0 24 24"
-            width={200}
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M12 3L2 12H5L12 5.66L19 12H22L12 3Z"
-              fill="currentColor"
-            ></path>
-            <path
-              d="M17 6V9.33L19 11.13V6H17Z"
-              fill="currentColor"
-            ></path>
-          </svg>
-        </div>
-        <div className="flex flex-col items-center gap-1 -mt-2">
-          <h1 className="text-[#0a44b8] tracking-tight text-[32px] md:text-[36px] font-bold leading-tight text-center">
+      <div className="flex flex-col items-center justify-center p-6 gap-2 animate-enter z-10 text-center">
+        <div className="flex flex-col gap-3 -mt-2">
+          <h1 className="text-[#0a44b8] tracking-tight text-[32px] md:text-[36px] font-bold leading-tight">
             Get a Roof
           </h1>
           <p className="text-slate-400 text-sm font-medium tracking-wide uppercase">
             THE REAL ESTATE APP
           </p>
         </div>
-        <div className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Backend:{" "}
-          {apiStatus === "checking"
-            ? "Checking..."
-            : apiStatus === "ok"
-              ? "Connected"
-              : "Unavailable"}
-        </div>
+        <button
+          type="button"
+          className="mt-8 flex items-center gap-3 rounded-full bg-black text-white px-6 py-3 text-sm font-semibold uppercase tracking-widest shadow-lg hover:bg-[#101010] transition"
+        >
+          <span className="material-symbols-outlined text-[18px]">music_note</span>
+          Follow us on TikTok
+        </button>
       </div>
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#f9f8fc] to-transparent pointer-events-none opacity-50" />
     </div>

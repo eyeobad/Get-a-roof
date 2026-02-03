@@ -115,7 +115,7 @@ export default function ExploreCards() {
       apartmentType,
       toggles,
     });
-  }, [loadExploreListings]);
+  }, [loadExploreListings, budget, distance, apartmentType, toggles]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (isSwipeAnimating || visibleCards.length === 0) return;

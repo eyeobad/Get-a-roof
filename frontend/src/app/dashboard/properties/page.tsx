@@ -1,9 +1,11 @@
 ﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import DashboardBottomNav from "@/components/DashboardBottomNav";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -159,45 +161,6 @@ function PropertyCard({
 
  
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
-  const Item = ({
-    id,
-    label,
-    icon,
-    badge,
-    href,
-  }: {
-    id: typeof active;
-    label: string;
-    icon: string;
-    badge?: number;
-    href: string;
-  }) => {
-    const isActive = active === id;
-    return (
-      <Link
-        href={href}
-        className={[
-          "flex flex-col items-center justify-center w-full h-full transition-colors",
-          isActive ? "text-[#0a44b8]" : "text-gray-400 hover:text-gray-600",
-        ].join(" ")}
-      >
-        <div className="relative">
-          <span className="material-symbols-outlined text-[30px]" style={solidIconStyle}>
-            {icon}
-          </span>
-          {typeof badge === "number" && badge > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-              {badge}
-            </span>
-          )}
-        </div>
-        <span className={["mt-1 text-[12px]", isActive ? "font-bold" : "font-medium"].join(" ")}>
-          {label}
-        </span>
-      </Link>
-    );
-  };
-
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromParam = searchParams?.get("from") ?? "";
@@ -230,14 +193,13 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full h-20 bg-white border-t border-gray-200 flex items-center justify-around z-50 pb-2 shadow-[0_-4px_10px_rgba(0,0,0,0.06)]">
-      <div className="max-w-md w-full h-full mx-auto flex">
-        <Item id="properties" label="Properties" icon="dashboard" href="/dashboard/properties" />
-        <Item id="matches" label="Matches" icon="group" href="/dashboard/matches" />
-        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href={chatHref} />
-        <Item id="profile" label="Profile" icon="person" href="/dashboard/profile" />
-      </div>
-    </nav>
+    <DashboardBottomNav
+      active={active}
+      chatBadge={2}
+      chatHref={chatHref}
+      rootClassName="h-20"
+      containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
+    />
   );
 }
 
@@ -250,40 +212,43 @@ export default function LandlordDashboardPage() {
   const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
 
-  const sampleProperties: Property[] = [
-    {
-      id: "p1",
-      status: "Listed",
-      title: "123 Maple Avenue",
-      price: 1200,
-      beds: 3,
-      baths: 2,
-      matches: 12,
-      coverUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuASNq12EGMCak0p_Mi5IJiFR2H_TUC43uKbPb3UDA3Drr2usbP0sbEyXKAiiIuy_rfrA5mSnrID4rcjMH6r63Ks8_m84AfNxGcqJ9NpaNmFzE-FeJ9dZa5s59CbhgiE57pnucWo7_zCdUKJDmr-PxKiyhHsMngsfHD0pgNlHhzZMzyOMLCcNv2oLh--U3ZUe3WUKryOL7DJJ5lbZzGGAYlckjXUyaGIBqmrWHgxygKNGmSZzU3nIE_fQddaOAV8vl8nv3fLFlXHVKTZ",
-    },
-    {
-      id: "p2",
-      status: "Listed",
-      title: "456 Oak Street",
-      price: 1500,
-      beds: 2,
-      baths: 2,
-      matches: 0,
-      coverUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuCXjht26ed14yawZqKOUqCh8E9PcQmqFD11r9bf8YvFGpD24Y877h44AWab8l5pGr0RjZLcCc_vPCOqRmaR9mxiObHutlocgatm1BXd_b2inDL3S2xIl1XwBJkVQ2cYNHeGAziyLtxnz4OZrDULO3u-uGtZ3Al5D0ParCSPxOPCeLNwd-14dNGKE2-G0-jTiJTCB4nEfR2kjrcXYP6yTNr5CiEq4J5n6CxGxAmebmc63UyTCKQnfsYUAV9wat0yHwJbYPpQ5KQj8Ja8",
-    },
-    {
-      id: "p3",
-      status: "Draft",
-      title: "789 Pine Lane",
-      price: 950,
-      beds: 1,
-      baths: 1,
-      coverUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuBaOh2T5Urtt9gq9SFJ6K-VegT_WT7Noz2alRwfAFVZuG4u_N0wmw53yGBNpeTBBMNmU3KNm6C56nW3rMgG50pfdaGIvvve3lVYAlWZn3I2fCpguvN3rpUlbwuSpSU0AXJD6TVzWEzSIrnrLkXlF7ruAJjgkVM9GF15sPSPmHKGHuuLli3FGllwFM-LYsUu2Q3s84gNFqus6EVh-VxPCD1KDt5D2IvRzf9wLhHugyKuK_X0VnIAd5VIeXk2pR4hptiyZbd2Z77UjrUI",
-    },
-  ];
+  const sampleProperties: Property[] = useMemo(
+    () => [
+      {
+        id: "p1",
+        status: "Listed",
+        title: "123 Maple Avenue",
+        price: 1200,
+        beds: 3,
+        baths: 2,
+        matches: 12,
+        coverUrl:
+          "https://lh3.googleusercontent.com/aida-public/AB6AXuASNq12EGMCak0p_Mi5IJiFR2H_TUC43uKbPb3UDA3Drr2usbP0sbEyXKAiiIuy_rfrA5mSnrID4rcjMH6r63Ks8_m84AfNxGcqJ9NpaNmFzE-FeJ9dZa5s59CbhgiE57pnucWo7_zCdUKJDmr-PxKiyhHsMngsfHD0pgNlHhzZMzyOMLCcNv2oLh--U3ZUe3WUKryOL7DJJ5lbZzGGAYlckjXUyaGIBqmrWHgxygKNGmSZzU3nIE_fQddaOAV8vl8nv3fLFlXHVKTZ",
+      },
+      {
+        id: "p2",
+        status: "Listed",
+        title: "456 Oak Street",
+        price: 1500,
+        beds: 2,
+        baths: 2,
+        matches: 0,
+        coverUrl:
+          "https://lh3.googleusercontent.com/aida-public/AB6AXuCXjht26ed14yawZqKOUqCh8E9PcQmqFD11r9bf8YvFGpD24Y877h44AWab8l5pGr0RjZLcCc_vPCOqRmaR9mxiObHutlocgatm1BXd_b2inDL3S2xIl1XwBJkVQ2cYNHeGAziyLtxnz4OZrDULO3u-uGtZ3Al5D0ParCSPxOPCeLNwd-14dNGKE2-G0-jTiJTCB4nEfR2kjrcXYP6yTNr5CiEq4J5n6CxGxAmebmc63UyTCKQnfsYUAV9wat0yHwJbYPpQ5KQj8Ja8",
+      },
+      {
+        id: "p3",
+        status: "Draft",
+        title: "789 Pine Lane",
+        price: 950,
+        beds: 1,
+        baths: 1,
+        coverUrl:
+          "https://lh3.googleusercontent.com/aida-public/AB6AXuBaOh2T5Urtt9gq9SFJ6K-VegT_WT7Noz2alRwfAFVZuG4u_N0wmw53yGBNpeTBBMNmU3KNm6C56nW3rMgG50pfdaGIvvve3lVYAlWZn3I2fCpguvN3rpUlbwuSpSU0AXJD6TVzWEzSIrnrLkXlF7ruAJjgkVM9GF15sPSPmHKGHuuLli3FGllwFM-LYsUu2Q3s84gNFqus6EVh-VxPCD1KDt5D2IvRzf9wLhHugyKuK_X0VnIAd5VIeXk2pR4hptiyZbd2Z77UjrUI",
+      },
+    ],
+    []
+  );
 
   const mappedProperties: Property[] = useMemo(
     () =>
@@ -298,7 +263,7 @@ export default function LandlordDashboardPage() {
         newCount: property.newCount ?? 0,
         coverUrl: property.coverUrl ?? "/hero.png",
       })),
-    [authToken, landlordProperties]
+    [authToken, landlordProperties, sampleProperties]
   );
 
   useEffect(() => {
@@ -327,6 +292,11 @@ export default function LandlordDashboardPage() {
     router.push(`/add-property-photos?propertyId=${id}`);
   };
 
+  const goAddProperty = () => {
+    clearLandlordDraft();
+    router.push("/add-property-photos");
+  };
+
   const onEdit = (id: string) => void openDraft(id);
   const onContinue = (id: string) => void openDraft(id);
   const onMatches = (id: string) => {
@@ -344,16 +314,14 @@ export default function LandlordDashboardPage() {
           <p className="text-[18px] text-gray-600 font-medium mt-1">Dashboard</p>
         </div>
 
-        <button
-          aria-label="Profile"
-          className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 hover:ring-4 ring-[#0a44b8]/20 transition-all focus:outline-none focus:ring-4"
-        >
-          <img
+        <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 hover:ring-4 ring-[#0a44b8]/20 transition-all focus:outline-none focus:ring-4">
+          <Image
             alt="Profile avatar"
-            className="w-full h-full object-cover"
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGEzCpt0ILv2ShepIc-_verWSuPCwtAXDW-e6EeG4kkTaOBJuQSlu8nbc907JfpuXy3oBnj5in34iv_WuZi76heKMOon1pAmtMTf1m0ddee-icIOR50wiIAyoG53dQmOdxNGlMhdQR7l6Cia4LyFny-xYHhXBwlxFKuv1D7Eu66vs9ZewGeFbHhXRyoEbbdbnEo4DsY7dsX7nrOhcs0DRX90daZEkqZ9rV8V-hr5c39Vjv_Yr8Bh1HRUgdUQRj3KKqoZb38elb3iiy"
+            fill
+            className="object-cover"
           />
-        </button>
+        </div>
       </header>
 
       {/* Main */}
@@ -390,18 +358,17 @@ export default function LandlordDashboardPage() {
           ) : authToken ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 space-y-4">
               <p>No properties yet. Start by adding your first listing.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  clearLandlordDraft();
-                  router.push("/add-property-photos");
-                }}
-                className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm"
-              >
+            <button
+              type="button"
+              onClick={goAddProperty}
+              className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
+            >
+              <span onClick={goAddProperty} className="cursor-pointer">
                 Add Property
-              </button>
-            </div>
-          ) : (
+              </span>
+            </button>
+          </div>
+        ) : (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
               Sign in to load your properties.
             </div>
@@ -415,12 +382,15 @@ export default function LandlordDashboardPage() {
       <div className="fixed bottom-24 right-5 z-40">
         <button
           type="button"
-          className="h-16 pl-5 pr-7 bg-[#0a44b8] hover:brightness-95 text-white rounded-full shadow-lg flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 ring-[#0a44b8]/30"
+          onClick={goAddProperty}
+          className="h-16 pl-5 pr-7 bg-[#0a44b8] hover:brightness-95 text-white rounded-full shadow-lg flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 ring-[#0a44b8]/30 cursor-pointer"
         >
           <span className="material-symbols-outlined text-[30px]" style={solidIconStyle}>
             add
           </span>
-          <span className="text-[18px] font-bold">Add Property</span>
+          <span className="text-[18px] font-bold cursor-pointer" onClick={goAddProperty}>
+            Add Property
+          </span>
         </button>
       </div>
 

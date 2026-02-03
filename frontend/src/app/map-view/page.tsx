@@ -1,16 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import L from "leaflet";
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
-
-const fallbackMarkers = [
-  { price: "$325k", top: "25%", left: "20%" },
-  { price: "$450k", top: "40%", left: "50%", spotlight: true },
-  { price: "$550k", top: "60%", right: "15%" },
-];
 
 type ListingCard = {
   id: string;
@@ -23,14 +18,12 @@ type ListingCard = {
   image: string;
 };
 
-type Marker = {
-  id?: string;
-  index?: number;
+type MapPoint = {
+  id: string;
+  index: number;
   price: string;
-  top?: string;
-  left?: string;
-  right?: string;
-  spotlight?: boolean;
+  lat: number;
+  lng: number;
 };
 
 function EmptyState({
@@ -116,6 +109,78 @@ function PropertyCard({ item }: { item: ListingCard }) {
   );
 }
 
+function MapCanvas({
+  points,
+  activeIndex,
+  onSelect,
+  onMapReady,
+}: {
+  points: MapPoint[];
+  activeIndex: number;
+  onSelect: (index: number) => void;
+  onMapReady: (map: L.Map) => void;
+}) {
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    if (!mapElementRef.current || mapRef.current) return;
+    const map = L.map(mapElementRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+    }).setView([6.4358, 3.4251], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+
+    const layer = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    layerRef.current = layer;
+    onMapReady(map);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
+  }, [onMapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+    if (!points.length) return;
+
+    points.forEach((point) => {
+      const html = `<div class="map-price-marker ${
+        point.index === activeIndex ? "is-active" : ""
+      }"><span>${point.price}</span></div>`;
+      const icon = L.divIcon({
+        html,
+        className: "map-price-marker-wrapper",
+      });
+      const marker = L.marker([point.lat, point.lng], { icon });
+      marker.on("click", () => onSelect(point.index));
+      marker.addTo(layer);
+    });
+  }, [points, activeIndex, onSelect]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !points.length) return;
+    const bounds = L.latLngBounds(points.map((point) => [point.lat, point.lng]));
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }, [points]);
+
+  return <div ref={mapElementRef} className="absolute inset-0" />;
+}
+
 export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const mapMatches = useAppStore((state) => state.mapMatches);
@@ -147,42 +212,53 @@ export default function MapView() {
     }));
   }, [sourceListings]);
 
+  const mapPoints = useMemo<MapPoint[]>(() => {
+    return sourceListings
+      .map((listing, index) => ({
+        id: listing.id,
+        index,
+        price: listing.price,
+        lat: listing.lat,
+        lng: listing.lng,
+      }))
+      .filter(
+        (point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)
+      );
+  }, [sourceListings]);
+
   const activeIndex =
     listItems.length > 0
       ? Math.min(selectedIndex, listItems.length - 1)
       : 0;
   const activeListing = listItems[activeIndex] ?? listItems[0];
 
-  const markers = useMemo<Marker[]>(() => {
-    if (!sourceListings.length) return authToken ? [] : fallbackMarkers;
-    const coords = sourceListings.filter(
-      (listing) =>
-        Number.isFinite(listing.lat) && Number.isFinite(listing.lng)
-    );
-    if (!coords.length) return authToken ? [] : fallbackMarkers;
+  const mobileMapRef = useRef<L.Map | null>(null);
+  const desktopMapRef = useRef<L.Map | null>(null);
 
-    const lats = coords.map((listing) => listing.lat);
-    const lngs = coords.map((listing) => listing.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
+  const handleMobileMapReady = useCallback((map: L.Map) => {
+    mobileMapRef.current = map;
+  }, []);
 
-    return coords.map((listing, index) => {
-      const latRatio = maxLat === minLat ? 0.5 : (listing.lat - minLat) / (maxLat - minLat);
-      const lngRatio = maxLng === minLng ? 0.5 : (listing.lng - minLng) / (maxLng - minLng);
-      const top = 15 + (1 - latRatio) * 70;
-      const left = 15 + lngRatio * 70;
-      return {
-        id: listing.id,
-        index,
-        price: listing.price,
-        top: `${top}%`,
-        left: `${left}%`,
-        spotlight: index === activeIndex,
-      };
+  const handleDesktopMapReady = useCallback((map: L.Map) => {
+    desktopMapRef.current = map;
+  }, []);
+
+  const handleZoomIn = (mapRef: { current: L.Map | null }) => {
+    mapRef.current?.zoomIn();
+  };
+
+  const handleZoomOut = (mapRef: { current: L.Map | null }) => {
+    mapRef.current?.zoomOut();
+  };
+
+  const handleLocate = (mapRef: { current: L.Map | null }) => {
+    const target = mapPoints.find((point) => point.index === activeIndex);
+    if (!target || !mapRef.current) return;
+    const currentZoom = mapRef.current.getZoom();
+    mapRef.current.flyTo([target.lat, target.lng], Math.max(currentZoom, 14), {
+      duration: 0.6,
     });
-  }, [authToken, sourceListings, activeIndex]);
+  };
 
   return (
     <>
@@ -246,58 +322,40 @@ export default function MapView() {
         {/* MOBILE BODY SWITCHES HERE */}
         {viewMode === "map" ? (
           <main className="relative w-full flex-1 overflow-hidden bg-[#e8e4dc]">
-            <div
-              className="absolute inset-0 w-full h-full bg-cover bg-center opacity-80"
-              style={{
-                backgroundImage:
-                  "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBx5jUzPT3xN-xZuHVHuFz51wLzt8OppvkgbfN99hchEVNGKeneenNZLFGY1-jizRRTCotT9wxqoh2f14ifXj9NulWqBY8M0Nx3GO5DxPmM4mLdrGm4pJffmEStbVmqQcaO7fCRCOCya18-uIkGEqccHYfc4nYPOT5MmAY6XxuliCbD7W0Xj-7o2lm3ngaX68xRGnhzAVBXzIE-0bGCBJhG-VVtlqRdw5Rsvn07TEy5pzsMhT7o-f1BDgN6kZeepBJU8vq2Kz8B1wcU')",
-              }}
+            <MapCanvas
+              points={mapPoints}
+              activeIndex={activeIndex}
+              onSelect={setSelectedIndex}
+              onMapReady={handleMobileMapReady}
             />
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/10 via-transparent to-white/40" />
 
             <div className="absolute right-4 top-4 flex flex-col gap-3">
               <div className="flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
-                <button className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600">
+                <button
+                  type="button"
+                  onClick={() => handleZoomIn(mobileMapRef)}
+                  className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
+                >
                   <span className="material-symbols-outlined">add</span>
                 </button>
-                <button className="p-3 hover:bg-gray-100 text-gray-600">
+                <button
+                  type="button"
+                  onClick={() => handleZoomOut(mobileMapRef)}
+                  className="p-3 hover:bg-gray-100 text-gray-600"
+                >
                   <span className="material-symbols-outlined">remove</span>
                 </button>
               </div>
 
-              <button className="bg-white p-3 rounded-full shadow-lg border border-gray-100 text-primary">
+              <button
+                type="button"
+                onClick={() => handleLocate(mobileMapRef)}
+                className="bg-white p-3 rounded-full shadow-lg border border-gray-100 text-primary"
+              >
                 <span className="material-symbols-outlined">near_me</span>
               </button>
             </div>
-
-            {markers.map((marker) => (
-              <button
-                key={marker.id ?? marker.price}
-                type="button"
-                onClick={() => {
-                  if (typeof marker.index === "number") {
-                    setSelectedIndex(marker.index);
-                  }
-                }}
-                className={`absolute z-10 ${
-                  marker.spotlight ? "animate-bounce-short" : "opacity-90"
-                }`}
-                style={{
-                  top: marker.top,
-                  left: marker.left,
-                  right: marker.right,
-                  transform: "translate(-50%, -50%)",
-                }}
-              >
-                <div className="flex flex-col items-center">
-                  <div className="bg-white text-primary px-3 py-1.5 rounded-full shadow-md border border-gray-200 flex items-center gap-1">
-                    <span className="font-bold text-sm whitespace-nowrap">
-                      {marker.price}
-                    </span>
-                  </div>
-                  <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white -mt-[1px]" />
-                </div>
-              </button>
-            ))}
 
             {showEmptyState && (
               <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
@@ -422,84 +480,104 @@ export default function MapView() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-            {listItems.map((item) => (
-              <PropertyCard key={item.id} item={item} />
-            ))}
-            <div className="h-10" />
+            {showEmptyState ? (
+              <EmptyState
+                title="No matches yet"
+                message="Like a few listings in Explore to see your matches here."
+                ctaLabel="Browse listings"
+                ctaHref="/explore"
+              />
+            ) : (
+              listItems.map((item) => <PropertyCard key={item.id} item={item} />)
+            )}
+            {!showEmptyState && <div className="h-10" />}
           </div>
         </aside>
 
         <section className="relative flex-1 h-full overflow-hidden bg-gray-200">
-          <div className="absolute inset-0 z-0">
-            <Image src="/p4.png" alt="Map" fill priority className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-green-50/20" />
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                backgroundImage:
-                  "linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px)",
-                backgroundSize: "100px 100px",
-                opacity: 0.12,
-              }}
-            />
-          </div>
+          <MapCanvas
+            points={mapPoints}
+            activeIndex={activeIndex}
+            onSelect={setSelectedIndex}
+            onMapReady={handleDesktopMapReady}
+          />
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 to-slate-100/30" />
 
           <div className="absolute top-6 right-6 flex flex-col space-y-2 z-10">
             <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
-              <button className="p-3 hover:bg-gray-100 border-b border-gray-200">
+              <button
+                type="button"
+                onClick={() => handleZoomIn(desktopMapRef)}
+                className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
+              >
                 <span className="material-symbols-outlined">add</span>
               </button>
-              <button className="p-3 hover:bg-gray-100">
+              <button
+                type="button"
+                onClick={() => handleZoomOut(desktopMapRef)}
+                className="p-3 hover:bg-gray-100 text-gray-600"
+              >
                 <span className="material-symbols-outlined">remove</span>
               </button>
             </div>
 
-            <button className="bg-white p-3 rounded-full shadow-lg border border-gray-200">
+            <button
+              type="button"
+              onClick={() => handleLocate(desktopMapRef)}
+              className="bg-white p-3 rounded-full shadow-lg border border-gray-200"
+            >
               <span className="material-symbols-outlined text-primary">
                 near_me
               </span>
             </button>
           </div>
 
-          {markers.map((marker) => (
-            <div
-              key={marker.id ?? marker.price}
-              className="absolute z-10"
-              style={{
-                top: marker.top,
-                left: marker.left,
-                right: marker.right,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              <div
-                className={`${
-                  marker.spotlight
-                    ? "marker-pulse bg-primary text-white"
-                    : "marker-pulse-white bg-white text-gray-800"
-                } px-3 py-2 sm:px-4 sm:py-2.5 rounded-full shadow-xl font-bold text-sm border border-gray-200`}
-              >
-                {marker.price}
+          {showEmptyState && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
+              <div className="w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                <EmptyState
+                  title="No matches yet"
+                  message="Like a few listings in Explore to see your matches on the map."
+                  ctaLabel="Browse listings"
+                  ctaHref="/explore"
+                />
               </div>
             </div>
-          ))}
+          )}
         </section>
       </div>
 
       <style jsx global>{`
-        @keyframes bounce-short {
-          0%,
-          100% {
-            transform: translate(-50%, -50%);
-          }
-          50% {
-            transform: translate(-50%, -60%);
-          }
+        .leaflet-container {
+          font-family: var(--font-sans);
+          background: #e2e8f0;
         }
-        .animate-bounce-short {
-          animation: bounce-short 2s infinite ease-in-out;
+        .map-price-marker-wrapper {
+          background: transparent;
+          border: none;
+          width: auto;
+          height: auto;
+          overflow: visible;
         }
-        .marker-pulse::after {
+        .map-price-marker {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px 12px;
+          border-radius: 999px;
+          background: #ffffff;
+          color: #0c141d;
+          font-weight: 700;
+          font-size: 12px;
+          box-shadow: 0 12px 30px rgba(12, 20, 29, 0.2);
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          transform: translate(-50%, -100%);
+          transition: transform 0.2s ease, background 0.2s ease,
+            color 0.2s ease, box-shadow 0.2s ease;
+          white-space: nowrap;
+        }
+        .map-price-marker::after {
           content: "";
           position: absolute;
           left: 50%;
@@ -507,21 +585,18 @@ export default function MapView() {
           transform: translate(-50%, 0);
           width: 0;
           height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-top: 8px solid #0f3c6e;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-top: 8px solid #ffffff;
         }
-        .marker-pulse-white::after {
-          content: "";
-          position: absolute;
-          left: 50%;
-          top: 100%;
-          transform: translate(-50%, 0);
-          width: 0;
-          height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-top: 8px solid white;
+        .map-price-marker.is-active {
+          background: var(--color-primary);
+          color: #ffffff;
+          box-shadow: 0 14px 32px rgba(10, 68, 184, 0.35);
+          transform: translate(-50%, -110%) scale(1.05);
+        }
+        .map-price-marker.is-active::after {
+          border-top-color: var(--color-primary);
         }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 20px);

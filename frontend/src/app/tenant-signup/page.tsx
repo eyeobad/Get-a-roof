@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { getApiErrorMessage, showToast } from "@/lib/alerts";
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showVerifyPassword, setShowVerifyPassword] = useState(false);
@@ -42,8 +43,8 @@ export default function TenantSignupPage() {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+  try {
+    setIsSubmitting(true);
       const user = await registerTenant({
         firstName: form.firstName,
         lastName: form.lastName,
@@ -68,9 +69,20 @@ export default function TenantSignupPage() {
         email: form.email,
         phone: form.phoneNumber,
       });
+      showToast({
+        title: "Verification sent",
+        text: "Check your email and phone for the next steps.",
+        variant: "success",
+      });
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      const message = getApiErrorMessage(err);
+      setError(message);
+      showToast({
+        title: "Sign up failed",
+        text: message,
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }

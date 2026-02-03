@@ -18,14 +18,6 @@ type Conversation = {
   landlordId?: string;
 };
 
-type Message = {
-  id: string;
-  convoId: string;
-  from: "me" | "them";
-  text: string;
-  time: string;
-};
-
 function Icon({ name, filled }: { name: string; filled?: boolean }) {
   return (
     <span

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+
+// --- Types ---
 type Option = { label: string };
 type PreferenceGroup = {
   key: string;
@@ -91,6 +93,143 @@ type ProfileState = {
 
 type ModalType = "none" | "photo" | "contact" | "preferences";
 
+type ApiTenantPreferences = {
+  lookingFor?: string[];
+  petFriendlyRequired?: boolean;
+  employmentStatus?: string;
+  maritalStatus?: string;
+  vehicles?: string;
+  smokingHabits?: string;
+  drinkingHabits?: string;
+  religionPreference?: string;
+  educationLevel?: string;
+  socialHabits?: string;
+  annualEarnings?: number;
+  maxCommuteRadius?: number;
+};
+
+type ApiUser = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  photoUrl?: string;
+  preferences?: { tenant?: ApiTenantPreferences };
+};
+
+type ContactFieldKey = keyof Pick<ProfileState, "fullName" | "email" | "phone">;
+type ContactField = {
+  key: ContactFieldKey;
+  label: string;
+  icon: string;
+  type: "text" | "email" | "tel";
+};
+
+const defaultProfile: ProfileState = {
+  fullName: "Sarah Jenkins",
+  email: "sarah.jenkins@example.com",
+  phone: "+1 (555) 123-4567",
+  photoUrl:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCx6DzMNOzrYCXX4YWcckEWTfaCn19D0_qoed1dl1Curkg6F6_abZMP-Fkks-2jNdJQDQKSjndOSwj1bst8t-IvK6BtQACV3RgFMJob8FIAlMa4rrtHC3-S_HnYCKLlgvE0yCWIezjLP33utbei9KW4Dym6Py3HRxziATGkK0nJ7jQA695G1T4PyoKSQ0AutCOUuFhGhPNOh_vFgpYIDxb9iAns66XAR8yUGIqaeTxCUmmzpF_a4OgfwDa8hsP21nEciC__k3wmOHBq",
+  annualEarnings: 85000,
+  commuteRadius: 15,
+  preferences: {
+    employment: "Employed",
+    marital: "Married",
+    vehicle: "Yes",
+    smoking: "No",
+    drinking: "Occasionally",
+    religion: "Muslim",
+    education: "Bachelors",
+    social: "Occasionally",
+  },
+  apartmentPrefs: {
+    "Pets Allowed": true,
+    "Non-owner-occupied": false,
+    "Shared Apartment": false,
+    Shortlet: false,
+    "Self Compound": false,
+    "Shared Compound": false,
+  },
+};
+
+const mapUserToProfile = (user: ApiUser | null | undefined): ProfileState => {
+  if (!user) return { ...defaultProfile };
+  const tenant = user.preferences?.tenant ?? {};
+  const lookingFor = Array.isArray(tenant.lookingFor) ? tenant.lookingFor : [];
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+
+  const apartmentPrefs: Record<string, boolean> = {
+    "Pets Allowed": Boolean(tenant.petFriendlyRequired),
+    "Non-owner-occupied": lookingFor.includes("NonOwnerOccupied"),
+    "Shared Apartment": lookingFor.includes("SharedApartment"),
+    Shortlet: lookingFor.includes("Shortlet"),
+    "Self Compound": lookingFor.includes("SelfCompound"),
+    "Shared Compound": lookingFor.includes("SharedCompound"),
+  };
+
+  return {
+    fullName: fullName || defaultProfile.fullName,
+    email: user.email ?? defaultProfile.email,
+    phone: user.phoneNumber ?? defaultProfile.phone,
+    photoUrl: user.photoUrl ?? defaultProfile.photoUrl,
+    annualEarnings: tenant.annualEarnings ?? defaultProfile.annualEarnings,
+    commuteRadius: tenant.maxCommuteRadius ?? defaultProfile.commuteRadius,
+    preferences: {
+      employment: tenant.employmentStatus ?? "",
+      marital: tenant.maritalStatus ?? "",
+      vehicle: tenant.vehicles ?? "",
+      smoking: tenant.smokingHabits ?? "",
+      drinking: tenant.drinkingHabits ?? "",
+      religion: tenant.religionPreference ?? "",
+      education: tenant.educationLevel ?? "",
+      social: tenant.socialHabits ?? "",
+    },
+    apartmentPrefs,
+  };
+};
+
+// --- Components ---
+
+function ToggleRow({
+  title,
+  subtitle,
+  checked,
+  onChange,
+}: {
+  title: string;
+  subtitle: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between bg-white px-6 py-5 rounded-3xl shadow-sm border border-slate-200">
+      <div className="flex flex-col">
+        <span className="text-lg font-bold text-slate-900">{title}</span>
+        <span className="text-sm text-slate-500 font-medium">{subtitle}</span>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={[
+          "relative inline-flex items-center w-14 h-8 rounded-full transition-colors shadow-inner",
+          checked ? "bg-primary" : "bg-slate-200",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "absolute top-[4px] left-[4px] h-6 w-6 rounded-full bg-white border border-gray-300 transition-transform",
+            checked ? "translate-x-6" : "translate-x-0",
+          ].join(" ")}
+        />
+      </button>
+    </div>
+  );
+}
+
 function Modal({
   open,
   title,
@@ -141,40 +280,32 @@ export default function ProfilePage() {
   const updateUser = useAppStore((state) => state.updateUser);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const clearAuth = useAppStore((state) => state.clearAuth);
+  const uploadProfilePhoto = useAppStore((state) => state.uploadProfilePhoto);
+  const deleteAccount = useAppStore((state) => state.deleteAccount);
+  
+  const [confirmInput, setConfirmInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [profile, setProfile] = useState<ProfileState>(() => ({
-    fullName: "Sarah Jenkins",
-    email: "sarah.jenkins@example.com",
-    phone: "+1 (555) 123-4567",
-    photoUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuCx6DzMNOzrYCXX4YWcckEWTfaCn19D0_qoed1dl1Curkg6F6_abZMP-Fkks-2jNdJQDQKSjndOSwj1bst8t-IvK6BtQACV3RgFMJob8FIAlMa4rrtHC3-S_HnYCKLlgvE0yCWIezjLP33utbei9KW4Dym6Py3HRxziATGkK0nJ7jQA695G1T4PyoKSQ0AutCOUuFhGhPNOh_vFgpYIDxb9iAns66XAR8yUGIqaeTxCUmmzpF_a4OgfwDa8hsP21nEciC__k3wmOHBq",
-    annualEarnings: 85000,
-    commuteRadius: 15,
-    preferences: {
-      employment: "Employed",
-      marital: "Married",
-      vehicle: "Yes",
-      smoking: "No",
-      drinking: "Occasionally",
-      religion: "Muslim",
-      education: "Bachelors",
-      social: "Occasionally",
-    },
-    apartmentPrefs: {
-      "Pets Allowed": true,
-      "Non-owner-occupied": false,
-      "Shared Apartment": false,
-      Shortlet: false,
-      "Self Compound": false,
-      "Shared Compound": false,
-    },
-  }));
+  
+  const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile }));
 
   // ---- MODAL + DRAFT STATE ----
   const [activeModal, setActiveModal] = useState<ModalType>("none");
   const [draft, setDraft] = useState<ProfileState>(profile);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const contactFields: ContactField[] = useMemo(
+    () => [
+      { key: "fullName", label: "Full Name", icon: "person", type: "text" },
+      { key: "email", label: "Email", icon: "mail", type: "email" },
+      { key: "phone", label: "Phone Number", icon: "phone", type: "tel" },
+    ],
+    []
+  );
 
   const openModal = (type: ModalType) => {
     setDraft(profile); // snapshot current data into draft
@@ -195,41 +326,6 @@ export default function ProfilePage() {
       value: profile.preferences[g.key] || "—",
     }));
   }, [profile.preferences]);
-
-  const mapUserToProfile = (user: any): ProfileState => {
-    const tenant = user?.preferences?.tenant ?? {};
-    const lookingFor = Array.isArray(tenant.lookingFor) ? tenant.lookingFor : [];
-    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
-
-    const apartmentPrefs: Record<string, boolean> = {
-      "Pets Allowed": Boolean(tenant.petFriendlyRequired),
-      "Non-owner-occupied": lookingFor.includes("NonOwnerOccupied"),
-      "Shared Apartment": lookingFor.includes("SharedApartment"),
-      Shortlet: lookingFor.includes("Shortlet"),
-      "Self Compound": lookingFor.includes("SelfCompound"),
-      "Shared Compound": lookingFor.includes("SharedCompound"),
-    };
-
-    return {
-      fullName: fullName || profile.fullName,
-      email: user?.email ?? profile.email,
-      phone: user?.phoneNumber ?? profile.phone,
-      photoUrl: user?.photoUrl ?? profile.photoUrl,
-      annualEarnings: tenant.annualEarnings ?? profile.annualEarnings,
-      commuteRadius: tenant.maxCommuteRadius ?? profile.commuteRadius,
-      preferences: {
-        employment: tenant.employmentStatus ?? "",
-        marital: tenant.maritalStatus ?? "",
-        vehicle: tenant.vehicles ?? "",
-        smoking: tenant.smokingHabits ?? "",
-        drinking: tenant.drinkingHabits ?? "",
-        religion: tenant.religionPreference ?? "",
-        education: tenant.educationLevel ?? "",
-        social: tenant.socialHabits ?? "",
-      },
-      apartmentPrefs,
-    };
-  };
 
   useEffect(() => {
     if (!authToken || !userId) return;
@@ -315,6 +411,51 @@ export default function ProfilePage() {
       setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePhotoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file || !uploadProfilePhoto) {
+      event.target.value = "";
+      return;
+    }
+    setIsUploadingPhoto(true);
+    setPhotoUploadError(null);
+    try {
+      const photoUrl = await uploadProfilePhoto(file);
+      if (photoUrl) {
+        const nextProfile = { ...profile, photoUrl };
+        setProfile(nextProfile);
+        setDraft((prev) => ({ ...prev, photoUrl }));
+      }
+    } catch (err) {
+      setPhotoUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploadingPhoto(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteAccount || !authToken || !userId) {
+      return;
+    }
+    // Logic now handled by the UI button enabling
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const success = await deleteAccount();
+      if (success) {
+        clearAuth();
+        router.push("/login");
+      } else {
+        setDeleteError("Unable to delete account");
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -473,8 +614,8 @@ export default function ProfilePage() {
               ))}
             </section>
 
-            {/* Preferences section (read view) */}
-            <section className="mt-8 space-y-6">
+            {/* Preferences section (read view) - UPDATED: Hidden on Desktop */}
+            <section className="mt-8 space-y-6 lg:hidden">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-primary">Preferences</h3>
                 <button
@@ -524,9 +665,9 @@ export default function ProfilePage() {
               <div className="rounded-3xl border border-slate-200 bg-white p-6">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
-                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                    ${profile.annualEarnings.toLocaleString()}
-                  </span>
+                      <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                        ${profile.annualEarnings.toLocaleString()}
+                      </span>
                 </div>
 
                 <div className="mt-4">
@@ -536,8 +677,10 @@ export default function ProfilePage() {
                     max={300000}
                     step={5000}
                     value={profile.annualEarnings}
+                    onChange={(e) =>
+                      setProfile((prev) => ({ ...prev, annualEarnings: Number(e.target.value) }))
+                    }
                     className="w-full accent-primary"
-                    readOnly
                   />
                   <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
                     <span>$0</span>
@@ -548,45 +691,28 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* Apartment Preference toggles */}
+            {/* Apartment Preference toggles - UPDATED WITH TOGGLE LOGIC */}
             <section className="mt-8 space-y-3">
               <h3 className="text-2xl font-bold text-primary">Apartment Preference</h3>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {apartmentChecks.map((check) => {
-                  const active = !!profile.apartmentPrefs[check.label];
-                  return (
-                    <div
-                      key={check.label}
-                      className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white p-5"
-                    >
-                      <div>
-                        <p className="text-lg font-bold text-slate-900">{check.label}</p>
-                        <p className="text-sm text-slate-500">{check.description}</p>
-                      </div>
-
-                      <label className="relative inline-flex cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="peer sr-only"
-                          checked={active}
-                          onChange={() =>
-                            setProfile((p) => ({
-                              ...p,
-                              apartmentPrefs: {
-                                ...p.apartmentPrefs,
-                                [check.label]: !p.apartmentPrefs[check.label],
-                              },
-                            }))
-                          }
-                        />
-                        <span className="inline-flex h-8 w-14 items-center rounded-full bg-gray-200 transition peer-checked:bg-primary">
-                          <span className="ml-1 h-7 w-7 rounded-full bg-white transition peer-checked:translate-x-6" />
-                        </span>
-                      </label>
-                    </div>
-                  );
-                })}
+              
+              <div className="space-y-4">
+                {apartmentChecks.map((check) => (
+                  <ToggleRow
+                    key={check.label}
+                    title={check.label}
+                    subtitle={check.description}
+                    checked={!!profile.apartmentPrefs[check.label]}
+                    onChange={() =>
+                      setProfile((p) => ({
+                        ...p,
+                        apartmentPrefs: {
+                          ...p.apartmentPrefs,
+                          [check.label]: !p.apartmentPrefs[check.label],
+                        },
+                      }))
+                    }
+                  />
+                ))}
               </div>
             </section>
 
@@ -606,8 +732,10 @@ export default function ProfilePage() {
                     min={0}
                     max={50}
                     value={profile.commuteRadius}
+                    onChange={(e) =>
+                      setProfile((prev) => ({ ...prev, commuteRadius: Number(e.target.value) }))
+                    }
                     className="w-full accent-primary"
-                    readOnly
                   />
                   <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
                     <span>0 mi</span>
@@ -615,6 +743,69 @@ export default function ProfilePage() {
                     <span>50 mi</span>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* Delete Account Section - UPDATED WITH DANGER ZONE */}
+            <section className="mt-12 border-t border-gray-100 pt-10">
+              <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm ring-1 ring-red-50">
+                <div className="flex flex-col gap-8 p-6 md:flex-row md:items-start md:justify-between">
+                  
+                  {/* Left Side: The Warning */}
+                  <div className="max-w-md space-y-3">
+                    <div className="flex items-center gap-2 text-red-600">
+                      <span className="material-symbols-outlined">warning</span>
+                      <h3 className="text-lg font-bold text-gray-900">Danger Zone</h3>
+                    </div>
+                    <p className="text-sm leading-relaxed text-gray-500">
+                      Permanently delete your account and all matching history. This action 
+                      <span className="font-semibold text-gray-900"> cannot be undone</span>.
+                    </p>
+                  </div>
+
+                  {/* Right Side: The Input & Action */}
+                  <div className="w-full max-w-sm rounded-xl bg-red-50/50 p-5 border border-red-100">
+                    <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">
+                      To confirm, type <span className="font-mono font-bold text-red-600">delete</span> below
+                    </label>
+                    
+                    <div className="flex flex-col gap-3">
+                      <input 
+                        type="text" 
+                        placeholder="delete"
+                        value={confirmInput}
+                        onChange={(e) => setConfirmInput(e.target.value)}
+                        className="w-full rounded-lg border-red-200 bg-white px-4 py-2 text-sm text-gray-900 placeholder:text-gray-300 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                      />
+
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={isDeleting || confirmInput !== "delete"}
+                        className="group flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
+                      >
+                        {isDeleting ? (
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        ) : (
+                          // Icon changes based on whether the input matches
+                          <span className="material-symbols-outlined text-[18px] transition-transform group-hover:scale-110">
+                            {confirmInput === "delete" ? "delete_forever" : "lock"}
+                          </span>
+                        )}
+                        {isDeleting ? "Deleting..." : "Delete Account"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Error Message */}
+                {deleteError && (
+                  <div className="border-t border-red-100 bg-red-50 px-6 py-3">
+                    <p className="flex items-center gap-2 text-xs font-medium text-red-600">
+                      <span className="material-symbols-outlined text-sm">error</span>
+                      {deleteError}
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
           </main>
@@ -689,6 +880,34 @@ export default function ProfilePage() {
               Tip: use a direct image URL (ends with .jpg/.png) for best results.
             </p>
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-900">Upload from device</label>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[18px]">upload</span>
+                {isUploadingPhoto ? "Uploading…" : "Choose a file"}
+              </button>
+              <p className="text-xs text-slate-500">
+                Files are uploaded securely and stored privately unless you update
+                permissions.
+              </p>
+              {photoUploadError && (
+                <p className="text-xs font-medium text-red-600">{photoUploadError}</p>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handlePhotoFileChange}
+            />
+          </div>
         </div>
       </Modal>
 
@@ -715,19 +934,17 @@ export default function ProfilePage() {
         }
       >
         <div className="space-y-4">
-          {[
-            { key: "fullName", label: "Full Name", icon: "person", type: "text" as const },
-            { key: "email", label: "Email", icon: "mail", type: "email" as const },
-            { key: "phone", label: "Phone Number", icon: "phone", type: "tel" as const },
-          ].map((field) => (
+          {contactFields.map((field) => (
             <div key={field.key} className="space-y-2">
               <label className="text-sm font-bold text-slate-900">{field.label}</label>
               <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
                 <span className="material-symbols-outlined text-slate-400">{field.icon}</span>
                 <input
                   type={field.type}
-                  value={(draft as any)[field.key]}
-                  onChange={(e) => setDraft((d) => ({ ...d, [field.key]: e.target.value } as any))}
+                  value={draft[field.key]}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, [field.key]: e.target.value }))
+                  }
                   className="w-full bg-transparent outline-none text-sm"
                 />
               </div>

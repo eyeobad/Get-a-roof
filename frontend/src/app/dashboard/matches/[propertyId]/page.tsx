@@ -1,13 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
-
-const solidIconStyle: React.CSSProperties = {
-  fontVariationSettings: '"FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24',
-};
+import DashboardBottomNav from "@/components/DashboardBottomNav";
 
 type TagTone = "primary" | "success";
 type NoteTone = "info" | "neutral";
@@ -35,8 +33,10 @@ function MatchCardView({ match }: { match: MatchCard }) {
     <section className="bg-white rounded-xl shadow border p-5 space-y-4">
       <div className="flex gap-4">
         <div className="relative">
-          <img
+          <Image
             src={match.avatarUrl}
+            width={64}
+            height={64}
             className="w-16 h-16 rounded-full object-cover border-2 border-white shadow"
             alt={`${match.name} avatar`}
           />
@@ -116,53 +116,14 @@ function MatchCardView({ match }: { match: MatchCard }) {
 }
 
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
-  const Item = ({
-    id,
-    label,
-    icon,
-    badge,
-    href,
-  }: {
-    id: typeof active;
-    label: string;
-    icon: string;
-    badge?: number;
-    href: string;
-  }) => {
-    const isActive = active === id;
-    return (
-      <Link
-        href={href}
-        className={[
-          "flex flex-col items-center justify-center gap-1 w-16 transition-colors",
-          isActive ? "text-[#0a44b8] font-bold" : "text-gray-400 hover:text-[#0a44b8]",
-        ].join(" ")}
-      >
-        <div className="relative">
-          <span className="material-symbols-outlined text-[32px]" style={solidIconStyle}>
-            {icon}
-          </span>
-          {typeof badge === "number" && badge > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
-              {badge}
-            </span>
-          )}
-        </div>
-        <span className="text-xs">{label}</span>
-      </Link>
-    );
-  };
-
   return (
-    <nav className="fixed bottom-0 inset-x-0 bg-white border-t shadow flex justify-around py-2 z-50">
-      <div className="flex justify-between items-end h-14 w-full max-w-md mx-auto">
-        <Item id="properties" label="Properties" icon="grid_view" href="/dashboard/properties" />
-        <Item id="matches" label="Matches" icon="group" href="/dashboard/matches" />
-        <Item id="chat" label="Chat" icon="chat_bubble" badge={2} href="/messages" />
-        <Item id="profile" label="Profile" icon="person" href="/dashboard/profile" />
-      </div>
-      <div className="h-5 w-full" />
-    </nav>
+    <DashboardBottomNav
+      active={active}
+      chatBadge={2}
+      chatHref="/messages"
+      rootClassName="py-2 shadow flex justify-around bg-white border-t z-50"
+      containerClassName="flex justify-between items-end h-14 w-full max-w-md mx-auto"
+    />
   );
 }
 
@@ -287,7 +248,7 @@ export default function LandlordMatchesPage() {
         ) : null}
       </main>
 
-      <BottomNav active="matches" />
+      <BottomNav  className="pb-6"active="matches"/>
     </div>
   );
 }

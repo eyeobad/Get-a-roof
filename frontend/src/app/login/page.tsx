@@ -5,12 +5,12 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { getApiErrorMessage, showToast } from "@/lib/alerts";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const login = useAppStore((state) => state.login);
   const router = useRouter();
@@ -18,17 +18,39 @@ export default function LoginPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!email || !password || isSubmitting) return;
-    setError(null);
     try {
       setIsSubmitting(true);
       const result = await login(email, password);
       if (!result) {
-        setError("Login failed.");
+        const message = "Login failed.";
+        showToast({ title: message, variant: "error" });
         return;
       }
-      router.push("/explore");
+      const rawRole = result.user?.role;
+      const roles = Array.isArray(rawRole)
+        ? rawRole
+        : rawRole
+        ? [rawRole]
+        : [];
+      const isLandlord = roles.some(
+        (value) => value?.toString().toLowerCase() === "landlord"
+      );
+      const tenantPreferences = result.user?.preferences?.tenant;
+      const needsTenantOnboarding =
+        !isLandlord &&
+        (!tenantPreferences ||
+          !tenantPreferences.lookingFor ||
+          tenantPreferences.lookingFor.length === 0);
+      if (isLandlord) {
+        router.push("/dashboard/properties");
+      } else if (needsTenantOnboarding) {
+        router.push("/tenant-onboarding");
+      } else {
+        router.push("/explore");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const message = getApiErrorMessage(err);
+      showToast({ title: message, variant: "error" });
     } finally {
       setIsSubmitting(false);
     }
@@ -134,10 +156,6 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
-
-          {error && (
-            <p className="text-sm font-medium text-red-600 text-center">{error}</p>
-          )}
 
           <button
             type="submit"

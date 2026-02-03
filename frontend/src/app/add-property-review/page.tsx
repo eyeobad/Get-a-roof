@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -202,10 +203,11 @@ export default function ReviewPublishPage() {
                 (draft.images ?? []).map((src, index) => (
                   <div className="shrink-0" key={`${src}-${index}`}>
                     <div className="relative w-[210px] h-[132px] rounded-2xl overflow-hidden bg-black/10">
-                      <img
+                      <Image
                         src={src}
                         alt={`Property photo ${index + 1}`}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                       {index === 0 ? (
                         <span className="absolute top-2 left-2 text-[11px] font-semibold text-white bg-black/55 backdrop-blur px-2 py-1 rounded-full">

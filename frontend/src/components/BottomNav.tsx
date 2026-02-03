@@ -7,7 +7,7 @@ import { type MotionScheme } from "@/lib/motion";
 
 const navItems = [
   { label: "Explore", icon: "search", href: "/explore" },
-  { label: "Matches", icon: "groups", href: "/matches" },
+  { label: "Matches", icon: "handshake", href: "/matches" },
   { label: "Messages", icon: "chat_bubble", href: "/messages" },
   { label: "Profile", icon: "person", href: "/profile" },
 ];

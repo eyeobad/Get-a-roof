@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
@@ -47,11 +48,12 @@ export default function AddPropertyPhotosPage() {
     }
     const uploads = await Promise.all(
       Array.from(files).map(async (file) => {
-        const url = await uploadLandlordImage(file.name);
-        if (!url) {
+        try {
+          return await uploadLandlordImage(file);
+        } catch (err) {
+          setError((err as Error).message || "Upload failed. Please try again.");
           return null;
         }
-        return url;
       })
     );
     const validUrls = uploads.filter((url): url is string => Boolean(url));
@@ -103,6 +105,7 @@ export default function AddPropertyPhotosPage() {
             aria-label="Cancel"
             className="flex size-12 shrink-0 items-center justify-center rounded-full active:bg-black/5 transition-colors"
             type="button"
+            onClick={() => router.push("/dashboard/properties")}
           >
             <span
               className="material-symbols-outlined"
@@ -160,7 +163,12 @@ export default function AddPropertyPhotosPage() {
                 key={photo.id}
                 className="relative aspect-square rounded-xl overflow-hidden group shadow-sm"
               >
-                <img alt={photo.alt} className="w-full h-full object-cover" src={photo.src} />
+                <Image
+                  alt={photo.alt}
+                  src={photo.src}
+                  fill
+                  className="object-cover"
+                />
 
                 {index === 0 && (
                   <div className="absolute top-3 left-3 bg-[#0a44b8] text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md flex items-center gap-1">

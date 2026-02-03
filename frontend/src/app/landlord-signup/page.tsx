@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { getApiErrorMessage, showToast } from "@/lib/alerts";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -20,7 +21,6 @@ export default function SignUpPage() {
     password: "",
     verifyPassword: "",
   });
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerLandlord = useAppStore((state) => state.registerLandlord);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
@@ -35,14 +35,13 @@ export default function SignUpPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
-    setError(null);
 
     if (!form.email || !form.password || !form.firstName || !form.lastName) {
-      setError("Please complete all required fields.");
+      showToast({ title: "Please complete all required fields.", variant: "error" });
       return;
     }
     if (form.password !== form.verifyPassword) {
-      setError("Passwords do not match.");
+      showToast({ title: "Passwords do not match.", variant: "error" });
       return;
     }
 
@@ -74,7 +73,12 @@ export default function SignUpPage() {
       });
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      const message = getApiErrorMessage(err);
+      showToast({
+        title: "Sign up failed",
+        text: message,
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -176,9 +180,6 @@ export default function SignUpPage() {
           </div>
 
           {/* Submit */}
-          {error ? (
-            <p className="text-sm font-medium text-red-600 text-center">{error}</p>
-          ) : null}
           <button
             type="submit"
             disabled={isSubmitting}

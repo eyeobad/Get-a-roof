@@ -102,7 +102,7 @@ type LandlordMatch = {
     phoneNumber?: string;
     photoUrl?: string;
     isVerified?: boolean;
-    preferences?: Record<string, any>;
+    preferences?: Record<string, unknown>;
   };
 };
 
@@ -112,6 +112,101 @@ export type ChatMessage = {
   content: string;
   timestamp: string;
 };
+
+type ApiUser = {
+  id?: string;
+  _id?: string;
+  role?: string | string[];
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  photoUrl?: string;
+  isVerified?: boolean;
+  preferences?: {
+    tenant?: Record<string, unknown>;
+    landlord?: Record<string, unknown>;
+  };
+};
+
+type ApiAuthResponse = {
+  accessToken: string;
+  user: ApiUser;
+};
+
+type ApiProperty = {
+  _id?: string;
+  id?: string;
+  images?: string[];
+  monthlyPrice?: number;
+  price?: number;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    lat?: number;
+    lng?: number;
+  };
+  neighborhood?: string;
+  title?: string;
+  bedCount?: number;
+  beds?: number;
+  bathCount?: number;
+  baths?: number;
+  sqFt?: number;
+  propertyType?: string;
+  type?: string;
+  status?: string;
+  description?: string;
+  proofOfOwnership?: string;
+  landlordId?: string;
+  landlordRequirements?: LandlordDraft["landlordRequirements"];
+  matchScore?: number;
+  preferencesMatchPercentage?: number;
+  apartmentPreferenceMatchPercentage?: number;
+  matches?: number;
+  matchCount?: number;
+  newCount?: number;
+  coverUrl?: string;
+  area?: string;
+};
+
+type ApiMatch = {
+  _id?: string;
+  id?: string;
+  propertyId?: string;
+  tenantId?: string;
+  status?: MatchStatus;
+  matchScore?: number;
+  preferencesMatchPercentage?: number;
+  apartmentPreferenceMatchPercentage?: number;
+  updatedAt?: string;
+  property?: ApiProperty;
+  lastMessage?: { content?: string; timestamp?: string };
+  unreadCount?: number;
+  tenant?: ApiUser;
+  isNewForLandlord?: boolean;
+};
+
+type ApiConversation = {
+  matchId?: string;
+  tenantId?: string;
+  property?: ApiProperty;
+  lastMessage?: { content?: string; timestamp?: string };
+  unreadCount?: number;
+};
+
+type ApiMessage = {
+  _id?: string;
+  senderId?: string;
+  receiverId?: string;
+  content?: string;
+  timestamp?: string;
+};
+
+type ApiUploadResponse = { url?: string };
+type ApiPhotoResponse = { photoUrl?: string };
 
 type Thread = {
   id: string;
@@ -143,7 +238,7 @@ type AppState = {
   messagesByMatch: Record<string, ChatMessage[]>;
   authToken: string | null;
   userId: string | null;
-  user: Record<string, unknown> | null;
+  user: ApiUser | null;
   landlordDraft: LandlordDraft;
   landlordProperties: LandlordPropertySummary[];
   landlordPropertiesWithMatches: LandlordPropertySummary[];
@@ -151,30 +246,33 @@ type AppState = {
   setSelectedListingId: (id: string | null) => void;
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
-  login: (email: string, password: string) => Promise<{ accessToken: string; user: any } | null>;
+  login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
   registerTenant: (payload: {
     firstName?: string;
     lastName?: string;
     email: string;
     phoneNumber?: string;
     password: string;
-  }) => Promise<any>;
+  }) => Promise<ApiUser>;
   registerLandlord: (payload: {
     firstName?: string;
     lastName?: string;
     email: string;
     phoneNumber?: string;
     password: string;
-  }) => Promise<any>;
-  sendEmailOtp: (userId: string) => Promise<any>;
-  sendPhoneOtp: (userId: string) => Promise<any>;
-  verifyEmailOtp: (userId: string, otp: string) => Promise<any>;
-  verifyPhoneOtp: (userId: string, otp: string) => Promise<any>;
+  }) => Promise<ApiUser>;
+  sendEmailOtp: (userId: string) => Promise<Record<string, unknown>>;
+  sendPhoneOtp: (userId: string) => Promise<Record<string, unknown>>;
+  verifyEmailOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
+  verifyPhoneOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
   requestPasswordReset: (email: string) => Promise<{ token?: string } | null>;
-  resetPassword: (token: string, password: string) => Promise<any>;
-  fetchUserProfile: () => Promise<any>;
-  updateUser: (payload: Record<string, unknown>) => Promise<any>;
-  updatePreferences: (payload: { tenant?: Record<string, unknown>; landlord?: Record<string, unknown> }) => Promise<any>;
+  resetPassword: (token: string, password: string) => Promise<Record<string, unknown>>;
+  fetchUserProfile: () => Promise<ApiUser | null>;
+  updateUser: (payload: Record<string, unknown>) => Promise<ApiUser | null>;
+  updatePreferences: (payload: {
+    tenant?: Record<string, unknown>;
+    landlord?: Record<string, unknown>;
+  }) => Promise<ApiUser | null>;
   likeListing: (listingId: string) => Promise<void>;
   unlikeListing: (listingId: string) => Promise<void>;
   toggleLikeListing: (listingId: string) => Promise<void>;
@@ -250,7 +348,7 @@ const formatTime = (value?: string) => {
   });
 };
 
-const mapPropertyToListing = (property: any): Listing => {
+const mapPropertyToListing = (property: ApiProperty): Listing => {
   const addressParts = [
     property?.address?.street,
     property?.address?.city,
@@ -301,7 +399,7 @@ const emptyLandlordDraft: LandlordDraft = {
   status: "Draft",
 };
 
-const mapLandlordPropertySummary = (property: any): LandlordPropertySummary => ({
+const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySummary => ({
   id: property?._id ?? property?.id ?? "",
   status: property?.status,
   title: property?.title ?? property?.address?.street ?? property?.neighborhood,
@@ -316,7 +414,7 @@ const mapLandlordPropertySummary = (property: any): LandlordPropertySummary => (
   matchCount: property?.matchCount ?? property?.matches ?? 0,
 });
 
-const mapPropertyToLandlordDraft = (property: any): LandlordDraft => ({
+const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
   id: property?._id ?? property?.id,
   images: property?.images ?? [],
   monthlyPrice: property?.monthlyPrice,
@@ -329,7 +427,7 @@ const mapPropertyToLandlordDraft = (property: any): LandlordDraft => ({
 });
 
 const buildLandlordPayload = (draft: LandlordDraft) => {
-  const payload: Record<string, any> = {};
+  const payload: Record<string, unknown> = {};
 
   if (draft.images) payload.images = draft.images;
   if (draft.monthlyPrice !== undefined) payload.monthlyPrice = draft.monthlyPrice;
@@ -350,7 +448,7 @@ const buildLandlordPayload = (draft: LandlordDraft) => {
   }
 
   if (draft.landlordRequirements) {
-    const requirements: Record<string, any> = {};
+    const requirements: Record<string, unknown> = {};
     const { budgetRange, annualIncome, idealTenantPreferences, ...rest } =
       draft.landlordRequirements;
 
@@ -427,7 +525,7 @@ export const useAppStore = create<AppState>()(
           landlordMatchesByProperty: {},
         }),
       login: async (email, password) => {
-        const response = await apiFetch<any>(`/api/auth/login`, {
+        const response = await apiFetch<ApiAuthResponse>(`/api/auth/login`, {
           method: "POST",
           body: JSON.stringify({ email, password }),
         });
@@ -443,49 +541,49 @@ export const useAppStore = create<AppState>()(
         return response;
       },
       registerTenant: async (payload) => {
-        return apiFetch(`/api/users`, {
+        return apiFetch<ApiUser>(`/api/users`, {
           method: "POST",
           body: JSON.stringify({ ...payload, role: "Tenant" }),
         });
       },
       registerLandlord: async (payload) => {
-        return apiFetch(`/api/users`, {
+        return apiFetch<ApiUser>(`/api/users`, {
           method: "POST",
           body: JSON.stringify({ ...payload, role: "Landlord" }),
         });
       },
       sendEmailOtp: async (userId) => {
-        return apiFetch(`/api/auth/send-email-otp`, {
+        return apiFetch<Record<string, unknown>>(`/api/auth/send-email-otp`, {
           method: "POST",
           body: JSON.stringify({ userId }),
         });
       },
       sendPhoneOtp: async (userId) => {
-        return apiFetch(`/api/auth/send-phone-otp`, {
+        return apiFetch<Record<string, unknown>>(`/api/auth/send-phone-otp`, {
           method: "POST",
           body: JSON.stringify({ userId }),
         });
       },
       verifyEmailOtp: async (userId, otp) => {
-        return apiFetch(`/api/auth/verify-email-otp`, {
+        return apiFetch<Record<string, unknown>>(`/api/auth/verify-email-otp`, {
           method: "POST",
           body: JSON.stringify({ userId, otp }),
         });
       },
       verifyPhoneOtp: async (userId, otp) => {
-        return apiFetch(`/api/auth/verify-phone-otp`, {
+        return apiFetch<Record<string, unknown>>(`/api/auth/verify-phone-otp`, {
           method: "POST",
           body: JSON.stringify({ userId, otp }),
         });
       },
       requestPasswordReset: async (email) => {
-        return apiFetch(`/api/auth/request-password-reset`, {
+        return apiFetch<{ token?: string }>(`/api/auth/request-password-reset`, {
           method: "POST",
           body: JSON.stringify({ email }),
         });
       },
       resetPassword: async (token, password) => {
-        return apiFetch(`/api/auth/reset-password`, {
+        return apiFetch<Record<string, unknown>>(`/api/auth/reset-password`, {
           method: "POST",
           body: JSON.stringify({ token, password }),
         });
@@ -493,7 +591,7 @@ export const useAppStore = create<AppState>()(
       fetchUserProfile: async () => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        const response = await apiFetch(`/api/users/${state.userId}`, {
+        const response = await apiFetch<ApiUser>(`/api/users/${state.userId}`, {
           token: state.authToken,
         });
         if (response) {
@@ -504,7 +602,7 @@ export const useAppStore = create<AppState>()(
       updateUser: async (payload) => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        const response = await apiFetch(`/api/users/${state.userId}`, {
+        const response = await apiFetch<ApiUser>(`/api/users/${state.userId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
           token: state.authToken,
@@ -513,7 +611,7 @@ export const useAppStore = create<AppState>()(
           set({ user: response });
           return response;
         }
-        const nextUser = { ...(state.user ?? {}), ...payload };
+        const nextUser = { ...(state.user ?? {}), ...payload } as ApiUser;
         set({ user: nextUser });
         return nextUser;
       },
@@ -522,7 +620,7 @@ export const useAppStore = create<AppState>()(
         if (!state.authToken || !state.userId || !file) return null;
         const form = new FormData();
         form.append("file", file, file.name);
-        const response = await apiFetch<any>(`/api/users/${state.userId}/photo`, {
+        const response = await apiFetch<ApiPhotoResponse>(`/api/users/${state.userId}/photo`, {
           method: "POST",
           body: form,
           token: state.authToken,
@@ -532,7 +630,7 @@ export const useAppStore = create<AppState>()(
       updatePreferences: async (payload) => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        return apiFetch(`/api/users/${state.userId}/preferences`, {
+        return apiFetch<ApiUser>(`/api/users/${state.userId}/preferences`, {
           method: "PATCH",
           body: JSON.stringify(payload),
           token: state.authToken,
@@ -669,7 +767,7 @@ export const useAppStore = create<AppState>()(
           nonOwner: filters?.toggles?.nonOwner,
         });
 
-        const data = await apiFetch<any[]>(`/api/properties/explore?${query}`, {
+        const data = await apiFetch<ApiProperty[]>(`/api/properties/explore?${query}`, {
           token: state.authToken,
         });
 
@@ -705,7 +803,7 @@ export const useAppStore = create<AppState>()(
           nonOwner: filters?.toggles?.nonOwner,
         });
 
-        const data = await apiFetch<any[]>(`/api/properties/matches/map?${query}`, {
+        const data = await apiFetch<ApiProperty[]>(`/api/properties/matches/map?${query}`, {
           token: state.authToken,
         });
         const listings = (data ?? []).map(mapPropertyToListing);
@@ -720,7 +818,7 @@ export const useAppStore = create<AppState>()(
       loadMatches: async () => {
         const state = get();
         if (!state.authToken) return;
-        const data = await apiFetch<any[]>(`/api/matches/tenant`, {
+        const data = await apiFetch<ApiMatch[]>(`/api/matches/tenant`, {
           token: state.authToken,
         });
 
@@ -751,7 +849,7 @@ export const useAppStore = create<AppState>()(
           limit: options?.limit,
           offset: options?.offset,
         });
-        const data = await apiFetch<any[]>(`/api/chat/conversations?${query}`, {
+        const data = await apiFetch<ApiConversation[]>(`/api/chat/conversations?${query}`, {
           token: state.authToken,
         });
 
@@ -786,7 +884,7 @@ export const useAppStore = create<AppState>()(
           limit: options?.limit ?? 50,
           before: options?.before,
         });
-        const data = await apiFetch<any[]>(`/api/chat/messages?${query}`, {
+        const data = await apiFetch<ApiMessage[]>(`/api/chat/messages?${query}`, {
           token: state.authToken,
         });
         const messages = (data ?? [])
@@ -805,7 +903,7 @@ export const useAppStore = create<AppState>()(
       sendMessage: async (matchId, receiverId, content) => {
         const state = get();
         if (!state.authToken) return;
-        const message = await apiFetch<any>(`/api/chat`, {
+        const message = await apiFetch<ApiMessage>(`/api/chat`, {
           method: "POST",
           body: JSON.stringify({ matchId, receiverId, content }),
           token: state.authToken,
@@ -847,7 +945,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         if (!state.authToken || !isMongoId(listingId)) return;
         if (state.listingsById[listingId]) return;
-        const property = await apiFetch<any>(`/api/properties/${listingId}`, {
+        const property = await apiFetch<ApiProperty>(`/api/properties/${listingId}`, {
           token: state.authToken,
         });
         if (!property) return;
@@ -893,7 +991,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         if (!state.authToken || !propertyId) return;
         try {
-          const property = await apiFetch<any>(`/api/properties/${propertyId}`, {
+          const property = await apiFetch<ApiProperty>(`/api/properties/${propertyId}`, {
             token: state.authToken,
           });
           if (property) {
@@ -916,12 +1014,12 @@ export const useAppStore = create<AppState>()(
         }
 
         const property = draft.id
-          ? await apiFetch<any>(`/api/properties/${draft.id}`, {
+          ? await apiFetch<ApiProperty>(`/api/properties/${draft.id}`, {
               method: "PATCH",
               body: JSON.stringify(requestPayload),
               token: state.authToken,
             })
-          : await apiFetch<any>(`/api/properties`, {
+          : await apiFetch<ApiProperty>(`/api/properties`, {
               method: "POST",
               body: JSON.stringify(requestPayload),
               token: state.authToken,
@@ -944,7 +1042,7 @@ export const useAppStore = create<AppState>()(
         if (!state.authToken || !file) return null;
         const form = new FormData();
         form.append("file", file, file.name);
-        const response = await apiFetch<{ url: string }>(`/api/properties/upload-image`, {
+        const response = await apiFetch<ApiUploadResponse>(`/api/properties/upload-image`, {
           method: "POST",
           body: form,
           token: state.authToken,
@@ -956,7 +1054,7 @@ export const useAppStore = create<AppState>()(
         if (!state.authToken || !file) return null;
         const form = new FormData();
         form.append("file", file, file.name);
-        const response = await apiFetch<{ url: string }>(`/api/properties/upload-proof`, {
+        const response = await apiFetch<ApiUploadResponse>(`/api/properties/upload-proof`, {
           method: "POST",
           body: form,
           token: state.authToken,
@@ -972,7 +1070,7 @@ export const useAppStore = create<AppState>()(
           sort: options?.sort,
         });
         try {
-          const data = await apiFetch<any[]>(
+          const data = await apiFetch<ApiProperty[]>(
             `/api/landlord/${state.userId}/properties${query ? `?${query}` : ""}`,
             { token: state.authToken }
           );
@@ -990,7 +1088,7 @@ export const useAppStore = create<AppState>()(
           sort: options?.sort,
         });
         try {
-          const data = await apiFetch<any[]>(
+          const data = await apiFetch<ApiProperty[]>(
             `/api/landlord/${state.userId}/properties-with-matches${
               query ? `?${query}` : ""
             }`,
@@ -1007,7 +1105,7 @@ export const useAppStore = create<AppState>()(
         const state = get();
         if (!state.authToken || !state.userId || !propertyId) return;
         try {
-          const data = await apiFetch<any[]>(
+          const data = await apiFetch<ApiMatch[]>(
             `/api/landlord/${state.userId}/properties/${propertyId}/matches`,
             { token: state.authToken }
           );

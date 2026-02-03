@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { getApiErrorMessage, showToast } from "@/lib/alerts";
 
 const DIGITS = 6;
 
@@ -11,7 +12,6 @@ export default function EmailVerificationPage() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const [values, setValues] = useState<string[]>(Array(DIGITS).fill(""));
   const [timer, setTimer] = useState(59);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,7 +19,6 @@ export default function EmailVerificationPage() {
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const userId = searchParams.get("userId") || "";
   const email = searchParams.get("email") || "user@example.com";
-  const phone = searchParams.get("phone") || "";
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
@@ -52,12 +51,13 @@ export default function EmailVerificationPage() {
     if (!userId || !canSubmit) return;
     try {
       setIsSubmitting(true);
-      setError(null);
       await verifyEmailOtp(userId, otp);
-      const query = new URLSearchParams({ userId, phone });
-      router.push(`/auth/phone-verification?${query.toString()}`);
+      showToast({ title: "Email verified", variant: "success" });
+      const query = new URLSearchParams({ userId });
+      router.push(`/auth/verification-success?${query.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed");
+      const message = getApiErrorMessage(err);
+      showToast({ title: message, variant: "error" });
     } finally {
       setIsSubmitting(false);
     }
@@ -68,8 +68,10 @@ export default function EmailVerificationPage() {
     try {
       await sendEmailOtp(userId);
       setTimer(59);
+      showToast({ title: "Code resent", variant: "success" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Resend failed");
+      const message = getApiErrorMessage(err);
+      showToast({ title: message, variant: "error" });
     }
   };
 
@@ -141,11 +143,6 @@ export default function EmailVerificationPage() {
           </div>
 
           <div className="mt-10">
-            {error && (
-              <p className="text-center text-sm font-medium text-red-600 mb-3">
-                {error}
-              </p>
-            )}
             <button
               onClick={handleVerify}
               disabled={!canSubmit}

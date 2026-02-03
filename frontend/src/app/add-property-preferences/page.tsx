@@ -225,7 +225,7 @@ export default function TenantPreferencesPage() {
       setIsSaving(false);
       return;
     }
-    const idealTenantPreferences: Record<string, any> = {
+    const idealTenantPreferences: Record<string, string | boolean> = {
       employmentStatus: resolveLabel(employment, employmentValue),
       maritalStatus: resolveLabel(marital, maritalValue),
       vehicles: resolveLabel(vehicles, vehicleValue),

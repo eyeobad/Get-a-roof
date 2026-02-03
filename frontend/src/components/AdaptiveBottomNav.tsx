@@ -11,14 +11,14 @@ type Layout = "fixed" | "inline";
 
 const tenantItems = [
   { label: "Explore", icon: "search", href: "/explore", id: "explore" },
-  { label: "Matches", icon: "groups", href: "/matches", id: "matches" },
+  { label: "Matches", icon: "handshake", href: "/matches", id: "matches" },
   { label: "Messages", icon: "chat_bubble", href: "/messages", id: "messages" },
   { label: "Profile", icon: "person", href: "/profile", id: "profile" },
 ];
 
 const dashboardItems = [
   { label: "Properties", icon: "dashboard", href: "/dashboard/properties", id: "properties" },
-  { label: "Matches", icon: "group", href: "/dashboard/matches", id: "matches" },
+  { label: "Matches", icon: "handshake", href: "/dashboard/matches", id: "matches" },
   { label: "Chat", icon: "chat_bubble", href: "/messages", id: "chat" },
   { label: "Profile", icon: "person", href: "/dashboard/profile", id: "profile" },
 ];

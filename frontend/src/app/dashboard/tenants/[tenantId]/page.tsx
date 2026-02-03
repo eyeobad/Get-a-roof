@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
@@ -13,7 +14,32 @@ type TenantProfile = {
   phoneNumber?: string;
   photoUrl?: string;
   isVerified?: boolean;
-  preferences?: Record<string, any>;
+  preferences?: Record<string, unknown>;
+};
+
+type TenantApiResponse = {
+  id?: string;
+  _id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  photoUrl?: string;
+  isVerified?: boolean;
+  preferences?: Record<string, unknown>;
+};
+
+type TenantPreferences = {
+  employmentStatus?: string;
+  maritalStatus?: string;
+  vehicles?: string;
+  hasPets?: boolean;
+  smokingHabits?: string;
+  drinkingHabits?: string;
+  religionPreference?: string;
+  educationLevel?: string;
+  socialHabits?: string;
+  hasChildren?: boolean;
 };
 
 export default function TenantProfilePage() {
@@ -24,16 +50,14 @@ export default function TenantProfilePage() {
   const userId = useAppStore((state) => state.userId);
   const [tenant, setTenant] = useState<TenantProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!authToken || !userId || !tenantId) return;
-    setLoading(true);
-    setError(null);
-    apiFetch<any>(`/api/landlord/${userId}/tenants/${tenantId}`, {
+    apiFetch<TenantApiResponse>(`/api/landlord/${userId}/tenants/${tenantId}`, {
       token: authToken,
     })
       .then((data) => {
+        setError(null);
         setTenant({
           id: data?.id ?? data?._id ?? tenantId,
           firstName: data?.firstName,
@@ -47,8 +71,7 @@ export default function TenantProfilePage() {
       })
       .catch((err) => {
         setError((err as Error).message || "Unable to load tenant profile.");
-      })
-      .finally(() => setLoading(false));
+      });
   }, [authToken, userId, tenantId]);
 
   const name = useMemo(() => {
@@ -56,7 +79,10 @@ export default function TenantProfilePage() {
     return `${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim() || "Tenant";
   }, [tenant]);
 
-  const preferences = tenant?.preferences?.tenant ?? {};
+  const preferences =
+    (tenant?.preferences as { tenant?: TenantPreferences } | undefined)?.tenant ?? {};
+
+  const isLoading = Boolean(authToken && userId && tenantId && !tenant && !error);
 
   return (
     <div className="min-h-screen bg-[#f5f6f8] text-gray-900 font-display antialiased">
@@ -73,9 +99,11 @@ export default function TenantProfilePage() {
         <header className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
             {tenant?.photoUrl ? (
-              <img
+              <Image
                 src={tenant.photoUrl}
                 alt={name}
+                width={64}
+                height={64}
                 className="w-full h-full object-cover"
               />
             ) : null}
@@ -92,7 +120,7 @@ export default function TenantProfilePage() {
           <div className="rounded-2xl bg-white p-6 text-sm text-gray-500">
             Sign in to view tenant details.
           </div>
-        ) : loading ? (
+        ) : isLoading ? (
           <div className="rounded-2xl bg-white p-6 text-sm text-gray-500">
             Loading profile...
           </div>

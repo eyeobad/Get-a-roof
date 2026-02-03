@@ -5,10 +5,11 @@ export const API_BASE_URL =
 
 type ApiOptions = RequestInit & { token?: string };
 
-export async function apiFetch<T = any>(path: string, options: ApiOptions = {}) {
+export async function apiFetch<T = unknown>(path: string, options: ApiOptions = {}) {
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const isFormData = options.body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers ?? {}),
   };
 

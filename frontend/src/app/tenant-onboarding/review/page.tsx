@@ -13,7 +13,31 @@ const propertyLabelMap: Record<string, string> = {
 
 export default function TenantReview() {
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
-  const [profile, setProfile] = useState<any | null>(null);
+  type TenantPreferences = {
+    lookingFor?: string[];
+    petFriendlyRequired?: boolean;
+    employmentStatus?: string;
+    annualEarnings?: number;
+    maritalStatus?: string;
+    vehicles?: string;
+    hasPets?: boolean;
+    smokingHabits?: string;
+    drinkingHabits?: string;
+    religionPreference?: string;
+    educationLevel?: string;
+    socialHabits?: string;
+    hasChildren?: boolean;
+  };
+
+  type UserProfile = {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phoneNumber?: string;
+    preferences?: { tenant?: TenantPreferences };
+  };
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -172,7 +196,7 @@ export default function TenantReview() {
           </section>
 
           <p className="text-center text-sm text-slate-400 mt-4 px-4">
-            By clicking "Create Profile", you agree to our{" "}
+            By clicking &quot;Create Profile&quot;, you agree to our{" "}
             <a className="text-primary underline" href="#">
               Terms of Service
             </a>{" "}
