@@ -36,6 +36,28 @@ const MAPBOX_TOKEN =
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+const MAPBOX_RASTER_STYLE: mapboxgl.Style = {
+  version: 8,
+  sources: {
+    "mapbox-raster": {
+      type: "raster",
+      tiles: [
+        `https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+      ],
+      tileSize: 256,
+      attribution:
+        '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    },
+  },
+  layers: [
+    {
+      id: "mapbox-raster-layer",
+      type: "raster",
+      source: "mapbox-raster",
+    },
+  ],
+};
+
 const hashString = (value: string) => {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -205,7 +227,7 @@ function MapCanvas({
 
     const map = new mapboxgl.Map({
       container: mapElementRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: MAPBOX_RASTER_STYLE,
       center: [3.4251, 6.4358],
       zoom: 12,
       attributionControl: false,
