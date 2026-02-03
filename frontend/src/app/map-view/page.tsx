@@ -172,6 +172,7 @@ function MapCanvas({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const mapLoadedRef = useRef(false);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
@@ -257,11 +258,20 @@ function MapCanvas({
           },
         });
       }
+      map.resize();
+      if (mapElementRef.current && !resizeObserverRef.current) {
+        resizeObserverRef.current = new ResizeObserver(() => {
+          map.resize();
+        });
+        resizeObserverRef.current.observe(mapElementRef.current);
+      }
       onMapReady(map);
     });
 
     return () => {
       window.clearTimeout(loadTimeout);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       map.remove();
