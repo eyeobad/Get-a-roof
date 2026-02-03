@@ -231,6 +231,7 @@ function MapCanvas({
       center: [3.4251, 6.4358],
       zoom: 12,
       attributionControl: false,
+      interactive: true,
     });
 
     map.addControl(new mapboxgl.AttributionControl({ compact: true }));
@@ -248,7 +249,7 @@ function MapCanvas({
       const message =
         typeof event.error?.message === "string"
           ? event.error.message
-          : "Map failed to load.";
+          : "Map error (check Network for 401/403 tile requests).";
       onMapError(message);
     });
 
@@ -433,7 +434,13 @@ function MapCanvas({
     map.fitBounds(bounds, { padding: 60, duration: 0 });
   }, [points]);
 
-  return <div ref={mapElementRef} className="absolute inset-0 z-0" />;
+  return (
+    <div
+      ref={mapElementRef}
+      className="absolute inset-0 z-0 pointer-events-auto"
+      style={{ pointerEvents: "auto", touchAction: "none" }}
+    />
+  );
 }
 
 export default function MapView() {
@@ -1001,6 +1008,11 @@ export default function MapView() {
         .mapboxgl-map {
           font-family: var(--font-sans);
           background: #e2e8f0;
+        }
+        .mapboxgl-canvas-container,
+        .mapboxgl-canvas,
+        .mapboxgl-map {
+          pointer-events: auto !important;
         }
         .mapboxgl-canvas {
           outline: none;
