@@ -670,12 +670,12 @@ export default function MapView() {
 
                       <div className="flex items-center gap-3 text-gray-500 mt-1">
                         {[
-                          { icon: "bed", value: activeListing?.beds ?? 0 },
-                          { icon: "bathtub", value: activeListing?.baths ?? 0 },
-                          { icon: "", value: `${activeListing?.sqft ?? "0"} sqft` },
+                          { icon: "bed", value: activeListing?.beds ?? 0, label: "bd" },
+                          { icon: "bathtub", value: activeListing?.baths ?? 0, label: "ba" },
+                          { icon: "square_foot", value: activeListing?.sqft ?? "0", label: "sqft" },
                         ].map((item) => (
                           <div
-                            key={item.value}
+                            key={`${item.icon}-${item.label}`}
                             className="flex items-center gap-1 text-sm font-medium"
                           >
                             {item.icon && (
@@ -684,6 +684,7 @@ export default function MapView() {
                               </span>
                             )}
                             <span>{item.value}</span>
+                            <span>{item.label}</span>
                           </div>
                         ))}
                       </div>
