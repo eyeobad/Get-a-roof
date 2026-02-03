@@ -42,6 +42,10 @@ type LandlordDraft = {
     lng?: number;
   };
   propertyType?: string;
+  bedCount?: number;
+  bathCount?: number;
+  sqFt?: number;
+  amenities?: string[];
   description?: string;
   proofOfOwnership?: string;
   landlordRequirements?: {
@@ -138,6 +142,7 @@ type ApiProperty = {
   _id?: string;
   id?: string;
   images?: string[];
+  amenities?: string[];
   monthlyPrice?: number;
   price?: number;
   address?: {
@@ -366,6 +371,7 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
     id: property?._id ?? "",
     image: property?.images?.[0] ?? "/hero.png",
     images: property?.images ?? undefined,
+    amenities: property?.amenities ?? undefined,
     price: formatCurrency(property?.monthlyPrice),
     period: "/mo",
     stats: [
@@ -420,6 +426,10 @@ const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
   monthlyPrice: property?.monthlyPrice,
   address: property?.address,
   propertyType: property?.propertyType,
+  bedCount: property?.bedCount,
+  bathCount: property?.bathCount,
+  sqFt: property?.sqFt,
+  amenities: property?.amenities,
   description: property?.description,
   proofOfOwnership: property?.proofOfOwnership,
   landlordRequirements: property?.landlordRequirements,
@@ -432,6 +442,10 @@ const buildLandlordPayload = (draft: LandlordDraft) => {
   if (draft.images) payload.images = draft.images;
   if (draft.monthlyPrice !== undefined) payload.monthlyPrice = draft.monthlyPrice;
   if (draft.propertyType) payload.propertyType = draft.propertyType;
+  if (draft.bedCount !== undefined) payload.bedCount = draft.bedCount;
+  if (draft.bathCount !== undefined) payload.bathCount = draft.bathCount;
+  if (draft.sqFt !== undefined) payload.sqFt = draft.sqFt;
+  if (draft.amenities) payload.amenities = draft.amenities;
   if (draft.description) payload.description = draft.description;
   if (draft.proofOfOwnership) payload.proofOfOwnership = draft.proofOfOwnership;
   if (draft.status) payload.status = draft.status;

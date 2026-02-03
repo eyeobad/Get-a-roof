@@ -23,11 +23,32 @@ export default function AddPropertyDetailsPage() {
   const [desc, setDesc] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [beds, setBeds] = useState<number | null>(null);
+  const [baths, setBaths] = useState<number | null>(null);
+  const [sqft, setSqft] = useState("");
+  const [amenities, setAmenities] = useState<string[]>([]);
+  const [amenityInput, setAmenityInput] = useState("");
   const [proofName, setProofName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const count = useMemo(() => desc.length, [desc]);
+  const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
+  const bathOptions = useMemo(() => [1, 2, 3, 4], []);
+  const sqftOptions = useMemo(() => [500, 750, 1000, 1500, 2000], []);
+  const amenityOptions = useMemo(
+    () => [
+      { label: "Local Laundry Service", icon: "local_laundry_service" },
+      { label: "AC Unit", icon: "ac_unit" },
+      { label: "Directions Car", icon: "directions_car" },
+      { label: "Elevator", icon: "elevator" },
+      { label: "Security", icon: "security" },
+      { label: "Gym", icon: "fitness_center" },
+      { label: "Pool", icon: "pool" },
+      { label: "Generator", icon: "bolt" },
+    ],
+    []
+  );
 
   useEffect(() => {
     if (initialized) return;
@@ -50,6 +71,10 @@ export default function AddPropertyDetailsPage() {
     setLng(
       draft.address?.lng !== undefined ? String(draft.address.lng) : ""
     );
+    setBeds(draft.bedCount ?? null);
+    setBaths(draft.bathCount ?? null);
+    setSqft(draft.sqFt !== undefined ? String(draft.sqFt) : "");
+    setAmenities(draft.amenities ?? []);
     if (draft.proofOfOwnership) {
       setProofName("Document uploaded");
     }
@@ -85,11 +110,16 @@ export default function AddPropertyDetailsPage() {
     const rentValue = rent ? Number(rent) : undefined;
     const latValue = lat ? Number(lat) : undefined;
     const lngValue = lng ? Number(lng) : undefined;
+    const sqftValue = sqft ? Number(sqft) : undefined;
 
     setLandlordDraft({
       monthlyPrice: Number.isNaN(rentValue) ? undefined : rentValue,
       propertyType: propertyType || undefined,
       description: desc || undefined,
+      bedCount: beds ?? undefined,
+      bathCount: baths ?? undefined,
+      sqFt: Number.isNaN(sqftValue) ? undefined : sqftValue,
+      amenities: amenities.length ? amenities : undefined,
       address: {
         street: location || undefined,
         lat: Number.isNaN(latValue) ? undefined : latValue,
@@ -123,6 +153,19 @@ export default function AddPropertyDetailsPage() {
     }
     setProofName(file.name);
     setLandlordDraft({ proofOfOwnership: uploadedUrl });
+  };
+
+  const toggleAmenity = (label: string) => {
+    setAmenities((prev) =>
+      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+    );
+  };
+
+  const handleAddAmenity = () => {
+    const trimmed = amenityInput.trim();
+    if (!trimmed) return;
+    setAmenities((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setAmenityInput("");
   };
 
   return (
@@ -337,6 +380,166 @@ export default function AddPropertyDetailsPage() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* Property Specs */}
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-2">
+                <label className="text-base font-semibold pl-1">Beds</label>
+                <div className="flex flex-wrap gap-3">
+                  {bedOptions.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setBeds(value)}
+                      className={[
+                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
+                        beds === value
+                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
+                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
+                      ].join(" ")}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Custom"
+                    value={beds ?? ""}
+                    onChange={(event) =>
+                      setBeds(event.target.value ? Number(event.target.value) : null)
+                    }
+                    className="w-28 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-base font-semibold pl-1">Baths</label>
+                <div className="flex flex-wrap gap-3">
+                  {bathOptions.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setBaths(value)}
+                      className={[
+                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
+                        baths === value
+                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
+                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
+                      ].join(" ")}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Custom"
+                    value={baths ?? ""}
+                    onChange={(event) =>
+                      setBaths(event.target.value ? Number(event.target.value) : null)
+                    }
+                    className="w-28 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-base font-semibold pl-1">Square Footage</label>
+                <div className="flex flex-wrap gap-3">
+                  {sqftOptions.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSqft(String(value))}
+                      className={[
+                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
+                        sqft === String(value)
+                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
+                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
+                      ].join(" ")}
+                    >
+                      {value.toLocaleString()} sqft
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Custom"
+                    value={sqft}
+                    onChange={(event) => setSqft(event.target.value)}
+                    className="w-32 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Amenities */}
+            <div className="flex flex-col gap-3">
+              <label className="text-base font-semibold pl-1">Amenities</label>
+              <div className="grid grid-cols-2 gap-3">
+                {amenityOptions.map((amenity) => {
+                  const selected = amenities.includes(amenity.label);
+                  return (
+                    <button
+                      key={amenity.label}
+                      type="button"
+                      onClick={() => toggleAmenity(amenity.label)}
+                      className={[
+                        "flex items-center gap-2 rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-all",
+                        selected
+                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
+                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
+                      ].join(" ")}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">
+                        {amenity.icon}
+                      </span>
+                      <span>{amenity.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="Add custom amenity"
+                  value={amenityInput}
+                  onChange={(event) => setAmenityInput(event.target.value)}
+                  className="flex-1 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddAmenity();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddAmenity}
+                  className="rounded-full bg-[#0a44b8] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+                >
+                  Add
+                </button>
+              </div>
+
+              {amenities.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {amenities.map((amenity) => (
+                    <button
+                      key={amenity}
+                      type="button"
+                      onClick={() => toggleAmenity(amenity)}
+                      className="rounded-full border border-[#0a44b8]/20 bg-[#EAF1FF] px-4 py-2 text-xs font-semibold text-[#0a44b8]"
+                    >
+                      {amenity}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {/* Description */}

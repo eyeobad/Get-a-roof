@@ -23,6 +23,36 @@ const socialLinks = [
   { name: "WhatsApp", href: "https://wa.me/?text=Check%20out%20this%20listing%20", icon: "chat" },
 ];
 
+const amenityIconMap: Record<string, string> = {
+  "local laundry service": "local_laundry_service",
+  laundry: "local_laundry_service",
+  washer: "local_laundry_service",
+  dryer: "local_laundry_service",
+  "ac unit": "ac_unit",
+  "air conditioning": "ac_unit",
+  parking: "directions_car",
+  garage: "directions_car",
+  elevator: "elevator",
+  lift: "elevator",
+  security: "security",
+  gym: "fitness_center",
+  pool: "pool",
+  generator: "bolt",
+  internet: "wifi",
+  wifi: "wifi",
+  furnished: "weekend",
+  balcony: "balcony",
+};
+
+const resolveAmenityIcon = (amenity: string) => {
+  const key = amenity.trim().toLowerCase();
+  return (
+    amenityIconMap[key] ||
+    Object.entries(amenityIconMap).find(([needle]) => key.includes(needle))?.[1] ||
+    "verified"
+  );
+};
+
 type PropertyDetailsViewProps = {
   listing: Listing;
   onBack?: () => void;
@@ -52,6 +82,17 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
       alt: `Listing image ${index + 1}`,
     }));
   }, [listing]);
+
+  const stats = useMemo(() => {
+    if (listing.stats && listing.stats.length) return listing.stats;
+    return [
+      { icon: "bed", label: `${listing.bedrooms || 0} Beds` },
+      { icon: "bathtub", label: `${listing.bathrooms || 0} Baths` },
+      { icon: "square_foot", label: `${listing.sqft || "0"} sqft` },
+    ];
+  }, [listing]);
+
+  const amenities = useMemo(() => listing.amenities ?? [], [listing.amenities]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shareUrl] = useState(() => (typeof window !== "undefined" ? window.location.href : ""));
@@ -269,7 +310,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {listing.stats.map((stat) => (
+            {stats.map((stat) => (
               <div
                 key={stat.label}
                 className="bg-blue-100 flex h-12 items-center gap-2 rounded-full px-5 py-3 border border-blue-200"
@@ -290,16 +331,24 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
           <div className="flex flex-col gap-4">
             <h3 className="text-primary text-2xl font-bold">Amenities</h3>
-            <div className="flex flex-col gap-5 pl-1">
-              {["local_laundry_service", "ac_unit", "directions_car", "elevator"].map((icon) => (
-                <div key={icon} className="flex items-center gap-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-                    <span className="material-symbols-outlined text-primary text-3xl">{icon}</span>
+            {amenities.length ? (
+              <div className="flex flex-col gap-5 pl-1">
+                {amenities.map((amenity) => (
+                  <div key={amenity} className="flex items-center gap-4">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
+                      <span className="material-symbols-outlined text-primary text-3xl">
+                        {resolveAmenityIcon(amenity)}
+                      </span>
+                    </div>
+                    <span className="text-slate-900 text-lg font-medium">
+                      {amenity}
+                    </span>
                   </div>
-                  <span className="text-slate-900 text-lg font-medium capitalize">{icon.replaceAll("_", " ")}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-600 text-base">No amenities listed yet.</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-4 mb-4">

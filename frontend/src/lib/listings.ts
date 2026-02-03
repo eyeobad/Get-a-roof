@@ -6,6 +6,7 @@ export type Listing = {
   id: string;
   image: string;
   images?: string[];
+  amenities?: string[];
   price: string;
   period: string;
   stats: ListingStat[];
@@ -27,6 +28,7 @@ export const listingSeed: Listing[] = [
     id: "listing-1",
     image: "/hero.png",
     images: ["/hero.png", "/p5.png", "/p6.png"],
+    amenities: ["Local Laundry Service", "AC Unit", "Directions Car", "Elevator"],
     price: "$3,500",
     period: "/mo",
     stats: [
@@ -50,6 +52,7 @@ export const listingSeed: Listing[] = [
     id: "listing-2",
     image: "/p2.png",
     images: ["/p2.png", "/p7.png", "/p8.png"],
+    amenities: ["Laundry", "Security", "Elevator"],
     price: "$2,750",
     period: "/mo",
     stats: [
@@ -73,6 +76,7 @@ export const listingSeed: Listing[] = [
     id: "listing-3",
     image: "/p3.png",
     images: ["/p3.png", "/propertydetails.png", "/p6.png"],
+    amenities: ["Pool", "Gym", "Parking"],
     price: "$4,100",
     period: "/mo",
     stats: [
@@ -96,6 +100,7 @@ export const listingSeed: Listing[] = [
     id: "listing-4",
     image: "/p4.png",
     images: ["/p4.png", "/p5.png", "/p7.png"],
+    amenities: ["Security", "Generator", "Parking"],
     price: "$3,100",
     period: "/mo",
     stats: [
