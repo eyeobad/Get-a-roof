@@ -679,7 +679,6 @@ export default function MapView() {
               onMapError={setMapError}
               onMapStatus={handleMapStatus}
             />
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/10 via-transparent to-white/40" />
             {mapError && (
               <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
                 <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
@@ -907,7 +906,6 @@ export default function MapView() {
             onMapError={setMapError}
             onMapStatus={handleMapStatus}
           />
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 to-slate-100/30" />
           {mapError && (
             <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
               <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
