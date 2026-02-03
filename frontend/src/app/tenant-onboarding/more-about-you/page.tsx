@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
 type SectionKey =
+  | "gender"
   | "employment"
   | "marital"
   | "vehicles"
@@ -27,6 +28,14 @@ type SectionConfig = {
 };
 
 const sections: readonly SectionConfig[] = [
+  {
+    key: "gender",
+    title: "Gender",
+    icon: "wc",
+    buttonLabels: ["Male", "Female", "Prefer not to say"],
+    primaryIndex: 2,
+    fullWidth: true,
+  },
   {
     key: "employment",
     title: "Employment Status",
@@ -136,8 +145,10 @@ export default function TenantMoreAboutYou() {
 
     const petsLabel = pickLabel("pets");
     const childrenLabel = pickLabel("children");
+    const genderLabel = pickLabel("gender");
 
     const payload: Record<string, unknown> = {
+      gender: genderLabel,
       employmentStatus: pickLabel("employment"),
       maritalStatus: pickLabel("marital"),
       vehicles: pickLabel("vehicles"),

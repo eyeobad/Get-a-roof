@@ -163,6 +163,15 @@ export default function TenantPreferencesPage() {
     []
   );
 
+  const gender: Option[] = useMemo(
+    () => [
+      { key: "male", label: "Male" },
+      { key: "female", label: "Female" },
+      { key: "na", label: "Prefer not to say" },
+    ],
+    []
+  );
+
   const [employmentValue, setEmploymentValue] = useState("employed");
   const [maritalValue, setMaritalValue] = useState("married");
   const [vehicleValue, setVehicleValue] = useState("yes");
@@ -172,6 +181,7 @@ export default function TenantPreferencesPage() {
   const [educationValue, setEducationValue] = useState("bachelors");
   const [socialValue, setSocialValue] = useState("occasionally");
   const [childrenValue, setChildrenValue] = useState("dont");
+  const [genderValue, setGenderValue] = useState("na");
 
   const resolveOptionKey = (value: unknown, options: Option[], fallback: string) => {
     if (!value) return fallback;
@@ -203,6 +213,7 @@ export default function TenantPreferencesPage() {
     } else {
       setChildrenValue("na");
     }
+    setGenderValue(resolveOptionKey((prefs as { gender?: string })?.gender, gender, "na"));
     setInitialized(true);
   }, [
     draft,
@@ -215,6 +226,7 @@ export default function TenantPreferencesPage() {
     religion,
     education,
     social,
+    gender,
   ]);
 
   const handleSave = async (nextPath?: string) => {
@@ -234,6 +246,7 @@ export default function TenantPreferencesPage() {
       religionPreference: resolveLabel(religion, religionValue),
       educationLevel: resolveLabel(education, educationValue),
       socialHabits: resolveLabel(social, socialValue),
+      gender: resolveLabel(gender, genderValue),
     };
 
     if (childrenValue === "have") {
@@ -458,6 +471,21 @@ export default function TenantPreferencesPage() {
                   selected={childrenValue === o.key}
                   onClick={() => setChildrenValue(o.key)}
                   fullWidth
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* Gender */}
+          <section className="space-y-3">
+            <SectionHeader icon="wc" title="Gender" subtitle="Preferred tenant gender" />
+            <div className="flex flex-wrap gap-3">
+              {gender.map((o) => (
+                <Chip
+                  key={o.key}
+                  label={o.label}
+                  selected={genderValue === o.key}
+                  onClick={() => setGenderValue(o.key)}
                 />
               ))}
             </div>

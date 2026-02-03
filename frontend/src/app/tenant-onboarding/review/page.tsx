@@ -27,6 +27,7 @@ export default function TenantReview() {
     educationLevel?: string;
     socialHabits?: string;
     hasChildren?: boolean;
+    gender?: string;
   };
 
   type UserProfile = {
@@ -78,6 +79,7 @@ export default function TenantReview() {
       tenant.hasChildren === undefined ? "Not set" : tenant.hasChildren ? "Yes" : "No";
 
     return [
+      ["Gender", tenant.gender ?? "Not set"],
       ["Employment", tenant.employmentStatus ?? "Not set"],
       ["Annual Earnings", currency(tenant.annualEarnings)],
       ["Marital Status", tenant.maritalStatus ?? "Not set"],

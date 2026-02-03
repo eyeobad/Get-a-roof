@@ -17,6 +17,12 @@ type ApartmentCheck = { label: string; description: string };
 
 const preferenceGroups: PreferenceGroup[] = [
   {
+    key: "gender",
+    title: "Gender",
+    icon: "wc",
+    options: [{ label: "Male" }, { label: "Female" }, { label: "Prefer not to say" }],
+  },
+  {
     key: "employment",
     title: "Employment",
     icon: "work",
@@ -96,6 +102,7 @@ type ModalType = "none" | "photo" | "contact" | "preferences";
 type ApiTenantPreferences = {
   lookingFor?: string[];
   petFriendlyRequired?: boolean;
+  gender?: string;
   employmentStatus?: string;
   maritalStatus?: string;
   vehicles?: string;
@@ -134,6 +141,7 @@ const defaultProfile: ProfileState = {
   annualEarnings: 85000,
   commuteRadius: 15,
   preferences: {
+    gender: "Prefer not to say",
     employment: "Employed",
     marital: "Married",
     vehicle: "Yes",
@@ -176,6 +184,7 @@ const mapUserToProfile = (user: ApiUser | null | undefined): ProfileState => {
     annualEarnings: tenant.annualEarnings ?? defaultProfile.annualEarnings,
     commuteRadius: tenant.maxCommuteRadius ?? defaultProfile.commuteRadius,
     preferences: {
+      gender: tenant.gender ?? "",
       employment: tenant.employmentStatus ?? "",
       marital: tenant.maritalStatus ?? "",
       vehicle: tenant.vehicles ?? "",
@@ -373,6 +382,7 @@ export default function ProfilePage() {
       .map(([, value]) => value);
 
     const tenantPayload: Record<string, unknown> = {
+      gender: profile.preferences.gender || undefined,
       employmentStatus: profile.preferences.employment || undefined,
       maritalStatus: profile.preferences.marital || undefined,
       vehicles: profile.preferences.vehicle || undefined,
