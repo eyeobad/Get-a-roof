@@ -172,6 +172,9 @@ function MapCanvas({
     supported: boolean;
     loaded: boolean;
     styleLoaded: boolean;
+    tilesLoaded: boolean;
+    layerCount: number;
+    sourceCount: number;
     zoom: number | null;
     center: { lat: number; lng: number } | null;
   }) => void;
@@ -189,6 +192,9 @@ function MapCanvas({
       supported,
       loaded: false,
       styleLoaded: false,
+      tilesLoaded: false,
+      layerCount: 0,
+      sourceCount: 0,
       zoom: null,
       center: null,
     });
@@ -281,10 +287,14 @@ function MapCanvas({
         });
         resizeObserverRef.current.observe(mapElementRef.current);
       }
+      const style = map.getStyle();
       onMapStatus({
         supported: true,
         loaded: map.loaded(),
         styleLoaded: map.isStyleLoaded(),
+        tilesLoaded: map.areTilesLoaded(),
+        layerCount: style.layers?.length ?? 0,
+        sourceCount: Object.keys(style.sources ?? {}).length,
         zoom: map.getZoom(),
         center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
       });
@@ -307,10 +317,14 @@ function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     const updateStatus = () => {
+      const style = map.getStyle();
       onMapStatus({
         supported: true,
         loaded: map.loaded(),
         styleLoaded: map.isStyleLoaded(),
+        tilesLoaded: map.areTilesLoaded(),
+        layerCount: style.layers?.length ?? 0,
+        sourceCount: Object.keys(style.sources ?? {}).length,
         zoom: map.getZoom(),
         center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
       });
@@ -419,6 +433,9 @@ export default function MapView() {
     supported: boolean;
     loaded: boolean;
     styleLoaded: boolean;
+    tilesLoaded: boolean;
+    layerCount: number;
+    sourceCount: number;
     zoom: number | null;
     center: { lat: number; lng: number } | null;
   } | null>(null);
@@ -513,6 +530,9 @@ export default function MapView() {
       supported: boolean;
       loaded: boolean;
       styleLoaded: boolean;
+      tilesLoaded: boolean;
+      layerCount: number;
+      sourceCount: number;
       zoom: number | null;
       center: { lat: number; lng: number } | null;
     }) => {
@@ -947,6 +967,9 @@ export default function MapView() {
               <div>supported: {String(mapStatus.supported)}</div>
               <div>loaded: {String(mapStatus.loaded)}</div>
               <div>styleLoaded: {String(mapStatus.styleLoaded)}</div>
+              <div>tilesLoaded: {String(mapStatus.tilesLoaded)}</div>
+              <div>layers: {mapStatus.layerCount}</div>
+              <div>sources: {mapStatus.sourceCount}</div>
               <div>zoom: {mapStatus.zoom?.toFixed(2) ?? "n/a"}</div>
               <div>
                 center:{" "}
