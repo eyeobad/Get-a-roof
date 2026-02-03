@@ -55,12 +55,18 @@ const jitterPoint = (lat: number, lng: number, seed: string) => {
   };
 };
 
-const buildDisplayAddress = (address: string, neighborhood?: string) => {
-  if (neighborhood) return `Area near ${neighborhood}`;
+const extractCityState = (address: string) => {
   const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    return `Area near ${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+    return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
   }
+  return parts[0] ?? "";
+};
+
+const buildDisplayAddress = (address: string, neighborhood?: string) => {
+  const cityState = extractCityState(address);
+  if (cityState) return cityState;
+  if (neighborhood) return `Area near ${neighborhood}`;
   return "Area in this neighborhood";
 };
 
@@ -185,6 +191,14 @@ function MapCanvas({
     map.addControl(new mapboxgl.AttributionControl({ compact: true }));
     mapRef.current = map;
 
+    const loadTimeout = window.setTimeout(() => {
+      if (!mapLoadedRef.current) {
+        onMapError(
+          "Map style failed to load. Check Mapbox token restrictions for localhost."
+        );
+      }
+    }, 5000);
+
     map.on("error", (event) => {
       const message =
         typeof event.error?.message === "string"
@@ -195,6 +209,7 @@ function MapCanvas({
 
     map.on("load", () => {
       mapLoadedRef.current = true;
+      window.clearTimeout(loadTimeout);
       if (!map.getSource("approx-areas")) {
         map.addSource("approx-areas", {
           type: "geojson",
@@ -246,6 +261,7 @@ function MapCanvas({
     });
 
     return () => {
+      window.clearTimeout(loadTimeout);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       map.remove();
