@@ -433,7 +433,7 @@ function MapCanvas({
     map.fitBounds(bounds, { padding: 60, duration: 0 });
   }, [points]);
 
-  return <div ref={mapElementRef} className="absolute inset-0" />;
+  return <div ref={mapElementRef} className="absolute inset-0 z-0" />;
 }
 
 export default function MapView() {
@@ -680,15 +680,15 @@ export default function MapView() {
               onMapStatus={handleMapStatus}
             />
             {mapError && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
-                <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
+              <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
+                <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
                   <p className="font-semibold text-slate-900">Map failed to load</p>
                   <p className="mt-1">{mapError}</p>
                 </div>
               </div>
             )}
 
-            <div className="absolute right-4 top-4 flex flex-col gap-3">
+            <div className="absolute right-4 top-4 z-30 flex flex-col gap-3">
               <div className="flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
                 <button
                   type="button"
@@ -716,8 +716,8 @@ export default function MapView() {
             </div>
 
             {showEmptyState && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
-                <div className="w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+              <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+                <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
                   <EmptyState
                     title="No matches yet"
                     message="Like a few listings in Explore to see your matches on the map."
@@ -907,15 +907,15 @@ export default function MapView() {
             onMapStatus={handleMapStatus}
           />
           {mapError && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
-              <div className="rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
+            <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
+              <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
                 <p className="font-semibold text-slate-900">Map failed to load</p>
                 <p className="mt-1">{mapError}</p>
               </div>
             </div>
           )}
 
-          <div className="absolute top-6 right-6 flex flex-col space-y-2 z-10">
+          <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
             <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
               <button
                 type="button"
@@ -945,8 +945,8 @@ export default function MapView() {
           </div>
 
           {showEmptyState && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
-              <div className="w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+            <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+              <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
                 <EmptyState
                   title="No matches yet"
                   message="Like a few listings in Explore to see your matches on the map."
