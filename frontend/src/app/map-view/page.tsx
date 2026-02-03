@@ -429,16 +429,6 @@ export default function MapView() {
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  const [mapStatus, setMapStatus] = useState<{
-    supported: boolean;
-    loaded: boolean;
-    styleLoaded: boolean;
-    tilesLoaded: boolean;
-    layerCount: number;
-    sourceCount: number;
-    zoom: number | null;
-    center: { lat: number; lng: number } | null;
-  } | null>(null);
 
   useEffect(() => {
     if (authToken) {
@@ -525,21 +515,7 @@ export default function MapView() {
     setMapError(null);
   }, []);
 
-  const handleMapStatus = useCallback(
-    (status: {
-      supported: boolean;
-      loaded: boolean;
-      styleLoaded: boolean;
-      tilesLoaded: boolean;
-      layerCount: number;
-      sourceCount: number;
-      zoom: number | null;
-      center: { lat: number; lng: number } | null;
-    }) => {
-      setMapStatus(status);
-    },
-    []
-  );
+  const handleMapStatus = useCallback(() => {}, []);
 
   const handleZoomIn = (mapRef: { current: mapboxgl.Map | null }) => {
     mapRef.current?.zoomIn();
@@ -957,25 +933,6 @@ export default function MapView() {
                   ctaLabel="Browse listings"
                   ctaHref="/explore"
                 />
-              </div>
-            </div>
-          )}
-
-          {mapStatus && (
-            <div className="absolute top-6 left-6 z-20 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg">
-              <div className="font-semibold text-slate-900">Map Debug</div>
-              <div>supported: {String(mapStatus.supported)}</div>
-              <div>loaded: {String(mapStatus.loaded)}</div>
-              <div>styleLoaded: {String(mapStatus.styleLoaded)}</div>
-              <div>tilesLoaded: {String(mapStatus.tilesLoaded)}</div>
-              <div>layers: {mapStatus.layerCount}</div>
-              <div>sources: {mapStatus.sourceCount}</div>
-              <div>zoom: {mapStatus.zoom?.toFixed(2) ?? "n/a"}</div>
-              <div>
-                center:{" "}
-                {mapStatus.center
-                  ? `${mapStatus.center.lat.toFixed(4)}, ${mapStatus.center.lng.toFixed(4)}`
-                  : "n/a"}
               </div>
             </div>
           )}
