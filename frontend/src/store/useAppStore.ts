@@ -143,6 +143,7 @@ type AppState = {
   messagesByMatch: Record<string, ChatMessage[]>;
   authToken: string | null;
   userId: string | null;
+  user: Record<string, unknown> | null;
   landlordDraft: LandlordDraft;
   landlordProperties: LandlordPropertySummary[];
   landlordPropertiesWithMatches: LandlordPropertySummary[];
@@ -195,8 +196,8 @@ type AppState = {
   loadLandlordDraftById: (propertyId: string) => Promise<void>;
   saveLandlordDraft: (payload?: Partial<LandlordDraft>) => Promise<LandlordDraft | null>;
   publishLandlordDraft: () => Promise<LandlordDraft | null>;
-  uploadLandlordImage: (fileName: string) => Promise<string | null>;
-  uploadLandlordProof: (fileName: string) => Promise<string | null>;
+  uploadLandlordImage: (file: File) => Promise<string | null>;
+  uploadLandlordProof: (file: File) => Promise<string | null>;
   loadLandlordProperties: (options?: {
     q?: string;
     status?: string;
@@ -266,6 +267,7 @@ const mapPropertyToListing = (property: any): Listing => {
   return {
     id: property?._id ?? "",
     image: property?.images?.[0] ?? "/hero.png",
+    images: property?.images ?? undefined,
     price: formatCurrency(property?.monthlyPrice),
     period: "/mo",
     stats: [
@@ -407,6 +409,7 @@ export const useAppStore = create<AppState>()(
       messagesByMatch: {},
       authToken: null,
       userId: null,
+      user: null,
       landlordDraft: emptyLandlordDraft,
       landlordProperties: [],
       landlordPropertiesWithMatches: [],
@@ -417,6 +420,7 @@ export const useAppStore = create<AppState>()(
         set({
           authToken: null,
           userId: null,
+          user: null,
           landlordDraft: emptyLandlordDraft,
           landlordProperties: [],
           landlordPropertiesWithMatches: [],
@@ -434,7 +438,7 @@ export const useAppStore = create<AppState>()(
 
         const userId = response.user.id || response.user._id;
         if (userId) {
-          set({ authToken: response.accessToken, userId });
+          set({ authToken: response.accessToken, userId, user: response.user });
         }
         return response;
       },
@@ -489,18 +493,41 @@ export const useAppStore = create<AppState>()(
       fetchUserProfile: async () => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        return apiFetch(`/api/users/${state.userId}`, {
+        const response = await apiFetch(`/api/users/${state.userId}`, {
           token: state.authToken,
         });
+        if (response) {
+          set({ user: response });
+        }
+        return response;
       },
       updateUser: async (payload) => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        return apiFetch(`/api/users/${state.userId}`, {
+        const response = await apiFetch(`/api/users/${state.userId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
           token: state.authToken,
         });
+        if (response) {
+          set({ user: response });
+          return response;
+        }
+        const nextUser = { ...(state.user ?? {}), ...payload };
+        set({ user: nextUser });
+        return nextUser;
+      },
+      uploadProfilePhoto: async (file) => {
+        const state = get();
+        if (!state.authToken || !state.userId || !file) return null;
+        const form = new FormData();
+        form.append("file", file, file.name);
+        const response = await apiFetch<any>(`/api/users/${state.userId}/photo`, {
+          method: "POST",
+          body: form,
+          token: state.authToken,
+        });
+        return response?.photoUrl ?? null;
       },
       updatePreferences: async (payload) => {
         const state = get();
@@ -510,6 +537,15 @@ export const useAppStore = create<AppState>()(
           body: JSON.stringify(payload),
           token: state.authToken,
         });
+      },
+      deleteAccount: async () => {
+        const state = get();
+        if (!state.authToken || !state.userId) return false;
+        await apiFetch(`/api/users/${state.userId}`, {
+          method: "DELETE",
+          token: state.authToken,
+        });
+        return true;
       },
       likeListing: async (listingId) => {
         const state = get();
@@ -903,30 +939,28 @@ export const useAppStore = create<AppState>()(
         const state = get();
         return state.saveLandlordDraft({ status: "Listed" });
       },
-      uploadLandlordImage: async (fileName) => {
+      uploadLandlordImage: async (file) => {
         const state = get();
-        if (!state.authToken || !fileName) return null;
-        const response = await apiFetch<{ url: string }>(
-          `/api/properties/upload-image`,
-          {
-            method: "POST",
-            body: JSON.stringify({ fileName }),
-            token: state.authToken,
-          }
-        );
+        if (!state.authToken || !file) return null;
+        const form = new FormData();
+        form.append("file", file, file.name);
+        const response = await apiFetch<{ url: string }>(`/api/properties/upload-image`, {
+          method: "POST",
+          body: form,
+          token: state.authToken,
+        });
         return response?.url ?? null;
       },
-      uploadLandlordProof: async (fileName) => {
+      uploadLandlordProof: async (file) => {
         const state = get();
-        if (!state.authToken || !fileName) return null;
-        const response = await apiFetch<{ url: string }>(
-          `/api/properties/upload-proof`,
-          {
-            method: "POST",
-            body: JSON.stringify({ fileName }),
-            token: state.authToken,
-          }
-        );
+        if (!state.authToken || !file) return null;
+        const form = new FormData();
+        form.append("file", file, file.name);
+        const response = await apiFetch<{ url: string }>(`/api/properties/upload-proof`, {
+          method: "POST",
+          body: form,
+          token: state.authToken,
+        });
         return response?.url ?? null;
       },
       loadLandlordProperties: async (options) => {
@@ -1056,6 +1090,7 @@ export const useAppStore = create<AppState>()(
         messagesByMatch: state.messagesByMatch,
         authToken: state.authToken,
         userId: state.userId,
+        user: state.user,
         landlordDraft: state.landlordDraft,
         landlordProperties: state.landlordProperties,
         landlordPropertiesWithMatches: state.landlordPropertiesWithMatches,

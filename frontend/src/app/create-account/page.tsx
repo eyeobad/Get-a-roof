@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { MdApartment,  MdHomeWork,MdHome } from "react-icons/md";
+import { MdHomeWork, MdPerson } from "react-icons/md";
 
 const roles = [
   {
     title: "Landlord",
     description: "I want to list properties",
-    icon: < MdHomeWork size={24} color="white" />,
+    icon: <MdHomeWork size={24} color="white" />,
   },
   {
     title: "Tenant",
     description: "I'm looking for a home",
-    icon: <MdHome size={24} color="white" />,
+    icon: <MdPerson size={24} color="white" />,
   },
 ];
 

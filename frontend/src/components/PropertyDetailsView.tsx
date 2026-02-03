@@ -7,11 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Listing } from "@/lib/listings";
 import { useAppStore } from "@/store/useAppStore";
 
-const gallery = [
-  { src: "/p2.png", alt: "Gallery image 2" },
-  { src: "/p3.png", alt: "Gallery image 3" },
-  { src: "/propertydetails.png", alt: "Modern living room" },
-];
+const fallbackGallery = ["/p2.png", "/p3.png", "/propertydetails.png"];
 
 const socialLinks = [
   {
@@ -38,14 +34,24 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const ensureMatchForListing = useAppStore((s) => s.ensureMatchForListing);
   const ensureThreadForListing = useAppStore((s) => s.ensureThreadForListing);
 
-  // Like APIs (store)
-  const likeListing = useAppStore((s) => s.likeListing);
-  const unlikeListing = useAppStore((s) => (s as any).unlikeListing); // if you have it
-  const toggleLikeListing = useAppStore((s) => (s as any).toggleLikeListing); // if you have it
+  const toggleLikeListing = useAppStore((s) => s.toggleLikeListing);
 
   const likedIds = useAppStore((s) => s.likedIds);
 
   const isSaved = useMemo(() => likedIds.includes(listing.id), [likedIds, listing.id]);
+
+  const gallery = useMemo(() => {
+    const rawImages =
+      listing.images && listing.images.length
+        ? listing.images
+        : [listing.image, ...fallbackGallery];
+    const unique = Array.from(new Set(rawImages.filter(Boolean)));
+    const finalImages = unique.length ? unique : fallbackGallery;
+    return finalImages.map((src, index) => ({
+      src,
+      alt: `Listing image ${index + 1}`,
+    }));
+  }, [listing]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shareUrl] = useState(() => (typeof window !== "undefined" ? window.location.href : ""));
@@ -63,36 +69,30 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
     return () => document.removeEventListener("mousedown", onDown);
   }, [shareMenuOpen]);
 
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % gallery.length);
+  const prevSlide = () =>
+    setCurrentIndex((prev) => (prev - 1 + gallery.length) % gallery.length);
+  const nextSlide = () =>
+    setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
   const handleBack = () => {
     if (onBack) return onBack();
     if (typeof window !== "undefined") window.history.back();
   };
 
-  const tapSlide = () => setCurrentIndex((prev) => (prev + 1) % gallery.length);
+  const tapSlide = () =>
+    setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
   const handleToggleSave = async () => {
     const shouldEnsureMatch = !isSaved;
-    // Best: store provides toggleLikeListing
-    if (typeof toggleLikeListing === "function") {
-      await toggleLikeListing(listing.id);
-    } else if (isSaved) {
-      // Next best: store provides unlikeListing
-      if (typeof unlikeListing === "function") await unlikeListing(listing.id);
-    } else {
-      await likeListing(listing.id);
-    }
+    await toggleLikeListing(listing.id);
 
     // You only want matches when saved/liked
     if (shouldEnsureMatch) await ensureMatchForListing(listing.id);
   };
 
-  const progressPct = useMemo(() => {
-    if (gallery.length <= 1) return 100;
-    return ((currentIndex + 1) / gallery.length) * 100;
-  }, [currentIndex]);
+  const safeIndex = gallery.length ? currentIndex % gallery.length : 0;
+  const progressPct =
+    gallery.length <= 1 ? 100 : ((safeIndex + 1) / gallery.length) * 100;
 
   return (
     <div className="min-h-screen text-slate-900 font-display bg-background-light">
@@ -167,8 +167,8 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
         {/* Gallery */}
         <div className="relative w-full h-[55vh] md:mt-16 overflow-hidden">
           <Image
-            src={gallery[currentIndex].src}
-            alt={gallery[currentIndex].alt}
+            src={gallery[safeIndex].src}
+            alt={gallery[safeIndex].alt}
             fill
             sizes="100vw"
             className="object-cover"
@@ -198,7 +198,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
           {/* counter */}
           <div className="absolute bottom-10 right-5 bg-black/60 text-white px-4 py-1.5 rounded-full text-base font-semibold backdrop-blur-md shadow-sm border border-white/10">
-            {currentIndex + 1}/{gallery.length}
+            {safeIndex + 1}/{gallery.length}
           </div>
 
           {/* progress bar + dots */}
@@ -213,7 +213,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
                   aria-label={`Go to slide ${idx + 1}`}
                   onClick={() => setCurrentIndex(idx)}
                   className={`h-2.5 rounded-full transition-all ${
-                    idx === currentIndex ? "w-8 bg-white" : "w-2.5 bg-white/60 hover:bg-white/80"
+                    idx === safeIndex ? "w-8 bg-white" : "w-2.5 bg-white/60 hover:bg-white/80"
                   }`}
                 />
               ))}

@@ -33,6 +33,34 @@ type Marker = {
   spotlight?: boolean;
 };
 
+function EmptyState({
+  title,
+  message,
+  ctaLabel,
+  ctaHref,
+}: {
+  title: string;
+  message: string;
+  ctaLabel: string;
+  ctaHref: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center gap-3 p-6">
+      <span className="material-symbols-outlined text-4xl text-slate-300">
+        map
+      </span>
+      <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+      <p className="text-sm text-slate-500 max-w-xs">{message}</p>
+      <Link
+        href={ctaHref}
+        className="mt-2 inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white"
+      >
+        {ctaLabel}
+      </Link>
+    </div>
+  );
+}
+
 function PropertyCard({ item }: { item: ListingCard }) {
   return (
     <article className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden group cursor-pointer transform transition active:scale-[0.99]">
@@ -92,14 +120,22 @@ export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const mapMatches = useAppStore((state) => state.mapMatches);
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const authToken = useAppStore((state) => state.authToken);
+  const listingsById = useAppStore((state) => state.listingsById);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
-    void loadMapMatches();
-  }, [loadMapMatches]);
+    if (authToken) {
+      void loadMapMatches();
+    }
+  }, [authToken, loadMapMatches]);
+
+  const demoListings = useMemo(() => Object.values(listingsById), [listingsById]);
+  const sourceListings = authToken ? mapMatches : demoListings;
+  const showEmptyState = authToken && mapMatches.length === 0;
 
   const listItems = useMemo<ListingCard[]>(() => {
-    return mapMatches.map((listing) => ({
+    return sourceListings.map((listing) => ({
       id: listing.id,
       price: listing.price,
       address: listing.address,
@@ -109,12 +145,21 @@ export default function MapView() {
       tag: listing.tag,
       image: listing.image,
     }));
-  }, [mapMatches]);
+  }, [sourceListings]);
+
+  const activeIndex =
+    listItems.length > 0
+      ? Math.min(selectedIndex, listItems.length - 1)
+      : 0;
+  const activeListing = listItems[activeIndex] ?? listItems[0];
 
   const markers = useMemo<Marker[]>(() => {
-    if (!mapMatches.length) return fallbackMarkers;
-    const coords = mapMatches.filter((listing) => listing.lat || listing.lng);
-    if (!coords.length) return fallbackMarkers;
+    if (!sourceListings.length) return authToken ? [] : fallbackMarkers;
+    const coords = sourceListings.filter(
+      (listing) =>
+        Number.isFinite(listing.lat) && Number.isFinite(listing.lng)
+    );
+    if (!coords.length) return authToken ? [] : fallbackMarkers;
 
     const lats = coords.map((listing) => listing.lat);
     const lngs = coords.map((listing) => listing.lng);
@@ -134,18 +179,10 @@ export default function MapView() {
         price: listing.price,
         top: `${top}%`,
         left: `${left}%`,
-        spotlight: index === selectedIndex,
+        spotlight: index === activeIndex,
       };
     });
-  }, [mapMatches, selectedIndex]);
-
-  const activeListing = listItems[selectedIndex] ?? listItems[0];
-
-  useEffect(() => {
-    if (selectedIndex >= listItems.length && listItems.length > 0) {
-      setSelectedIndex(0);
-    }
-  }, [listItems, selectedIndex]);
+  }, [authToken, sourceListings, activeIndex]);
 
   return (
     <>
@@ -237,8 +274,8 @@ export default function MapView() {
                 key={marker.id ?? marker.price}
                 type="button"
                 onClick={() => {
-                  if (typeof (marker as any).index === "number") {
-                    setSelectedIndex((marker as any).index);
+                  if (typeof marker.index === "number") {
+                    setSelectedIndex(marker.index);
                   }
                 }}
                 className={`absolute z-10 ${
@@ -262,79 +299,101 @@ export default function MapView() {
               </button>
             ))}
 
-            <div className="absolute bottom-4 left-4 right-4 z-20">
-              <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-100 relative">
-                <div className="flex gap-4 items-start">
-                  <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
-                    {activeListing ? (
-                      <Image
-                        src={activeListing.image}
-                        alt={activeListing.address}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : null}
-                  </div>
+            {showEmptyState && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center px-6">
+                <div className="w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                  <EmptyState
+                    title="No matches yet"
+                    message="Like a few listings in Explore to see your matches on the map."
+                    ctaLabel="Browse listings"
+                    ctaHref="/explore"
+                  />
+                </div>
+              </div>
+            )}
 
-                  <div className="flex-1 flex flex-col justify-between h-24 py-0.5">
-                    <div>
-                      <div className="flex justify-between items-start">
-                        <h2 className="text-xl font-bold text-primary leading-none">
-                          {activeListing?.price ?? "$0"}
-                        </h2>
-                        <button className="text-gray-400 hover:text-red-500 transition-colors">
-                          <span className="material-symbols-outlined text-[20px]">
-                            favorite
-                          </span>
-                        </button>
+            {listItems.length > 0 && (
+              <div className="absolute bottom-4 left-4 right-4 z-20">
+                <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-100 relative">
+                  <div className="flex gap-4 items-start">
+                    <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
+                      {activeListing ? (
+                        <Image
+                          src={activeListing.image}
+                          alt={activeListing.address}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between h-24 py-0.5">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <h2 className="text-xl font-bold text-primary leading-none">
+                            {activeListing?.price ?? "$0"}
+                          </h2>
+                          <button className="text-gray-400 hover:text-red-500 transition-colors">
+                            <span className="material-symbols-outlined text-[20px]">
+                              favorite
+                            </span>
+                          </button>
+                        </div>
+
+                        <p className="text-gray-600 text-sm mt-1 truncate">
+                          {activeListing?.address ?? "No matched properties yet"}
+                        </p>
                       </div>
 
-                      <p className="text-gray-600 text-sm mt-1 truncate">
-                        {activeListing?.address ?? "No matched properties yet"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-gray-500 mt-1">
-                      {[
-                        { icon: "bed", value: activeListing?.beds ?? 0 },
-                        { icon: "bathtub", value: activeListing?.baths ?? 0 },
-                        { icon: "", value: `${activeListing?.sqft ?? "0"} sqft` },
-                      ].map((item) => (
-                        <div
-                          key={item.value}
-                          className="flex items-center gap-1 text-sm font-medium"
-                        >
-                          {item.icon && (
-                            <span className="material-symbols-outlined text-[18px]">
-                              {item.icon}
-                            </span>
-                          )}
-                          <span>{item.value}</span>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-3 text-gray-500 mt-1">
+                        {[
+                          { icon: "bed", value: activeListing?.beds ?? 0 },
+                          { icon: "bathtub", value: activeListing?.baths ?? 0 },
+                          { icon: "", value: `${activeListing?.sqft ?? "0"} sqft` },
+                        ].map((item) => (
+                          <div
+                            key={item.value}
+                            className="flex items-center gap-1 text-sm font-medium"
+                          >
+                            {item.icon && (
+                              <span className="material-symbols-outlined text-[18px]">
+                                {item.icon}
+                              </span>
+                            )}
+                            <span>{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {activeListing && (
-                  <Link
-                    href={`/property-details/${activeListing.id}`}
-                    className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                  >
-                    <span>View Home Details</span>
-                    <span className="material-symbols-outlined text-sm">
-                      arrow_forward
-                    </span>
-                  </Link>
-                )}
+                  {activeListing && (
+                    <Link
+                      href={`/property-details/${activeListing.id}`}
+                      className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    >
+                      <span>View Home Details</span>
+                      <span className="material-symbols-outlined text-sm">
+                        arrow_forward
+                      </span>
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto bg-background-light px-4 py-5 space-y-5">
-            {listItems.map((item) => (
-              <PropertyCard key={item.id} item={item} />
-            ))}
+            {showEmptyState ? (
+              <EmptyState
+                title="No matches yet"
+                message="Like a few listings in Explore to see them here."
+                ctaLabel="Go to Explore"
+                ctaHref="/explore"
+              />
+            ) : (
+              listItems.map((item) => <PropertyCard key={item.id} item={item} />)
+            )}
             <div className="h-8" />
           </main>
         )}
