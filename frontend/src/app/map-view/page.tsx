@@ -437,7 +437,7 @@ function MapCanvas({
   return (
     <div
       ref={mapElementRef}
-      className="absolute inset-0 z-0 pointer-events-auto"
+      className="h-full w-full pointer-events-auto"
       style={{ pointerEvents: "auto", touchAction: "none" }}
     />
   );
