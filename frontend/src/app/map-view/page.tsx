@@ -618,7 +618,7 @@ export default function MapView() {
   return (
     <>
       {/* Mobile */}
-      <div className="lg:hidden min-h-screen bg-background-light text-[#0c141d] font-display antialiased flex flex-col">
+      <div className="lg:hidden h-screen bg-background-light text-[#0c141d] font-display antialiased flex flex-col">
         <header className="bg-primary text-white pt-10 pb-4 px-4 shadow-lg shrink-0 rounded-b-lg z-10 w-full">
           <div className="flex items-center justify-between mb-4">
             <button className="flex items-center justify-center p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -676,7 +676,7 @@ export default function MapView() {
 
         {/* MOBILE BODY SWITCHES HERE */}
         {viewMode === "map" ? (
-          <main className="relative w-full flex-1 overflow-hidden bg-[#e8e4dc]">
+          <main className="relative w-full flex-1 min-h-0 overflow-hidden bg-[#e8e4dc]">
             <MapCanvas
               points={mapPoints}
               activeIndex={activeIndex}
