@@ -267,19 +267,19 @@ function MapCanvas({
           source: "approx-areas",
           paint: {
             "circle-color": "#0a44b8",
-            "circle-opacity": 0.15,
+            "circle-opacity": 0.22,
             "circle-radius": [
               "interpolate",
               ["linear"],
               ["zoom"],
               10,
-              30,
+              24,
               14,
-              70,
+              48,
             ],
             "circle-stroke-color": "#0a44b8",
-            "circle-stroke-width": 1,
-            "circle-stroke-opacity": 0.35,
+            "circle-stroke-width": 2,
+            "circle-stroke-opacity": 0.6,
           },
         });
       }
@@ -378,7 +378,10 @@ function MapCanvas({
       ]
         .filter(Boolean)
         .join(" ");
-      markerEl.innerHTML = `<span>${point.price}</span>`;
+      markerEl.innerHTML = point.isExact ? `<span>${point.price}</span>` : "";
+      if (!point.isExact) {
+        markerEl.setAttribute("aria-label", point.price);
+      }
       markerEl.addEventListener("click", () => onSelect(point.index));
       const marker = new mapboxgl.Marker({ element: markerEl })
         .setLngLat([point.displayLng, point.displayLat])
@@ -1071,8 +1074,17 @@ export default function MapView() {
           border-top-color: var(--color-primary);
         }
         .map-price-marker.is-approx {
-          background: rgba(255, 255, 255, 0.9);
-          border-color: rgba(15, 23, 42, 0.18);
+          width: 14px;
+          height: 14px;
+          padding: 0;
+          border-radius: 999px;
+          background: #0a44b8;
+          border: 2px solid #0a44b8;
+          box-shadow: 0 8px 18px rgba(10, 68, 184, 0.35);
+          font-size: 0;
+        }
+        .map-price-marker.is-approx::after {
+          display: none;
         }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 20px);
