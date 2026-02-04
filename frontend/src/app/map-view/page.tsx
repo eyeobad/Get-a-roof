@@ -565,6 +565,20 @@ export default function MapView() {
     });
   };
 
+  useEffect(() => {
+    const maps = [mobileMapRef.current, desktopMapRef.current];
+    const resizeMaps = () => {
+      maps.forEach((map) => map?.resize());
+    };
+    resizeMaps();
+    const timerShort = window.setTimeout(resizeMaps, 100);
+    const timerLong = window.setTimeout(resizeMaps, 400);
+    return () => {
+      window.clearTimeout(timerShort);
+      window.clearTimeout(timerLong);
+    };
+  }, [viewMode, listItems.length]);
+
   const requestDirections = async () => {
     if (!activeListing || !activeListing.isExact) {
       setRoutingError("Directions are available after match acceptance.");
@@ -903,7 +917,7 @@ export default function MapView() {
           </div>
         </aside>
 
-        <section className="relative flex-1 h-full overflow-hidden bg-gray-200">
+        <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
           <MapCanvas
             points={mapPoints}
             activeIndex={activeIndex}
