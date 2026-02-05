@@ -3,9 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import { useAppStore } from "@/store/useAppStore";
+import { getSocket } from "@/lib/socket";
 
 type Conversation = {
   id: string;
@@ -74,17 +75,55 @@ function EmptyState({
   );
 }
 
+function SendingIndicator({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div className="flex items-center gap-2 text-xs text-slate-500 px-2">
+      <span className="inline-flex h-2 w-2 rounded-full bg-primary/60 animate-pulse" />
+      <span className="font-medium">Sending...</span>
+    </div>
+  );
+}
+
+function TypingIndicator({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div className="flex justify-start" aria-label="Typing indicator">
+      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <span
+          className="h-2 w-2 rounded-full bg-slate-400 animate-pulse"
+          style={{ animationDelay: "0ms" }}
+        />
+        <span
+          className="h-2 w-2 rounded-full bg-slate-400 animate-pulse"
+          style={{ animationDelay: "150ms" }}
+        />
+        <span
+          className="h-2 w-2 rounded-full bg-slate-400 animate-pulse"
+          style={{ animationDelay: "300ms" }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function MessagesPage() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const threadParam = searchParams.get("thread") ?? "";
+  const fromParam = searchParams.get("from") ?? "";
+  const isLandlordContext =
+    fromParam.startsWith("/dashboard") || pathname?.startsWith("/dashboard");
   const storeConversations = useAppStore((state) => state.conversations);
   const messagesByMatch = useAppStore((state) => state.messagesByMatch);
   const loadConversations = useAppStore((state) => state.loadConversations);
   const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
   const sendMessageToApi = useAppStore((state) => state.sendMessage);
   const markMatchRead = useAppStore((state) => state.markMatchRead);
+  const setSelectedThreadId = useAppStore((state) => state.setSelectedThreadId);
   const userId = useAppStore((state) => state.userId);
   const authToken = useAppStore((state) => state.authToken);
+  const typingByMatch = useAppStore((state) => state.typingByMatch);
 
   const conversations = useMemo<Conversation[]>(
     () =>
@@ -106,6 +145,7 @@ export default function MessagesPage() {
     () => (threadParam ? "chat" : "list")
   );
   const [messageText, setMessageText] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const activeConversationId =
     activeId || threadParam || conversations[0]?.id || "";
 
@@ -135,9 +175,14 @@ export default function MessagesPage() {
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isOtherTyping = Boolean(
+    activeConversationId && typingByMatch[activeConversationId]
+  );
 
   const selectConversation = (id: string, openChat?: boolean) => {
     setActiveId(id);
+    setSelectedThreadId(id);
     if (openChat) {
       setMobileView("chat");
     }
@@ -145,7 +190,7 @@ export default function MessagesPage() {
     void markMatchRead(id);
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!activeConversation || !activeConversationId) return;
     const trimmed = messageText.trim();
     if (!trimmed) return;
@@ -156,7 +201,12 @@ export default function MessagesPage() {
     if (!receiverId) return;
 
     setMessageText("");
-    void sendMessageToApi(activeConversationId, receiverId, trimmed);
+    setIsSending(true);
+    try {
+      await sendMessageToApi(activeConversationId, receiverId, trimmed);
+    } finally {
+      setIsSending(false);
+    }
 
     requestAnimationFrame(() => {
       chatRef.current?.scrollTo({
@@ -173,11 +223,50 @@ export default function MessagesPage() {
   }, [authToken, loadConversations]);
 
   useEffect(() => {
+    if (!authToken || !activeConversationId) return;
+    const socket = getSocket(authToken);
+    if (!socket) return;
+
+    const trimmed = messageText.trim();
+    if (!trimmed) {
+      socket.emit("typing", { matchId: activeConversationId, isTyping: false });
+      return;
+    }
+
+    socket.emit("typing", { matchId: activeConversationId, isTyping: true });
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing", { matchId: activeConversationId, isTyping: false });
+    }, 1200);
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [authToken, activeConversationId, messageText]);
+
+  useEffect(() => {
+    if (activeConversationId) {
+      setSelectedThreadId(activeConversationId);
+    }
+  }, [activeConversationId, setSelectedThreadId]);
+
+  useEffect(() => {
     if (activeConversationId && !messagesByMatch[activeConversationId]) {
+      setSelectedThreadId(activeConversationId);
       void loadMessagesForMatch(activeConversationId);
       void markMatchRead(activeConversationId);
     }
-  }, [activeConversationId, messagesByMatch, loadMessagesForMatch, markMatchRead]);
+  }, [
+    activeConversationId,
+    messagesByMatch,
+    loadMessagesForMatch,
+    markMatchRead,
+    setSelectedThreadId,
+  ]);
 
   if (!authToken) {
     return (
@@ -229,10 +318,14 @@ export default function MessagesPage() {
             <main className="flex-1 overflow-y-auto pb-24">
               {conversations.length === 0 ? (
                 <EmptyState
-                  title="No conversations yet"
-                  message="Once you like a listing, you can start chatting with the landlord here."
-                  ctaLabel="Find listings"
-                  ctaHref="/explore"
+                  title={isLandlordContext ? "No tenant messages yet" : "No conversations yet"}
+                  message={
+                    isLandlordContext
+                      ? "When a tenant contacts you about a property, their chat will show up here."
+                      : "Once you like a listing, you can start chatting with the landlord here."
+                  }
+                  ctaLabel={isLandlordContext ? "View properties" : "Find listings"}
+                  ctaHref={isLandlordContext ? "/dashboard/properties" : "/explore"}
                 />
               ) : (
                 conversations.map((conversation) => (
@@ -270,7 +363,10 @@ export default function MessagesPage() {
               )}
             </main>
 
-            <AdaptiveBottomNav activeTab="messages" layout="fixed" className="lg:hidden" />
+            <AdaptiveBottomNav
+              layout="fixed"
+              className="lg:hidden"
+            />
           </>
         )}
 
@@ -298,7 +394,9 @@ export default function MessagesPage() {
                   <p className="truncate font-bold text-slate-900">
                     {activeConversation.name}
                   </p>
-                  <p className="text-xs text-slate-500">Online</p>
+                  <p className="text-xs text-slate-500">
+                    {isOtherTyping ? "Typing..." : "Online"}
+                  </p>
                 </div>
               </div>
 
@@ -344,6 +442,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 ))}
+                <TypingIndicator visible={isOtherTyping} />
               </div>
             </main>
 
@@ -367,16 +466,19 @@ export default function MessagesPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
-                          sendMessage();
+                          void sendMessage();
                         }
                       }}
                     />
                   </div>
 
+                  <SendingIndicator visible={isSending} />
+
                   <button
                     aria-label="Send"
-                    onClick={sendMessage}
+                    onClick={() => void sendMessage()}
                     className="rounded-full bg-primary p-3 text-white shadow-sm hover:brightness-110 active:scale-95 transition"
+                    disabled={isSending}
                   >
                     <Icon name="send" filled />
                   </button>
@@ -495,7 +597,10 @@ export default function MessagesPage() {
               </main>
 
               {/* BottomNav pinned to the bottom of the LEFT column only */}
-              <AdaptiveBottomNav activeTab="chat" layout="inline" className="hidden lg:block" />
+              <AdaptiveBottomNav
+                layout="inline"
+                className="hidden lg:flex"
+              />
             </aside>
 
             {/* RIGHT: chat panel (NO BottomNav under here) */}
@@ -503,10 +608,14 @@ export default function MessagesPage() {
               {conversations.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center px-8">
                   <EmptyState
-                    title="No messages yet"
-                    message="Like a listing and start a conversation to see it here."
-                    ctaLabel="Explore listings"
-                    ctaHref="/explore"
+                    title={isLandlordContext ? "No tenant messages yet" : "No messages yet"}
+                    message={
+                      isLandlordContext
+                        ? "When a tenant contacts you about a property, their chat will appear here."
+                        : "Like a listing and start a conversation to see it here."
+                    }
+                    ctaLabel={isLandlordContext ? "View properties" : "Explore listings"}
+                    ctaHref={isLandlordContext ? "/dashboard/properties" : "/explore"}
                   />
                 </div>
               ) : (
@@ -527,7 +636,9 @@ export default function MessagesPage() {
                         <p className="truncate font-bold text-slate-900">
                           {activeConversation?.name ?? "Conversation"}
                         </p>
-                        <p className="text-xs text-slate-500">Online</p>
+                        <p className="text-xs text-slate-500">
+                          {isOtherTyping ? "Typing..." : "Online"}
+                        </p>
                       </div>
                     </div>
 
@@ -585,6 +696,7 @@ export default function MessagesPage() {
                             </div>
                           </div>
                         ))}
+                        <TypingIndicator visible={isOtherTyping} />
                         <div className="h-2" />
                       </div>
                     </div>
@@ -609,16 +721,19 @@ export default function MessagesPage() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
-                              sendMessage();
+                              void sendMessage();
                             }
                           }}
                         />
                       </div>
 
+                      <SendingIndicator visible={isSending} />
+
                       <button
                         aria-label="Send"
-                        onClick={sendMessage}
+                        onClick={() => void sendMessage()}
                         className="rounded-full bg-primary p-3 text-white shadow-sm hover:brightness-110 active:scale-95 transition"
+                        disabled={isSending}
                       >
                         <Icon name="send" filled />
                       </button>

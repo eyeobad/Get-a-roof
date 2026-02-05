@@ -61,10 +61,10 @@ type PropertyDetailsViewProps = {
 export default function PropertyDetailsView({ listing, onBack }: PropertyDetailsViewProps) {
   const router = useRouter();
 
-  const ensureMatchForListing = useAppStore((s) => s.ensureMatchForListing);
   const ensureThreadForListing = useAppStore((s) => s.ensureThreadForListing);
 
   const toggleLikeListing = useAppStore((s) => s.toggleLikeListing);
+  const authToken = useAppStore((s) => s.authToken);
 
   const likedIds = useAppStore((s) => s.likedIds);
 
@@ -124,11 +124,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
     setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
   const handleToggleSave = async () => {
-    const shouldEnsureMatch = !isSaved;
     await toggleLikeListing(listing.id);
-
-    // You only want matches when saved/liked
-    if (shouldEnsureMatch) await ensureMatchForListing(listing.id);
   };
 
   const safeIndex = gallery.length ? currentIndex % gallery.length : 0;
@@ -288,10 +284,19 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
                 <button
                   onClick={async () => {
-                    const threadId = await ensureThreadForListing(listing.id);
-                    if (threadId) {
-                      router.push(`/messages?thread=${threadId}`);
-                    } else {
+                    if (!authToken) {
+                      router.push(`/login?next=${encodeURIComponent(`/property-details/${listing.id}`)}`);
+                      return;
+                    }
+
+                    try {
+                      const threadId = await ensureThreadForListing(listing.id);
+                      if (threadId) {
+                        router.push(`/messages?thread=${threadId}`);
+                      } else {
+                        router.push(`/messages`);
+                      }
+                    } catch {
                       router.push(`/messages`);
                     }
                   }}

@@ -14,12 +14,14 @@ import { SendOtpDto } from "./dto/send-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { MailService } from "../mail/mail.service";
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly mailService: MailService
   ) {}
 
   async login(dto: LoginDto) {
@@ -71,6 +73,7 @@ export class AuthService {
     user.emailOtp = otp;
     user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
+    await this.mailService.sendVerificationOtp(user.email, otp);
 
     return { sent: true, channel: "email", otp, expiresAt: user.emailOtpExpiresAt };
   }

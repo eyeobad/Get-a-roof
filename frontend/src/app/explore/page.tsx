@@ -71,7 +71,6 @@ export default function ExploreCards() {
   const passListing = useAppStore((state) => state.passListing);
   const advanceQueue = useAppStore((state) => state.advanceQueue);
   const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
-  const ensureMatchForListing = useAppStore((state) => state.ensureMatchForListing);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
   const loadExploreListings = useAppStore((state) => state.loadExploreListings);
 
@@ -134,7 +133,6 @@ export default function ExploreCards() {
 
     if (direction === "right") {
       likeListing(topListing.id);
-      ensureMatchForListing(topListing.id);
       setSelectedListingId(topListing.id);
       router.push(`/property-details/${topListing.id}`);
     } else {

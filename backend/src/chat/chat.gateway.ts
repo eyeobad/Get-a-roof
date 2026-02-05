@@ -32,12 +32,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const payload = this.jwtService.verify(token);
       client.data.user = payload;
+      if (payload?.sub) {
+        client.join(payload.sub);
+      }
     } catch (error) {
       client.disconnect();
     }
   }
 
   handleDisconnect(_client: Socket) {}
+
+  emitMessage(message: { matchId?: any; receiverId?: any }) {
+    if (!message) return;
+    const matchId =
+      message.matchId?.toString?.() ??
+      (typeof message.matchId === "string" ? message.matchId : "");
+    const receiverId =
+      message.receiverId?.toString?.() ??
+      (typeof message.receiverId === "string" ? message.receiverId : "");
+    if (matchId) {
+      this.server.to(matchId).emit("message", message);
+    }
+    if (receiverId) {
+      this.server.to(receiverId).emit("conversation:update", message);
+    }
+  }
 
   @SubscribeMessage("join")
   handleJoin(
@@ -69,9 +88,45 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ...body,
       senderId,
     });
-    this.server.to(body.matchId).emit("message", message);
+    this.emitMessage(message);
     client.emit("message:sent", message);
     return message;
+  }
+
+  @SubscribeMessage("typing")
+  async handleTyping(
+    @MessageBody()
+    body: { matchId?: string; isTyping?: boolean },
+    @ConnectedSocket() client: Socket
+  ) {
+    const senderId = client.data.user?.sub;
+    if (!senderId) {
+      throw new WsException("Unauthorized");
+    }
+    if (!body?.matchId) {
+      throw new WsException("matchId is required");
+    }
+
+    try {
+      const participants = await this.chatService.getParticipantIds(body.matchId);
+      const isParticipant =
+        senderId === participants.tenantId || senderId === participants.landlordId;
+      if (!isParticipant) {
+        throw new WsException("Access denied");
+      }
+    } catch (error) {
+      throw new WsException(
+        error instanceof Error ? error.message : "Unable to validate participant"
+      );
+    }
+
+    this.server.to(body.matchId).emit("typing", {
+      matchId: body.matchId,
+      senderId,
+      isTyping: Boolean(body.isTyping),
+    });
+
+    return { ok: true };
   }
 
   @SubscribeMessage("markRead")

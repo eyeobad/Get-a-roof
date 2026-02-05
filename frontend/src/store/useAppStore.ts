@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { listingIds, listingSeed, type Listing } from "@/lib/listings";
 import { apiFetch, buildQuery } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 
 type MatchStatus = "TenantLiked" | "LandlordQualified" | "ChatInitiated" | "Dismissed";
 
@@ -25,6 +26,7 @@ export type ConversationSummary = {
   time?: string;
   image?: string;
   unread?: boolean;
+  unreadCount?: number;
   tenantId?: string;
   landlordId?: string;
 };
@@ -198,16 +200,19 @@ type ApiConversation = {
   matchId?: string;
   tenantId?: string;
   property?: ApiProperty;
+  tenant?: ApiUser;
+  landlord?: ApiUser;
   lastMessage?: { content?: string; timestamp?: string };
   unreadCount?: number;
 };
 
-type ApiMessage = {
+export type ApiMessage = {
   _id?: string;
   senderId?: string;
   receiverId?: string;
   content?: string;
   timestamp?: string;
+  matchId?: string;
 };
 
 type ApiUploadResponse = { url?: string };
@@ -241,6 +246,7 @@ type AppState = {
   selectedThreadId: string | null;
   conversations: ConversationSummary[];
   messagesByMatch: Record<string, ChatMessage[]>;
+  typingByMatch: Record<string, boolean>;
   authToken: string | null;
   userId: string | null;
   user: ApiUser | null;
@@ -249,6 +255,7 @@ type AppState = {
   landlordPropertiesWithMatches: LandlordPropertySummary[];
   landlordMatchesByProperty: Record<string, LandlordMatch[]>;
   setSelectedListingId: (id: string | null) => void;
+  setSelectedThreadId: (id: string | null) => void;
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
   login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
@@ -280,6 +287,7 @@ type AppState = {
   }) => Promise<ApiUser | null>;
   likeListing: (listingId: string) => Promise<void>;
   unlikeListing: (listingId: string) => Promise<void>;
+  createMatchForListing: (listingId: string, tenantLiked: boolean) => Promise<void>;
   toggleLikeListing: (listingId: string) => Promise<void>;
   passListing: (listingId: string) => Promise<void>;
   advanceQueue: () => void;
@@ -292,6 +300,8 @@ type AppState = {
   loadConversations: (options?: { limit?: number; offset?: number }) => Promise<void>;
   loadMessagesForMatch: (matchId: string, options?: { limit?: number; before?: string }) => Promise<void>;
   sendMessage: (matchId: string, receiverId: string, content: string) => Promise<void>;
+  receiveMessage: (message: ApiMessage) => void;
+  receiveTyping: (matchId: string, senderId: string, isTyping: boolean) => void;
   markMatchRead: (matchId: string) => Promise<void>;
   fetchPropertyById: (listingId: string) => Promise<void>;
   setLandlordDraft: (payload: Partial<LandlordDraft>) => void;
@@ -325,6 +335,62 @@ const initialQueue = listingIds;
 const isMongoId = (value?: string | null) =>
   Boolean(value && /^[a-f\d]{24}$/i.test(value));
 
+const resolvePropertyId = (property?: ApiProperty | null) => {
+  if (!property) return "";
+  const raw = property._id ?? property.id;
+  if (!raw) return "";
+  return typeof raw === "string" ? raw : String(raw);
+};
+
+const toIdString = (value?: unknown) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object" && "toString" in (value as any)) {
+    const str = (value as any).toString?.();
+    return typeof str === "string" ? str : "";
+  }
+  return "";
+};
+
+const toTimestamp = (value?: unknown) => {
+  if (!value) return new Date().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return value;
+  const asString = toIdString(value);
+  if (asString) {
+    const date = new Date(asString);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return new Date().toISOString();
+};
+
+const buildMessageId = (message: ApiMessage) => {
+  const id = toIdString((message as any).id ?? message._id);
+  if (id) return id;
+  const senderId = toIdString(message.senderId);
+  const timestamp = toTimestamp(message.timestamp);
+  return `${senderId}:${timestamp}:${message.content ?? ""}`;
+};
+
+const mapApiMessageToChat = (message: ApiMessage): ChatMessage => ({
+  id: buildMessageId(message),
+  senderId: toIdString(message.senderId),
+  content: message.content ?? "",
+  timestamp: toTimestamp(message.timestamp),
+});
+
+const isSameChatMessage = (a: ChatMessage, b: ChatMessage) => {
+  const aId = toIdString(a.id);
+  const bId = toIdString(b.id);
+  if (aId && bId && aId === bId) return true;
+  return (
+    a.senderId === b.senderId &&
+    a.content === b.content &&
+    a.timestamp === b.timestamp
+  );
+};
+
 const formatCurrency = (value?: number) => {
   if (value === undefined || value === null) return "$0";
   try {
@@ -353,7 +419,55 @@ const formatTime = (value?: string) => {
   });
 };
 
+const buildConversationSummary = (
+  item: ApiConversation,
+  currentUserId?: string,
+  currentUser?: ApiUser | null
+) => {
+  const matchId = toIdString(item.matchId);
+  const listing = item.property ? mapPropertyToListing(item.property) : null;
+  const tenantId = item.tenantId ? toIdString(item.tenantId) : undefined;
+  const landlordId = toIdString(
+    item.landlord?.id ?? item.landlord?._id ?? item.property?.landlordId
+  );
+
+  const tenantName = [item.tenant?.firstName, item.tenant?.lastName]
+    .filter(Boolean)
+    .join(" ");
+  const landlordName = [item.landlord?.firstName, item.landlord?.lastName]
+    .filter(Boolean)
+    .join(" ");
+
+  const currentId = toIdString(currentUserId);
+  const isTenant = Boolean(currentId && tenantId && currentId === tenantId);
+  const isLandlord = Boolean(currentId && landlordId && currentId === landlordId);
+
+  const title = isLandlord
+    ? tenantName || "Tenant"
+    : isTenant
+      ? landlordName || "Landlord"
+      : landlordName || tenantName || "Unknown user";
+
+  const otherPhoto = isLandlord
+    ? item.tenant?.photoUrl
+    : item.landlord?.photoUrl || item.tenant?.photoUrl;
+  const summary: ConversationSummary = {
+    id: matchId,
+    listingId: listing?.id,
+    title,
+    preview: item.lastMessage?.content ?? "Start a conversation",
+    time: formatTime(item.lastMessage?.timestamp),
+    image: otherPhoto || listing?.image,
+    unread: (item.unreadCount ?? 0) > 0,
+    unreadCount: item.unreadCount ?? 0,
+    tenantId,
+    landlordId,
+  };
+  return { summary, listing };
+};
+
 const mapPropertyToListing = (property: ApiProperty): Listing => {
+  const propertyId = resolvePropertyId(property);
   const addressParts = [
     property?.address?.street,
     property?.address?.city,
@@ -368,7 +482,7 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
   const sqftValue = property?.sqFt ?? 0;
 
   return {
-    id: property?._id ?? "",
+    id: propertyId,
     image: property?.images?.[0] ?? "/hero.png",
     images: property?.images ?? undefined,
     amenities: property?.amenities ?? undefined,
@@ -406,7 +520,7 @@ const emptyLandlordDraft: LandlordDraft = {
 };
 
 const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySummary => ({
-  id: property?._id ?? property?.id ?? "",
+  id: resolvePropertyId(property),
   status: property?.status,
   title: property?.title ?? property?.address?.street ?? property?.neighborhood,
   price: property?.price ?? property?.monthlyPrice,
@@ -421,7 +535,7 @@ const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySumm
 });
 
 const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
-  id: property?._id ?? property?.id,
+  id: resolvePropertyId(property),
   images: property?.images ?? [],
   monthlyPrice: property?.monthlyPrice,
   address: property?.address,
@@ -519,6 +633,7 @@ export const useAppStore = create<AppState>()(
       selectedThreadId: null,
       conversations: [],
       messagesByMatch: {},
+      typingByMatch: {},
       authToken: null,
       userId: null,
       user: null,
@@ -527,8 +642,19 @@ export const useAppStore = create<AppState>()(
       landlordPropertiesWithMatches: [],
       landlordMatchesByProperty: {},
       setSelectedListingId: (id) => set({ selectedListingId: id }),
+      setSelectedThreadId: (id) => {
+        set({ selectedThreadId: id });
+        const state = get();
+        if (id && state.authToken) {
+          const socket = getSocket(state.authToken);
+          socket?.emit("join", { matchId: id });
+        }
+        if (id) {
+          void get().markMatchRead(id);
+        }
+      },
       setAuth: (token, userId) => set({ authToken: token, userId }),
-      clearAuth: () =>
+      clearAuth: () => {
         set({
           authToken: null,
           userId: null,
@@ -537,7 +663,9 @@ export const useAppStore = create<AppState>()(
           landlordProperties: [],
           landlordPropertiesWithMatches: [],
           landlordMatchesByProperty: {},
-        }),
+        });
+        void fetch("/api/auth/session", { method: "DELETE" });
+      },
       login: async (email, password) => {
         const response = await apiFetch<ApiAuthResponse>(`/api/auth/login`, {
           method: "POST",
@@ -552,6 +680,11 @@ export const useAppStore = create<AppState>()(
         if (userId) {
           set({ authToken: response.accessToken, userId, user: response.user });
         }
+        await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: response.accessToken }),
+        });
         return response;
       },
       registerTenant: async (payload) => {
@@ -659,6 +792,20 @@ export const useAppStore = create<AppState>()(
         });
         return true;
       },
+      createMatchForListing: async (listingId, tenantLiked) => {
+        const state = get();
+        if (!state.authToken || !isMongoId(listingId)) return;
+        try {
+          await apiFetch(`/api/matches`, {
+            method: "POST",
+            body: JSON.stringify({ propertyId: listingId, tenantLiked }),
+            token: state.authToken,
+          });
+          await get().loadMatches();
+        } catch {
+          // Best-effort; ignore errors here to avoid blocking UI.
+        }
+      },
       likeListing: async (listingId) => {
         const state = get();
         if (state.likedIds.includes(listingId)) return;
@@ -668,12 +815,20 @@ export const useAppStore = create<AppState>()(
           selectedListingId: listingId,
         });
 
-        if (state.authToken && state.userId && isMongoId(listingId)) {
-          await apiFetch(`/api/users/${state.userId}/saved-properties`, {
-            method: "POST",
-            body: JSON.stringify({ propertyId: listingId }),
-            token: state.authToken,
-          });
+        if (state.authToken && isMongoId(listingId)) {
+          if (state.userId) {
+            try {
+              await apiFetch(`/api/users/${state.userId}/saved-properties`, {
+                method: "POST",
+                body: JSON.stringify({ propertyId: listingId }),
+                token: state.authToken,
+              });
+            } catch {
+              // Keep match creation independent of saved-properties failures.
+            }
+          }
+
+          await get().createMatchForListing(listingId, true);
         }
       },
       unlikeListing: async (listingId) => {
@@ -682,11 +837,19 @@ export const useAppStore = create<AppState>()(
           likedIds: state.likedIds.filter((id) => id !== listingId),
         });
 
-        if (state.authToken && state.userId && isMongoId(listingId)) {
-          await apiFetch(`/api/users/${state.userId}/saved-properties/${listingId}`, {
-            method: "DELETE",
-            token: state.authToken,
-          });
+        if (state.authToken && isMongoId(listingId)) {
+          if (state.userId) {
+            try {
+              await apiFetch(`/api/users/${state.userId}/saved-properties/${listingId}`, {
+                method: "DELETE",
+                token: state.authToken,
+              });
+            } catch {
+              // Ignore saved-properties failures; still update match state.
+            }
+          }
+
+          await get().createMatchForListing(listingId, false);
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -708,11 +871,7 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          await apiFetch(`/api/matches`, {
-            method: "POST",
-            body: JSON.stringify({ propertyId: listingId, tenantLiked: false }),
-            token: state.authToken,
-          });
+          await get().createMatchForListing(listingId, false);
         }
       },
       advanceQueue: () =>
@@ -734,20 +893,14 @@ export const useAppStore = create<AppState>()(
           selectedThreadId: null,
         })),
       ensureMatchForListing: async (listingId) => {
-        const state = get();
-        if (!state.authToken || !isMongoId(listingId)) return;
-        await apiFetch(`/api/matches`, {
-          method: "POST",
-          body: JSON.stringify({ propertyId: listingId, tenantLiked: true }),
-          token: state.authToken,
-        });
+        await get().createMatchForListing(listingId, true);
       },
       ensureThreadForListing: async (listingId) => {
         const state = get();
         if (!state.authToken || !isMongoId(listingId)) {
           return null;
         }
-        const response = await apiFetch<{ matchId: string }>(`/api/chat/start`, {
+        const response = await apiFetch<ApiConversation>(`/api/chat/start`, {
           method: "POST",
           body: JSON.stringify({ propertyId: listingId }),
           token: state.authToken,
@@ -755,11 +908,37 @@ export const useAppStore = create<AppState>()(
 
         if (!response?.matchId) return null;
 
-        const thread = createThreadObject(listingId, response.matchId);
-        set(({ threadsById }) => ({
-          threadsById: { ...threadsById, [thread.id]: thread },
-          selectedThreadId: thread.id,
-        }));
+        const { summary, listing } = buildConversationSummary(
+          response,
+          state.userId,
+          state.user
+        );
+        if (listing) {
+          set((prev) => ({
+            listingsById: { ...prev.listingsById, [listing.id]: listing },
+          }));
+        }
+        if (summary.id) {
+          set((prev) => {
+            const next = prev.conversations.filter((item) => item.id !== summary.id);
+            return {
+              conversations: [summary, ...next],
+            };
+          });
+        } else {
+          const thread = createThreadObject(listingId, response.matchId);
+          set(({ threadsById }) => ({
+            threadsById: { ...threadsById, [thread.id]: thread },
+            selectedThreadId: thread.id,
+          }));
+        }
+
+        const hasNames =
+          Boolean(response.tenant?.firstName || response.tenant?.lastName) ||
+          Boolean(response.landlord?.firstName || response.landlord?.lastName);
+        if (!hasNames) {
+          await get().loadConversations();
+        }
 
         return response.matchId;
       },
@@ -843,9 +1022,14 @@ export const useAppStore = create<AppState>()(
               listingsById: { ...prev.listingsById, [listing.id]: listing },
             }));
           }
+          const listingId =
+            listing?.id ?? (match.propertyId ? String(match.propertyId) : "");
+          if (listingId && !state.listingsById[listingId]) {
+            void get().fetchPropertyById(listingId);
+          }
           return {
-            id: match._id,
-            listingId: listing?.id ?? match.propertyId,
+            id: toIdString(match._id ?? match.id),
+            listingId,
             status: match.status,
             matchScore: match.matchScore,
             lastMessage: match.lastMessage?.content,
@@ -868,31 +1052,50 @@ export const useAppStore = create<AppState>()(
         });
 
         const conversations = (data ?? []).map((item) => {
-          const listing = item.property ? mapPropertyToListing(item.property) : null;
+          const { summary, listing } = buildConversationSummary(
+            item,
+            state.userId,
+            state.user
+          );
           if (listing) {
             set((prev) => ({
               listingsById: { ...prev.listingsById, [listing.id]: listing },
             }));
           }
-          const title = listing?.address || listing?.neighborhood || "Conversation";
-          return {
-            id: item.matchId,
-            listingId: listing?.id,
-            title,
-            preview: item.lastMessage?.content ?? "Start a conversation",
-            time: formatTime(item.lastMessage?.timestamp),
-            image: listing?.image,
-            unread: (item.unreadCount ?? 0) > 0,
-            tenantId: item.tenantId,
-            landlordId: item.property?.landlordId,
-          } as ConversationSummary;
+          return summary;
         });
 
-        set({ conversations });
+        if (!conversations.length) {
+          if (state.conversations.length) return;
+          set({ conversations: [] });
+          return;
+        }
+
+        set((prev) => {
+          const prevById = new Map(prev.conversations.map((item) => [item.id, item]));
+          const merged = conversations.map((next) => {
+            const prevItem = prevById.get(next.id);
+            if (!prevItem) return next;
+            const nextTitle = next.title?.trim();
+            const prevTitle = prevItem.title?.trim();
+            const usePrevTitle =
+              (!nextTitle || nextTitle === "Unknown user") &&
+              prevTitle &&
+              prevTitle !== "Unknown user";
+
+            return {
+              ...prevItem,
+              ...next,
+              title: usePrevTitle ? prevTitle : next.title,
+              image: next.image || prevItem.image,
+            };
+          });
+          return { conversations: merged };
+        });
       },
       loadMessagesForMatch: async (matchId, options) => {
         const state = get();
-        if (!state.authToken) return;
+        if (!state.authToken || !isMongoId(matchId)) return;
         const query = buildQuery({
           matchId,
           limit: options?.limit ?? 50,
@@ -902,12 +1105,7 @@ export const useAppStore = create<AppState>()(
           token: state.authToken,
         });
         const messages = (data ?? [])
-          .map((message) => ({
-            id: message._id,
-            senderId: message.senderId,
-            content: message.content,
-            timestamp: message.timestamp,
-          }))
+          .map(mapApiMessageToChat)
           .reverse();
 
         set((prev) => ({
@@ -916,7 +1114,7 @@ export const useAppStore = create<AppState>()(
       },
       sendMessage: async (matchId, receiverId, content) => {
         const state = get();
-        if (!state.authToken) return;
+        if (!state.authToken || !isMongoId(matchId)) return;
         const message = await apiFetch<ApiMessage>(`/api/chat`, {
           method: "POST",
           body: JSON.stringify({ matchId, receiverId, content }),
@@ -925,23 +1123,125 @@ export const useAppStore = create<AppState>()(
 
         if (!message) return;
 
-        const nextMessage: ChatMessage = {
-          id: message._id,
-          senderId: message.senderId,
-          content: message.content,
-          timestamp: message.timestamp,
-        };
+        const nextMessage = mapApiMessageToChat(message);
+        const messageId = nextMessage.id;
 
+        const nextTime = formatTime(nextMessage.timestamp);
+        set((prev) => {
+          const currentMessages = prev.messagesByMatch[matchId] ?? [];
+          const alreadyExists = currentMessages.some((existing) =>
+            isSameChatMessage(existing, nextMessage)
+          );
+          const nextMessages = alreadyExists
+            ? currentMessages
+            : [...currentMessages, nextMessage];
+
+          const updated = prev.conversations.map((conversation) =>
+            conversation.id === matchId
+              ? {
+                  ...conversation,
+                  preview: nextMessage.content,
+                  time: nextTime,
+                  unread: false,
+                  unreadCount: 0,
+                }
+              : conversation
+          );
+          const active = updated.find((conversation) => conversation.id === matchId);
+          const reordered = active
+            ? [active, ...updated.filter((conversation) => conversation.id !== matchId)]
+            : updated;
+
+          return {
+            messagesByMatch: {
+              ...prev.messagesByMatch,
+              [matchId]: nextMessages,
+            },
+            conversations: reordered,
+          };
+        });
+      },
+      receiveMessage: (incoming) => {
+        const state = get();
+        const matchId = toIdString(incoming.matchId);
+        if (!matchId) return;
+
+        const senderId = toIdString(incoming.senderId);
+        const nextMessage = mapApiMessageToChat(incoming);
+        const messageId = nextMessage.id;
+        const hasConversation = state.conversations.some(
+          (conversation) => conversation.id === matchId
+        );
+        const shouldCountUnread =
+          senderId !== state.userId && state.selectedThreadId !== matchId;
+
+        set((prev) => {
+          const currentMessages = prev.messagesByMatch[matchId] ?? [];
+          const alreadyExists = currentMessages.some((message) =>
+            isSameChatMessage(message, nextMessage)
+          );
+          const nextMessages = alreadyExists
+            ? currentMessages
+            : [...currentMessages, nextMessage];
+
+          const updatedConversations = prev.conversations.map((conv) => {
+            if (conv.id !== matchId) return conv;
+            const nextUnreadCount = shouldCountUnread
+              ? (conv.unreadCount ?? 0) + 1
+              : 0;
+            return {
+              ...conv,
+              preview: nextMessage.content || conv.preview,
+              time: formatTime(nextMessage.timestamp),
+              unread: nextUnreadCount > 0,
+              unreadCount: nextUnreadCount,
+            };
+          });
+
+          if (!updatedConversations.some((conv) => conv.id === matchId)) {
+            const placeholder: ConversationSummary = {
+              id: matchId,
+              title: senderId === state.userId ? "Conversation" : "New message",
+              preview: nextMessage.content || "Start a conversation",
+              time: formatTime(nextMessage.timestamp),
+              image: "/hero.png",
+              unread: shouldCountUnread,
+              unreadCount: shouldCountUnread ? 1 : 0,
+            };
+            updatedConversations.unshift(placeholder);
+          }
+
+          const updatedIndex = updatedConversations.findIndex(
+            (conv) => conv.id === matchId
+          );
+          if (updatedIndex > 0) {
+            const [updatedConv] = updatedConversations.splice(updatedIndex, 1);
+            updatedConversations.unshift(updatedConv);
+          }
+
+          return {
+            messagesByMatch: {
+              ...prev.messagesByMatch,
+              [matchId]: nextMessages,
+            },
+            conversations: updatedConversations,
+          };
+        });
+
+        if (!hasConversation) {
+          void get().loadConversations();
+        }
+      },
+      receiveTyping: (matchId, senderId, isTyping) => {
+        const state = get();
+        if (!matchId || senderId === state.userId) return;
         set((prev) => ({
-          messagesByMatch: {
-            ...prev.messagesByMatch,
-            [matchId]: [...(prev.messagesByMatch[matchId] ?? []), nextMessage],
-          },
+          typingByMatch: { ...prev.typingByMatch, [matchId]: isTyping },
         }));
       },
       markMatchRead: async (matchId) => {
         const state = get();
-        if (!state.authToken) return;
+        if (!state.authToken || !isMongoId(matchId)) return;
         await apiFetch(`/api/chat/mark-read`, {
           method: "PATCH",
           body: JSON.stringify({ matchId }),
@@ -950,7 +1250,7 @@ export const useAppStore = create<AppState>()(
         set((prev) => ({
           conversations: prev.conversations.map((conversation) =>
             conversation.id === matchId
-              ? { ...conversation, unread: false }
+              ? { ...conversation, unread: false, unreadCount: 0 }
               : conversation
           ),
         }));
@@ -1124,9 +1424,9 @@ export const useAppStore = create<AppState>()(
             { token: state.authToken }
           );
           const matches = (data ?? []).map((match) => ({
-            id: match?._id ?? match?.id ?? "",
-            propertyId: match?.propertyId,
-            tenantId: match?.tenantId,
+            id: toIdString(match?._id ?? match?.id),
+            propertyId: match?.propertyId ? String(match.propertyId) : "",
+            tenantId: match?.tenantId ? String(match.tenantId) : "",
             status: match?.status,
             matchScore: match?.matchScore,
             preferencesMatchPercentage: match?.preferencesMatchPercentage,
@@ -1200,6 +1500,7 @@ export const useAppStore = create<AppState>()(
         selectedThreadId: state.selectedThreadId,
         conversations: state.conversations,
         messagesByMatch: state.messagesByMatch,
+        typingByMatch: state.typingByMatch,
         authToken: state.authToken,
         userId: state.userId,
         user: state.user,

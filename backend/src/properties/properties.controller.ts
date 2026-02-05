@@ -9,7 +9,12 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { Express } from "express";
+import * as multer from "multer";
 import { Request } from "express";
 import { PropertiesService } from "./properties.service";
 import { CreatePropertyDto } from "./dto/create-property.dto";
@@ -29,15 +34,27 @@ export class PropertiesController {
   @Post("upload-image")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Landlord)
-  uploadImage(@Body() body: { fileName?: string }) {
-    return this.propertiesService.uploadImageStub(body?.fileName);
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    })
+  )
+  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+    return this.propertiesService.uploadImage(file);
   }
 
   @Post("upload-proof")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Landlord)
-  uploadProof(@Body() body: { fileName?: string }) {
-    return this.propertiesService.uploadImageStub(body?.fileName);
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    })
+  )
+  uploadProof(@UploadedFile() file?: Express.Multer.File) {
+    return this.propertiesService.uploadProof(file);
   }
 
   @Post()

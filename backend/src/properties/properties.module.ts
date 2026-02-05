@@ -4,6 +4,7 @@ import { PropertiesController } from "./properties.controller";
 import { PropertiesService } from "./properties.service";
 import { Property, PropertySchema } from "./schemas/property.schema";
 import { UsersModule } from "../users/users.module";
+import { AppwriteModule } from "../appwrite/appwrite.module";
 import { Match, MatchSchema } from "../matches/schemas/match.schema";
 
 @Module({
@@ -11,6 +12,7 @@ import { Match, MatchSchema } from "../matches/schemas/match.schema";
     MongooseModule.forFeature([{ name: Property.name, schema: PropertySchema }]),
     MongooseModule.forFeature([{ name: Match.name, schema: MatchSchema }]),
     UsersModule,
+    AppwriteModule,
   ],
   controllers: [PropertiesController],
   providers: [PropertiesService],

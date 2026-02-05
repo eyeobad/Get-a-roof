@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Work_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import "mapbox-gl/dist/mapbox-gl.css";
+import SocketBridge from "@/components/SocketBridge";
 import "./globals.css";
 
 const workSans = Work_Sans({
@@ -18,7 +19,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link
           rel="stylesheet"
@@ -31,6 +32,7 @@ export default function RootLayout({
       </head>
       <body className={`${workSans.className} antialiased`}>
         {children}
+        <SocketBridge />
         <Toaster
           richColors
           position="bottom-center"

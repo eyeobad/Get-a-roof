@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { CSSProperties } from "react";
+import { useEffect, useMemo } from "react";
+import { useAppStore } from "@/store/useAppStore";
 
 type NavItemId = "properties" | "matches" | "chat" | "profile";
 
@@ -21,7 +23,7 @@ const iconStyle: CSSProperties = {
 const NAV_ITEMS: Array<{ id: NavItemId; label: string; icon: string; href: string }> = [
   { id: "properties", label: "Properties", icon: "dashboard", href: "/dashboard/properties" },
   { id: "matches", label: "Matches", icon: "handshake", href: "/dashboard/matches" },
-  { id: "chat", label: "Chat", icon: "chat_bubble", href: "/messages" },
+  { id: "chat", label: "Chat", icon: "chat_bubble", href: "/dashboard/messages" },
   { id: "profile", label: "Profile", icon: "person", href: "/dashboard/profile" },
 ];
 
@@ -33,10 +35,36 @@ export default function DashboardBottomNav({
   containerClassName = "max-w-md h-full w-full mx-auto flex items-center justify-between px-4",
 }: DashboardBottomNavProps) {
   const pathname = usePathname();
+  const authToken = useAppStore((state) => state.authToken);
+  const conversations = useAppStore((state) => state.conversations);
+  const loadConversations = useAppStore((state) => state.loadConversations);
   const current =
     active ??
-    (pathname?.startsWith("/dashboard/matches") ? "matches" : pathname?.startsWith("/dashboard/properties") ? "properties" : pathname?.startsWith("/dashboard/profile") ? "profile" : undefined) ??
+    (pathname?.startsWith("/dashboard/matches") ? "matches" : pathname?.startsWith("/dashboard/properties") ? "properties" : pathname?.startsWith("/dashboard/profile") ? "profile" : pathname?.startsWith("/dashboard/messages") ? "chat" : undefined) ??
     (pathname === "/messages" ? "chat" : undefined);
+
+  useEffect(() => {
+    if (authToken) {
+      void loadConversations();
+    }
+  }, [authToken, loadConversations]);
+
+  const unreadCount = useMemo(
+    () =>
+      conversations.reduce(
+        (sum, item) =>
+          sum +
+          (typeof item.unreadCount === "number"
+            ? item.unreadCount
+            : item.unread
+              ? 1
+              : 0),
+        0
+      ),
+    [conversations]
+  );
+  const resolvedBadge =
+    typeof chatBadge === "number" ? chatBadge : unreadCount;
 
   return (
     <nav
@@ -47,13 +75,10 @@ export default function DashboardBottomNav({
     >
       <div className={containerClassName}>
         {NAV_ITEMS.map((item) => {
-          if (item.id === "chat" && chatBadge !== undefined) {
-            // keep badge logic in render to avoid unused variable warning
-          }
           const isActive = current === item.id;
           const href =
             item.id === "chat" && chatHref ? chatHref : item.href;
-          const badge = item.id === "chat" ? chatBadge : undefined;
+          const badge = item.id === "chat" ? resolvedBadge : undefined;
           return (
             <Link
               key={item.id}

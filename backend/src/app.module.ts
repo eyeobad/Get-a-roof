@@ -9,6 +9,8 @@ import { MatchesModule } from "./matches/matches.module";
 import { ChatModule } from "./chat/chat.module";
 import { VerificationModule } from "./verification/verification.module";
 import { LandlordModule } from "./landlord/landlord.module";
+import { MailModule } from "./mail/mail.module";
+import { AppwriteModule } from "./appwrite/appwrite.module";
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { LandlordModule } from "./landlord/landlord.module";
     ChatModule,
     VerificationModule,
     LandlordModule,
+    MailModule,
+    AppwriteModule,
   ],
   controllers: [AppController],
 })

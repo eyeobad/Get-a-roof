@@ -132,18 +132,6 @@ export default function TenantProfilePage() {
           <>
             <section className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 space-y-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                Contact
-              </h2>
-              <p className="text-sm text-gray-700">
-                Email: {tenant?.email ?? "Not provided"}
-              </p>
-              <p className="text-sm text-gray-700">
-                Phone: {tenant?.phoneNumber ?? "Not provided"}
-              </p>
-            </section>
-
-            <section className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                 Preferences
               </h2>
               <div className="text-sm text-gray-700 space-y-2">

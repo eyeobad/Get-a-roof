@@ -170,11 +170,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   const showDashboardNav =
     isDashboardRoute ||
     (pathname === "/messages" && dashboardSources.has(fromParam));
-  const shouldPassFromParam =
-    pathname === "/dashboard/properties" || pathname === "/dashboard/matches";
-  const chatHref = shouldPassFromParam
-    ? `/messages?from=${encodeURIComponent(pathname ?? "")}`
-    : "/messages";
+  const chatHref = "/dashboard/messages";
 
   if (!showDashboardNav) {
     return (
@@ -195,7 +191,6 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   return (
     <DashboardBottomNav
       active={active}
-      chatBadge={2}
       chatHref={chatHref}
       rootClassName="h-20"
       containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"

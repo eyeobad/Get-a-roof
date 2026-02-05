@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 
@@ -26,6 +26,7 @@ type MatchCard = {
   avatarUrl: string;
   verified?: boolean;
   tenantId?: string;
+  chatHref: string;
 };
 
 function MatchCardView({ match }: { match: MatchCard }) {
@@ -92,7 +93,7 @@ function MatchCardView({ match }: { match: MatchCard }) {
 
       <div className="flex gap-3">
         <Link
-          href={`/messages?thread=${match.id}`}
+          href={match.chatHref}
           className="w-14 h-14 rounded-full border-2 border-[#0a44b8]/30 flex items-center justify-center text-[#0a44b8]"
           aria-label={`Chat with ${match.name}`}
         >
@@ -119,8 +120,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   return (
     <DashboardBottomNav
       active={active}
-      chatBadge={2}
-      chatHref="/messages"
+      chatHref="/dashboard/messages"
       rootClassName="py-2 shadow flex justify-around bg-white border-t z-50"
       containerClassName="flex justify-between items-end h-14 w-full max-w-md mx-auto"
     />
@@ -140,6 +140,7 @@ export default function LandlordMatchesPage() {
   const markLandlordPropertyMatchesSeen = useAppStore(
     (state) => state.markLandlordPropertyMatchesSeen
   );
+  const [isLoading, setIsLoading] = useState(false);
 
   const matches = useMemo<MatchCard[]>(() => {
     return landlordMatches.map((match) => {
@@ -192,9 +193,10 @@ export default function LandlordMatchesPage() {
         avatarUrl: tenant?.photoUrl ?? "https://i.pravatar.cc/100?img=32",
         verified: tenant?.isVerified ?? false,
         tenantId: tenant?.id ?? match.tenantId,
+        chatHref: `/dashboard/messages?thread=${match.id}`,
       };
     });
-  }, [landlordMatches]);
+  }, [landlordMatches, propertyId]);
 
   const newCount = useMemo(
     () => landlordMatches.filter((match) => match.isNewForLandlord).length,
@@ -203,32 +205,53 @@ export default function LandlordMatchesPage() {
 
   useEffect(() => {
     if (!authToken || !propertyId) return;
-    void loadLandlordPropertyMatches(propertyId);
-    void markLandlordPropertyMatchesSeen(propertyId);
-  }, [authToken, propertyId, loadLandlordPropertyMatches, markLandlordPropertyMatchesSeen]);
+    let active = true;
+    setIsLoading(true);
+    (async () => {
+      await loadLandlordPropertyMatches(propertyId);
+      await markLandlordPropertyMatchesSeen(propertyId);
+      if (active) {
+        setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [
+    authToken,
+    propertyId,
+    loadLandlordPropertyMatches,
+    markLandlordPropertyMatchesSeen,
+  ]);
 
   return (
     <div className="min-h-screen bg-[#fcfbf8] text-gray-900 font-display antialiased pb-24">
       {/* Header */}
-      <header className="sticky top-0 bg-[#0a44b8] text-white px-4 py-4 shadow-md z-50">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Matches</h1>
-          <button
-            type="button"
-            className="w-11 h-11 rounded-full hover:bg-white/10 flex items-center justify-center"
-            aria-label="Filter matches"
-          >
-            <span className="material-symbols-outlined text-2xl">tune</span>
-          </button>
+      <header className="sticky top-0 bg-[#0a44b8] text-white shadow-md z-50">
+        <div className="mx-auto w-full max-w-3xl px-4 py-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold">Matches</h1>
+            <button
+              type="button"
+              className="w-11 h-11 rounded-full hover:bg-white/10 flex items-center justify-center"
+              aria-label="Filter matches"
+            >
+              <span className="material-symbols-outlined text-2xl">tune</span>
+            </button>
+          </div>
+          <p className="text-sm opacity-80 mt-1">
+            {newCount} new match{newCount === 1 ? "" : "es"} waiting for review
+          </p>
         </div>
-        <p className="text-sm opacity-80 mt-1">
-          {newCount} new match{newCount === 1 ? "" : "es"} waiting for review
-        </p>
       </header>
 
       {/* Content */}
-      <main className="px-4 py-6 space-y-6">
-        {matches.length ? (
+      <main className="mx-auto w-full max-w-3xl px-4 py-6 space-y-6">
+        {isLoading ? (
+          <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
+            Loading matches...
+          </div>
+        ) : matches.length ? (
           matches.map((match) => <MatchCardView key={match.id} match={match} />)
         ) : authToken ? (
           <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
@@ -240,7 +263,7 @@ export default function LandlordMatchesPage() {
           </div>
         )}
 
-        {!matches.length ? (
+        {!matches.length && !isLoading ? (
           <div className="text-center text-gray-500 mt-6">
             <span className="material-symbols-outlined text-4xl">check</span>
             <p className="mt-2 font-medium">You&apos;re all caught up!</p>
@@ -248,7 +271,7 @@ export default function LandlordMatchesPage() {
         ) : null}
       </main>
 
-      <BottomNav  className="pb-6"active="matches"/>
+      <BottomNav active="matches" />
     </div>
   );
 }

@@ -9,8 +9,12 @@ import {
   Post,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
-import { Request } from "express";
+import { Express, Request } from "express";
+import { FileInterceptor } from "@nestjs/platform-express";
+import * as multer from "multer";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -113,5 +117,34 @@ export class UsersController {
       isVerified: user.isVerified,
       verificationStatus: user.verificationStatus,
     };
+  }
+
+  @Post(":id/photo")
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    })
+  )
+  uploadPhoto(
+    @Param("id") id: string,
+    @UploadedFile() file?: Express.Multer.File,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService.uploadProfilePhoto(id, file);
+  }
+
+  @Delete(":id")
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@Param("id") id: string, @Req() req: Request & { user?: any }) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    await this.usersService.deleteUser(id);
+    return { success: true };
   }
 }

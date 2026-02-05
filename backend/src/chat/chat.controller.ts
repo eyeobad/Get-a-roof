@@ -3,16 +3,22 @@ import { Request } from "express";
 import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ChatGateway } from "./chat.gateway";
 
 @Controller("api/chat")
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly chatGateway: ChatGateway
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  create(@Body() dto: CreateChatDto, @Req() req: Request & { user?: any }) {
+  async create(@Body() dto: CreateChatDto, @Req() req: Request & { user?: any }) {
     dto.senderId = req.user?.sub;
-    return this.chatService.createMessage(dto);
+    const message = await this.chatService.createMessage(dto);
+    this.chatGateway.emitMessage(message);
+    return message;
   }
 
   @Post("start")

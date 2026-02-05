@@ -119,16 +119,25 @@ export class MatchesService {
   }
 
   async countByProperty(propertyId: string) {
+    const propertyIdString = propertyId?.toString?.() ?? propertyId;
     return this.matchModel
-      .countDocuments({ propertyId, status: { $ne: MatchStatus.Dismissed } })
+      .countDocuments({
+        status: { $ne: MatchStatus.Dismissed },
+        $expr: {
+          $eq: [{ $toString: "$propertyId" }, propertyIdString],
+        },
+      })
       .exec();
   }
 
   async countNewByProperty(propertyId: string) {
+    const propertyIdString = propertyId?.toString?.() ?? propertyId;
     return this.matchModel
       .countDocuments({
-        propertyId,
         status: { $ne: MatchStatus.Dismissed },
+        $expr: {
+          $eq: [{ $toString: "$propertyId" }, propertyIdString],
+        },
         $or: [
           { landlordSeenAt: { $exists: false } },
           { landlordSeenAt: null },
@@ -142,12 +151,14 @@ export class MatchesService {
     if (!propertyIds.length) {
       return [];
     }
-    const objectIds = propertyIds.map((id) => new Types.ObjectId(id));
+    const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          propertyId: { $in: objectIds },
           status: { $ne: MatchStatus.Dismissed },
+          $expr: {
+            $in: [{ $toString: "$propertyId" }, idStrings],
+          },
         },
       },
       {
@@ -165,12 +176,14 @@ export class MatchesService {
     if (!propertyIds.length) {
       return [];
     }
-    const objectIds = propertyIds.map((id) => new Types.ObjectId(id));
+    const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          propertyId: { $in: objectIds },
           status: { $ne: MatchStatus.Dismissed },
+          $expr: {
+            $in: [{ $toString: "$propertyId" }, idStrings],
+          },
           $or: [
             { landlordSeenAt: { $exists: false } },
             { landlordSeenAt: null },
@@ -190,29 +203,64 @@ export class MatchesService {
   }
 
   async findPropertyIdsWithMatches(landlordPropertyIds: string[]) {
-    return this.matchModel
-      .find({
-        propertyId: { $in: landlordPropertyIds },
-        status: { $ne: MatchStatus.Dismissed },
-      })
-      .distinct("propertyId")
+    if (!landlordPropertyIds.length) {
+      return [];
+    }
+    const idStrings = landlordPropertyIds.map(
+      (id) => id?.toString?.() ?? id
+    );
+    const results = await this.matchModel
+      .aggregate([
+        {
+          $match: {
+            status: { $ne: MatchStatus.Dismissed },
+            $expr: {
+              $in: [{ $toString: "$propertyId" }, idStrings],
+            },
+          },
+        },
+        { $group: { _id: "$propertyId" } },
+      ])
       .exec();
+    return results.map((item: any) => item._id);
   }
 
   async getPropertyMatchesWithTenant(propertyId: string) {
-    const propertyObjectId = new Types.ObjectId(propertyId);
+    const propertyIdString = propertyId?.toString?.() ?? propertyId;
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          propertyId: propertyObjectId,
           status: { $ne: MatchStatus.Dismissed },
+          $expr: {
+            $eq: [{ $toString: "$propertyId" }, propertyIdString],
+          },
         },
       },
       {
         $lookup: {
           from: "users",
-          localField: "tenantId",
-          foreignField: "_id",
+          let: { tenantId: "$tenantId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: [{ $toString: "$_id" }, { $toString: "$$tenantId" }],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                firstName: 1,
+                lastName: 1,
+                email: 1,
+                phoneNumber: 1,
+                photoUrl: 1,
+                isVerified: 1,
+                preferences: 1,
+              },
+            },
+          ],
           as: "tenant",
         },
       },
@@ -235,7 +283,12 @@ export class MatchesService {
             $cond: [
               {
                 $or: [
-                  { $eq: ["$landlordSeenAt", null] },
+                  {
+                    $eq: [
+                      { $ifNull: ["$landlordSeenAt", null] },
+                      null,
+                    ],
+                  },
                   { $gt: ["$updatedAt", "$landlordSeenAt"] },
                 ],
               },
@@ -274,30 +327,46 @@ export class MatchesService {
     if (!landlordPropertyIds.length) {
       return false;
     }
-    const exists = await this.matchModel
-      .exists({
-        tenantId,
-        propertyId: { $in: landlordPropertyIds },
-        status: { $ne: MatchStatus.Dismissed },
-      })
-      .exec();
+    const idStrings = landlordPropertyIds.map(
+      (id) => id?.toString?.() ?? id
+    );
+    const exists = await this.matchModel.exists({
+      status: { $ne: MatchStatus.Dismissed },
+      $expr: {
+        $and: [
+          { $in: [{ $toString: "$propertyId" }, idStrings] },
+          { $eq: [{ $toString: "$tenantId" }, tenantId] },
+        ],
+      },
+    });
     return Boolean(exists);
   }
 
   async getTenantMatches(tenantId: string) {
+    if (!Types.ObjectId.isValid(tenantId)) {
+      throw new BadRequestException("Invalid tenantId");
+    }
     const tenantObjectId = new Types.ObjectId(tenantId);
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          tenantId: tenantObjectId,
           status: { $ne: MatchStatus.Dismissed },
+          $or: [{ tenantId: tenantObjectId }, { tenantId }],
         },
       },
       {
         $lookup: {
           from: "properties",
-          localField: "propertyId",
-          foreignField: "_id",
+          let: { propId: "$propertyId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: [{ $toString: "$_id" }, { $toString: "$$propId" }],
+                },
+              },
+            },
+          ],
           as: "property",
         },
       },
@@ -305,9 +374,15 @@ export class MatchesService {
       {
         $lookup: {
           from: "messages",
-          let: { matchId: "$_id" },
+          let: { matchId: "$_id", currentUserId: tenantId },
           pipeline: [
-            { $match: { $expr: { $eq: ["$matchId", "$$matchId"] } } },
+            {
+              $match: {
+                $expr: {
+                  $eq: [{ $toString: "$matchId" }, { $toString: "$$matchId" }],
+                },
+              },
+            },
             { $sort: { timestamp: -1 } },
             {
               $group: {
@@ -318,7 +393,12 @@ export class MatchesService {
                     $cond: [
                       {
                         $and: [
-                          { $eq: ["$receiverId", tenantObjectId] },
+                          {
+                            $eq: [
+                              { $toString: "$receiverId" },
+                              "$$currentUserId",
+                            ],
+                          },
                           { $eq: ["$isRead", false] },
                         ],
                       },

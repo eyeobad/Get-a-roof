@@ -126,8 +126,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   return (
     <DashboardBottomNav
       active={active}
-      chatBadge={2}
-      chatHref="/messages?from=/dashboard/matches"
+      chatHref="/dashboard/messages"
       rootClassName="px-6 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"
       containerClassName="flex justify-between items-end h-14 max-w-md mx-auto"
     />

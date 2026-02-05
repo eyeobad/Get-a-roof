@@ -1,19 +1,31 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import * as bcrypt from "bcrypt";
+import { Express } from "express";
+import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { User, UserDocument } from "./schemas/user.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
+import { Property, PropertyDocument } from "../properties/schemas/property.schema";
+import { Match, MatchDocument } from "../matches/schemas/match.schema";
+import { Message, MessageDocument } from "../chat/schemas/message.schema";
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
+    @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
+    @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
+    private readonly appwriteStorage: AppwriteStorageService
+  ) {}
 
   async createUser(dto: CreateUserDto) {
     const email = dto.email.toLowerCase();
@@ -154,6 +166,74 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
     return updated;
+  }
+
+  async deleteUser(id: string) {
+    const user = await this.userModel.findById(id).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const userObjectId = new Types.ObjectId(user.id);
+    const isLandlord = user.role === "Landlord";
+
+    let landlordPropertyIds: Types.ObjectId[] = [];
+    if (isLandlord) {
+      const propertyIds = await this.propertyModel
+        .find({ landlordId: userObjectId })
+        .distinct("_id")
+        .exec();
+      landlordPropertyIds = propertyIds.map((pid) => new Types.ObjectId(pid));
+      if (landlordPropertyIds.length) {
+        await this.propertyModel.deleteMany({
+          _id: { $in: landlordPropertyIds },
+        });
+      }
+    }
+
+    const matchFilter: Record<string, unknown> = {
+      $or: [{ tenantId: userObjectId }],
+    };
+    if (landlordPropertyIds.length) {
+      (matchFilter.$or as Array<Record<string, unknown>>).push({
+        propertyId: { $in: landlordPropertyIds },
+      });
+    }
+
+    const matchIds = await this.matchModel
+      .find(matchFilter)
+      .distinct("_id")
+      .exec();
+    if (matchIds.length) {
+      await this.messageModel.deleteMany({
+        matchId: { $in: matchIds.map((mid) => new Types.ObjectId(mid)) },
+      });
+    }
+    await this.matchModel.deleteMany(matchFilter);
+
+    const deleted = await this.userModel.findByIdAndDelete(id).exec();
+    return deleted;
+  }
+
+  async uploadProfilePhoto(id: string, file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException("File is required");
+    }
+    const result = await this.appwriteStorage.uploadFile(
+      file.originalname ?? file.filename ?? `profile-${Date.now()}`,
+      file.buffer,
+      file.mimetype ?? "image/jpeg"
+    );
+    if (!result?.url) {
+      throw new BadRequestException("Unable to upload file");
+    }
+    const updated = await this.userModel
+      .findByIdAndUpdate(id, { photoUrl: result.url }, { new: true })
+      .exec();
+    if (!updated) {
+      throw new NotFoundException("User not found");
+    }
+    return this.sanitizeUser(updated);
   }
 
   sanitizeUser(user: UserDocument) {

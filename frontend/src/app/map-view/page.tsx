@@ -18,6 +18,7 @@ type ListingCard = {
   tag?: string;
   image: string;
   isExact: boolean;
+  isSaved?: boolean;
 };
 
 type MapPoint = {
@@ -120,7 +121,13 @@ function EmptyState({
   );
 }
 
-function PropertyCard({ item }: { item: ListingCard }) {
+function PropertyCard({
+  item,
+  onToggleSave,
+}: {
+  item: ListingCard;
+  onToggleSave?: (id: string) => void;
+}) {
   return (
     <article className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden group cursor-pointer transform transition active:scale-[0.99]">
       <div className="relative h-48 overflow-hidden">
@@ -130,11 +137,19 @@ function PropertyCard({ item }: { item: ListingCard }) {
           fill
           className="object-cover transition duration-500 group-hover:scale-105"
         />
-        <div className="absolute top-3 right-3 bg-white/90 p-1.5 rounded-full shadow-sm">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleSave?.(item.id);
+          }}
+          className="absolute top-3 right-3 bg-white/90 p-1.5 rounded-full shadow-sm hover:bg-white transition"
+          aria-label={item.isSaved ? "Remove saved listing" : "Save listing"}
+        >
           <span className="material-symbols-outlined text-xl text-gray-400">
-            favorite_border
+            {item.isSaved ? "favorite" : "favorite_border"}
           </span>
-        </div>
+        </button>
         <div className="absolute bottom-3 left-3 bg-primary text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
           {item.tag ?? "Listing"}
         </div>
@@ -452,6 +467,8 @@ export default function MapView() {
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
   const matchSummaries = useAppStore((state) => state.matchSummaries);
   const loadMatches = useAppStore((state) => state.loadMatches);
+  const likedIds = useAppStore((state) => state.likedIds);
+  const toggleLikeListing = useAppStore((state) => state.toggleLikeListing);
   const authToken = useAppStore((state) => state.authToken);
   const listingsById = useAppStore((state) => state.listingsById);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -500,9 +517,10 @@ export default function MapView() {
         tag: listing.tag,
         image: listing.image,
         isExact,
+        isSaved: likedIds.includes(listing.id),
       };
     });
-  }, [sourceListings, acceptedIds, authToken]);
+  }, [sourceListings, acceptedIds, authToken, likedIds]);
 
   const mapPoints = useMemo<MapPoint[]>(() => {
     return sourceListings
@@ -876,7 +894,13 @@ export default function MapView() {
                 ctaHref="/explore"
               />
             ) : (
-              listItems.map((item) => <PropertyCard key={item.id} item={item} />)
+              listItems.map((item) => (
+                <PropertyCard
+                  key={item.id}
+                  item={item}
+                  onToggleSave={toggleLikeListing}
+                />
+              ))
             )}
             <div className="h-8" />
           </main>
@@ -914,7 +938,13 @@ export default function MapView() {
                 ctaHref="/explore"
               />
             ) : (
-              listItems.map((item) => <PropertyCard key={item.id} item={item} />)
+              listItems.map((item) => (
+                <PropertyCard
+                  key={item.id}
+                  item={item}
+                  onToggleSave={toggleLikeListing}
+                />
+              ))
             )}
             {!showEmptyState && <div className="h-10" />}
           </div>
