@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 
@@ -17,6 +17,7 @@ export default function AddPropertyDetailsPage() {
   const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
   const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
   const uploadLandlordProof = useAppStore((state) => state.uploadLandlordProof);
+
   const [initialized, setInitialized] = useState(false);
   const [location, setLocation] = useState("");
   const [rent, setRent] = useState("");
@@ -33,67 +34,39 @@ export default function AddPropertyDetailsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const count = useMemo(() => desc.length, [desc]);
   const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
   const bathOptions = useMemo(() => [1, 2, 3, 4], []);
   const sqftOptions = useMemo(() => [500, 750, 1000, 1500, 2000], []);
-  const amenityOptions = useMemo(
-    () => [
-      { label: "Local Laundry Service", icon: "local_laundry_service" },
-      { label: "AC Unit", icon: "ac_unit" },
-      { label: "Directions Car", icon: "directions_car" },
-      { label: "Elevator", icon: "elevator" },
-      { label: "Security", icon: "security" },
-      { label: "Gym", icon: "fitness_center" },
-      { label: "Pool", icon: "pool" },
-      { label: "Generator", icon: "bolt" },
-    ],
-    []
-  );
-  const propertyTypeLookup = useMemo(
-    () =>
-      new Map(
-        PROPERTY_TYPE_OPTIONS.map((option) => [
-          option.value.toLowerCase().replace(/[\s_-]/g, ""),
-          option.value,
-        ])
-      ),
-    []
-  );
+  
+  const amenityOptions = useMemo(() => [
+    { label: "Local Laundry Service", icon: "local_laundry_service" },
+    { label: "AC Unit", icon: "ac_unit" },
+    { label: "Parking Space", icon: "directions_car" },
+    { label: "Elevator", icon: "elevator" },
+    { label: "Security", icon: "security" },
+    { label: "Gym", icon: "fitness_center" },
+    { label: "Pool", icon: "pool" },
+    { label: "Generator", icon: "bolt" },
+  ], []);
 
+  // Sync Draft to Local State on mount
   useEffect(() => {
     if (initialized) return;
-    setLocation(draft.address?.street ?? "");
-    setRent(
-      draft.monthlyPrice !== undefined
-        ? String(Math.round(draft.monthlyPrice * 12))
-        : ""
-    );
-    const rawType = draft.propertyType ?? "";
-    const normalizedType = rawType
-      ? rawType.toLowerCase().replace(/[\s_-]/g, "")
-      : "";
-    if (!rawType) {
-      setPropertyType("");
-    } else {
-      setPropertyType(propertyTypeLookup.get(normalizedType) ?? "other");
-    }
-    setDesc(draft.description ?? "");
-    setLat(
-      draft.address?.lat !== undefined ? String(draft.address.lat) : ""
-    );
-    setLng(
-      draft.address?.lng !== undefined ? String(draft.address.lng) : ""
-    );
-    setBeds(draft.bedCount ?? null);
-    setBaths(draft.bathCount ?? null);
-    setSqft(draft.sqFt !== undefined ? String(draft.sqFt) : "");
-    setAmenities(draft.amenities ?? []);
-    if (draft.proofOfOwnership) {
-      setProofName("Document uploaded");
-    }
+
+    if (draft.address?.street) setLocation(draft.address.street);
+    if (draft.monthlyPrice) setRent(String(Math.round(draft.monthlyPrice * 12)));
+    if (draft.propertyType) setPropertyType(draft.propertyType);
+    if (draft.description) setDesc(draft.description);
+    if (draft.address?.lat) setLat(String(draft.address.lat));
+    if (draft.address?.lng) setLng(String(draft.address.lng));
+    if (draft.bedCount !== undefined) setBeds(draft.bedCount);
+    if (draft.bathCount !== undefined) setBaths(draft.bathCount);
+    if (draft.sqFt) setSqft(String(draft.sqFt));
+    if (draft.amenities) setAmenities(draft.amenities);
+    if (draft.proofOfOwnership) setProofName("Document uploaded");
+
     setInitialized(true);
-  }, [draft, initialized, propertyTypeLookup]);
+  }, [draft, initialized]);
 
   const handleUseLocation = () => {
     if (!navigator.geolocation) {
@@ -106,8 +79,8 @@ export default function AddPropertyDetailsPage() {
         setLat(position.coords.latitude.toFixed(6));
         setLng(position.coords.longitude.toFixed(6));
       },
-      () => {
-        setError("Unable to access your location.");
+      (err) => {
+        setError(err.code === 1 ? "Please enable location permissions." : "Unable to access location.");
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
@@ -116,41 +89,38 @@ export default function AddPropertyDetailsPage() {
   const handleSave = async (nextPath?: string) => {
     setIsSaving(true);
     setError(null);
+
     if (!authToken) {
       setError("Sign in to save your draft.");
       setIsSaving(false);
       return;
     }
-    const rentValue = rent ? Number(rent) : undefined;
-    const latValue = lat ? Number(lat) : undefined;
-    const lngValue = lng ? Number(lng) : undefined;
-    const sqftValue = sqft ? Number(sqft) : undefined;
 
-    const monthlyPrice =
-      typeof rentValue === "number" && !Number.isNaN(rentValue)
-        ? Math.round(rentValue / 12)
-        : undefined;
+    const rentValue = parseFloat(rent);
+    const monthlyPrice = !isNaN(rentValue) ? Math.round(rentValue / 12) : undefined;
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    const sqftNum = parseInt(sqft);
 
+    // Update Store
     setLandlordDraft({
       monthlyPrice,
       propertyType: propertyType || undefined,
       description: desc || undefined,
       bedCount: beds ?? undefined,
       bathCount: baths ?? undefined,
-      sqFt: Number.isNaN(sqftValue) ? undefined : sqftValue,
+      sqFt: isNaN(sqftNum) ? undefined : sqftNum,
       amenities: amenities.length ? amenities : undefined,
       address: {
         street: location || undefined,
-        lat: Number.isNaN(latValue) ? undefined : latValue,
-        lng: Number.isNaN(lngValue) ? undefined : lngValue,
+        lat: isNaN(latNum) ? undefined : latNum,
+        lng: isNaN(lngNum) ? undefined : lngNum,
       },
     });
 
     try {
       await saveLandlordDraft();
-      if (nextPath) {
-        router.push(nextPath);
-      }
+      if (nextPath) router.push(nextPath);
     } catch (err) {
       setError((err as Error).message || "Unable to save. Try again.");
     } finally {
@@ -165,13 +135,14 @@ export default function AddPropertyDetailsPage() {
       setError("Sign in to upload proof documents.");
       return;
     }
-    const uploadedUrl = await uploadLandlordProof(file.name);
-    if (!uploadedUrl) {
+    try {
+      const uploadedUrl = await uploadLandlordProof(file.name);
+      if (!uploadedUrl) throw new Error("Upload failed.");
+      setProofName(file.name);
+      setLandlordDraft({ proofOfOwnership: uploadedUrl });
+    } catch {
       setError("Proof upload failed. Please try again.");
-      return;
     }
-    setProofName(file.name);
-    setLandlordDraft({ proofOfOwnership: uploadedUrl });
   };
 
   const toggleAmenity = (label: string) => {
@@ -183,468 +154,234 @@ export default function AddPropertyDetailsPage() {
   const handleAddAmenity = () => {
     const trimmed = amenityInput.trim();
     if (!trimmed) return;
-    setAmenities((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    if (!amenities.includes(trimmed)) {
+      setAmenities((prev) => [...prev, trimmed]);
+    }
     setAmenityInput("");
   };
 
   return (
-    <div className="min-h-screen bg-white/95  text-[#1A1A1A] font-display antialiased overflow-x-hidden selection:bg-[#0a44b8]/30">
+    <div className="min-h-screen bg-white text-[#1A1A1A] font-sans antialiased selection:bg-[#0a44b8]/20">
       <style>{`
         .input-active-ring:focus-within {
           box-shadow: 0 0 0 2px #0a44b8;
           border-color: #0a44b8;
         }
-        select {
-          -webkit-appearance: none;
-          -moz-appearance: none;
-          appearance: none;
-          background-image: none;
-        }
+        select { -webkit-appearance: none; appearance: none; }
       `}</style>
 
-      <div className="relative w-full max-w-md mx-auto ">
-        {/* Header */}
-        <header className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10 ">
-          <Link
-            href="/add-property-photos"
-            aria-label="Go back"
-            className="flex items-center justify-center p-2 rounded-full hover:bg-black/5 transition-colors"
-          >
-            <span
-              className="material-symbols-outlined text-2xl"
-              style={solidIconStyle}
-            >
-              arrow_back
-            </span>
+      <div className="relative w-full max-w-md mx-auto">
+        <header className="flex items-center justify-between p-4 sticky top-0 z-10 bg-white/80 backdrop-blur-md">
+          <Link href="/add-property-photos" className="p-2 rounded-full hover:bg-black/5 transition-colors">
+            <span className="material-symbols-outlined text-2xl" style={solidIconStyle}>arrow_back</span>
           </Link>
-
-          <h2 className="text-[#0a44b8] text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-10">
-            Add Property
-          </h2>
+          <h2 className="text-[#0a44b8] text-lg font-bold flex-1 text-center pr-10">Add Property</h2>
         </header>
 
-        {/* Progress */}
-        <div className="w-full px-6 py-2">
-          <div className="flex w-full flex-row items-center justify-center gap-2">
-            <div className="h-1.5 flex-1 rounded-full bg-[#0a44b8]/40"></div>
-            <div className="h-1.5 flex-1 rounded-full bg-[#0a44b8]"></div>
-            <div className="h-1.5 flex-1 rounded-full bg-gray-300"></div>
-            <div className="h-1.5 flex-1 rounded-full bg-gray-300"></div>
-            <div className="h-1.5 flex-1 rounded-full bg-gray-300"></div>
+        {/* Progress Bar */}
+        <div className="px-6 py-2">
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((step) => (
+              <div key={step} className={`h-1.5 flex-1 rounded-full ${step < 2 ? 'bg-[#0a44b8]/40' : step === 2 ? 'bg-[#0a44b8]' : 'bg-gray-200'}`} />
+            ))}
           </div>
-
-          <p className="text-center text-xs font-medium text-gray-500 mt-2 uppercase">
-            STEP 2 OF 5
-          </p>
+          <p className="text-center text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Step 2 of 5</p>
         </div>
 
-        {/* Content */}
-        <main className="flex-1 flex flex-col px-5 pb-32 w-full">
-          <h1 className="text-[#0a44b8] text-[28px] font-bold leading-tight pt-4 pb-6">
-            Tell us about your place
-          </h1>
+        <main className="px-5 pb-40">
+          <h1 className="text-[#0a44b8] text-3xl font-extrabold tracking-tight pt-4 pb-6">Tell us about your place</h1>
 
-          <form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
-            {/* Location */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="location">
-                Where is it located?
-              </label>
-
-              <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
-                <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                  <span
-                    className="material-symbols-outlined text-2xl"
-                    style={solidIconStyle}
-                  >
-                    location_on
-                  </span>
-                </div>
-
+          <form className="flex flex-col gap-8" onSubmit={(e) => e.preventDefault()}>
+            
+            {/* Location Section */}
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Location</label>
+              <div className="group relative flex items-center input-active-ring rounded-2xl bg-gray-50 border border-gray-200 transition-all">
+                <span className="pl-4 pr-2 text-[#0a44b8] material-symbols-outlined text-2xl" style={solidIconStyle}>location_on</span>
                 <input
-                  id="location"
                   type="text"
-                  placeholder="123 Main St, Springfield"
+                  placeholder="Street address, City"
                   value={location}
-                  onChange={(event) => setLocation(event.target.value)}
-                  className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="w-full bg-transparent py-4 pr-4 outline-none text-lg font-medium"
                 />
               </div>
-            </div>
 
-            {/* Coordinates */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="lat">
-                Pin Location (Optional)
-              </label>
               <div className="grid grid-cols-2 gap-3">
-                <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
-                  <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                    <span
-                      className="material-symbols-outlined text-2xl"
-                      style={solidIconStyle}
-                    >
-                      north
-                    </span>
-                  </div>
+                <div className="group relative flex items-center input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                  <span className="pl-4 pr-2 text-[#0a44b8]/50 material-symbols-outlined text-xl">north</span>
                   <input
-                    id="lat"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="Latitude"
+                    type="number"
+                    placeholder="Lat"
                     value={lat}
-                    onChange={(event) => setLat(event.target.value)}
-                    className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                    onChange={(e) => setLat(e.target.value)}
+                    className="w-full bg-transparent py-3 pr-4 outline-none text-sm"
                   />
                 </div>
-                <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
-                  <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                    <span
-                      className="material-symbols-outlined text-2xl"
-                      style={solidIconStyle}
-                    >
-                      east
-                    </span>
-                  </div>
+                <div className="group relative flex items-center input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                  <span className="pl-4 pr-2 text-[#0a44b8]/50 material-symbols-outlined text-xl">east</span>
                   <input
-                    id="lng"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="Longitude"
+                    type="number"
+                    placeholder="Lng"
                     value={lng}
-                    onChange={(event) => setLng(event.target.value)}
-                    className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                    onChange={(e) => setLng(e.target.value)}
+                    className="w-full bg-transparent py-3 pr-4 outline-none text-sm"
                   />
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleUseLocation}
-                className="self-start text-sm font-semibold text-[#0a44b8] hover:opacity-80"
-              >
-                Use my current location
+              <button type="button" onClick={handleUseLocation} className="text-sm font-bold text-[#0a44b8] hover:underline flex items-center gap-1 ml-1">
+                <span className="material-symbols-outlined text-sm">my_location</span> Use current location
               </button>
             </div>
 
-            {/* Rent */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="rent">
-                Annual Rent
-              </label>
-
-              <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
-                <div className="pl-4 pr-1 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                  <span className="text-xl font-bold">₦</span>
-                </div>
-
+            {/* Rent Section */}
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Annual Rent</label>
+              <div className="group relative flex items-center input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                <span className="pl-5 pr-2 text-xl font-black text-[#0a44b8]">₦</span>
                 <input
-                  id="rent"
-                  inputMode="numeric"
-                  placeholder="0"
                   type="number"
+                  placeholder="Total price per year"
                   value={rent}
-                  onChange={(event) => setRent(event.target.value)}
-                  className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg py-4 pr-6 rounded-r-full outline-none"
+                  onChange={(e) => setRent(e.target.value)}
+                  className="w-full bg-transparent py-4 pr-4 outline-none text-xl font-bold"
                 />
               </div>
-
-              <p className="text-sm text-gray-500 pl-4">
-                Suggested: ₦1,200,000 per year based on area
-              </p>
             </div>
 
             {/* Property Type */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="property-type">
-                Type of Property
-              </label>
-
-              <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
-                <div className="pl-4 pr-2 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                  <span
-                    className="material-symbols-outlined text-2xl"
-                    style={solidIconStyle}
-                  >
-                    home_work
-                  </span>
-                </div>
-
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Property Type</label>
+              <div className="relative input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
                 <select
-                  id="property-type"
-                  className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] text-lg py-4 pr-10 rounded-r-full cursor-pointer outline-none"
                   value={propertyType}
-                  onChange={(event) => setPropertyType(event.target.value)}
+                  onChange={(e) => setPropertyType(e.target.value)}
+                  className="w-full bg-transparent py-4 px-5 outline-none text-lg font-medium cursor-pointer"
                 >
-                  <option value="" disabled>
-                    Select property type
-                  </option>
-                  {PROPERTY_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+                  <option value="" disabled>Select Type</option>
+                  {PROPERTY_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#0a44b8]">
-                  <span
-                    className="material-symbols-outlined text-2xl"
-                    style={solidIconStyle}
-                  >
-                    expand_more
-                  </span>
-                </div>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-gray-400">expand_more</span>
               </div>
             </div>
 
-            {/* Property Specs */}
+            {/* Specs (Beds/Baths) */}
             <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-2">
-                <label className="text-base font-semibold pl-1">Beds</label>
-                <div className="flex flex-wrap gap-3">
-                  {bedOptions.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setBeds(value)}
-                      className={[
-                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
-                        beds === value
-                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
-                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
-                      ].join(" ")}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Custom"
-                    value={beds ?? ""}
-                    onChange={(event) =>
-                      setBeds(event.target.value ? Number(event.target.value) : null)
-                    }
-                    className="w-28 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
-                  />
+              {[
+                { label: "Beds", options: bedOptions, val: beds, setter: setBeds },
+                { label: "Baths", options: bathOptions, val: baths, setter: setBaths },
+              ].map((spec) => (
+                <div key={spec.label} className="flex flex-col gap-3">
+                  <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">{spec.label}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {spec.options.map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => spec.setter(num)}
+                        className={`min-w-[50px] py-3 px-4 rounded-xl font-bold border transition-all ${
+                          spec.val === num ? "bg-[#0a44b8] border-[#0a44b8] text-white" : "bg-white border-gray-200"
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      placeholder="Custom"
+                      className="w-24 px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#0a44b8]"
+                      value={spec.options.includes(spec.val as number) ? "" : (spec.val ?? "")}
+                      onChange={(e) => spec.setter(e.target.value ? Number(e.target.value) : null)}
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-base font-semibold pl-1">Baths</label>
-                <div className="flex flex-wrap gap-3">
-                  {bathOptions.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setBaths(value)}
-                      className={[
-                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
-                        baths === value
-                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
-                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
-                      ].join(" ")}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Custom"
-                    value={baths ?? ""}
-                    onChange={(event) =>
-                      setBaths(event.target.value ? Number(event.target.value) : null)
-                    }
-                    className="w-28 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-base font-semibold pl-1">Square Footage</label>
-                <div className="flex flex-wrap gap-3">
-                  {sqftOptions.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setSqft(String(value))}
-                      className={[
-                        "rounded-full px-5 py-3 text-[14px] font-medium transition-all shadow-sm border",
-                        sqft === String(value)
-                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
-                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
-                      ].join(" ")}
-                    >
-                      {value.toLocaleString()} sqft
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="Custom"
-                    value={sqft}
-                    onChange={(event) => setSqft(event.target.value)}
-                    className="w-32 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
-                  />
-                </div>
-              </div>
+              ))}
             </div>
 
             {/* Amenities */}
-            <div className="flex flex-col gap-3">
-              <label className="text-base font-semibold pl-1">Amenities</label>
-              <div className="grid grid-cols-2 gap-3">
-                {amenityOptions.map((amenity) => {
-                  const selected = amenities.includes(amenity.label);
-                  return (
-                    <button
-                      key={amenity.label}
-                      type="button"
-                      onClick={() => toggleAmenity(amenity.label)}
-                      className={[
-                        "flex items-center gap-2 rounded-2xl border px-4 py-3 text-left text-sm font-medium transition-all",
-                        selected
-                          ? "border-[#0a44b8] bg-[#EAF1FF] text-[#0a44b8]"
-                          : "border-black/10 text-[#1A1A1A] hover:border-[#0a44b8]/40 active:bg-black/5",
-                      ].join(" ")}
-                    >
-                      <span className="material-symbols-outlined text-[20px]">
-                        {amenity.icon}
-                      </span>
-                      <span>{amenity.label}</span>
-                    </button>
-                  );
-                })}
+            <div className="flex flex-col gap-4">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Amenities</label>
+              <div className="grid grid-cols-2 gap-2">
+                {amenityOptions.map((amn) => (
+                  <button
+                    key={amn.label}
+                    type="button"
+                    onClick={() => toggleAmenity(amn.label)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-semibold transition-all ${
+                      amenities.includes(amn.label) ? "bg-[#EAF1FF] border-[#0a44b8] text-[#0a44b8]" : "bg-white border-gray-200"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">{amn.icon}</span>
+                    {amn.label}
+                  </button>
+                ))}
               </div>
-
-              <div className="flex items-center gap-3">
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Add custom amenity"
+                  placeholder="Add other (e.g. Borehole)"
                   value={amenityInput}
-                  onChange={(event) => setAmenityInput(event.target.value)}
-                  className="flex-1 rounded-full border border-black/10 bg-white px-4 py-3 text-[14px] text-[#1A1A1A] outline-none focus:border-[#0a44b8]"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleAddAmenity();
-                    }
-                  }}
+                  onChange={(e) => setAmenityInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddAmenity())}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#0a44b8]"
                 />
-                <button
-                  type="button"
-                  onClick={handleAddAmenity}
-                  className="rounded-full bg-[#0a44b8] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  Add
-                </button>
+                <button type="button" onClick={handleAddAmenity} className="bg-gray-100 px-4 rounded-xl font-bold text-sm">Add</button>
               </div>
-
-              {amenities.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {amenities.map((amenity) => (
-                    <button
-                      key={amenity}
-                      type="button"
-                      onClick={() => toggleAmenity(amenity)}
-                      className="rounded-full border border-[#0a44b8]/20 bg-[#EAF1FF] px-4 py-2 text-xs font-semibold text-[#0a44b8]"
-                    >
-                      {amenity}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {amenities.map(a => (
+                   <span key={a} className="bg-[#0a44b8] text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                     {a} <button onClick={() => toggleAmenity(a)}>×</button>
+                   </span>
+                ))}
+              </div>
             </div>
 
             {/* Description */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="description">
-                Description
-              </label>
-
-              <div className="relative w-full input-active-ring rounded-3xl bg-white border border-[#0A1F33]/20 transition-all duration-200 p-1">
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Description</label>
+              <div className="relative rounded-2xl border border-gray-200 bg-gray-50 p-1">
                 <textarea
-                  id="description"
-                  placeholder="A cozy 2-bedroom apartment with a renovated kitchen and lots of natural light..."
-                  rows={5}
+                  rows={4}
+                  placeholder="Tell us what makes this place special..."
                   value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
-                  className="w-full bg-transparent border-none focus:ring-0 text-[#1A1A1A] placeholder:text-gray-400 text-lg p-4 rounded-3xl resize-none outline-none"
+                  onChange={(e) => setDesc(e.target.value.slice(0, 500))}
+                  className="w-full bg-transparent p-4 outline-none resize-none text-lg"
                 />
-
-                <div className="absolute bottom-4 right-5 text-xs text-gray-400 bg-white pl-2 rounded-lg">
-                  {Math.min(count, 500)}/500
-                </div>
+                <div className="text-[10px] text-right p-2 font-bold text-gray-400">{desc.length}/500</div>
               </div>
-
-              <p className="text-sm text-gray-500 pl-4">
-                Mention sunlight, amenities, or nearby parks.
-              </p>
             </div>
 
-            {/* Proof upload */}
-            <div className="flex flex-col gap-2">
-              <label className="text-base font-semibold pl-1" htmlFor="proof-upload">
-                Proof of Ownership (Optional)
-              </label>
-
-              <div className="group relative w-full input-active-ring rounded-3xl bg-white border border-[#0A1F33]/20 transition-all duration-200 hover:border-[#0a44b8]/50">
+            {/* Proof Upload */}
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Verify Ownership (Optional)</label>
+              <div className="relative h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
                 <input
-                  id="proof-upload"
-                  accept="image/*,.pdf"
                   type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    void handleProofUpload(file);
-                  }}
+                  accept="image/*,.pdf"
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  onChange={(e) => handleProofUpload(e.target.files?.[0] ?? null)}
                 />
-
-                <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-                  <div className="mb-3 p-3 rounded-full bg-blue-50 text-[#0a44b8] group-hover:scale-105 transition-transform duration-200">
-                    <span
-                      className="material-symbols-outlined text-3xl"
-                      style={solidIconStyle}
-                    >
-                      add_a_photo
-                    </span>
-                  </div>
-
-                  <p className="text-[#1A1A1A] font-medium text-lg">
-                    {proofName || "Upload document"}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1 max-w-[200px]">
-                    Utility bill, deed, or tax record
-                  </p>
-                </div>
+                <span className="material-symbols-outlined text-3xl text-[#0a44b8] mb-1">upload_file</span>
+                <p className="text-sm font-bold">{proofName || "Upload Proof"}</p>
+                <p className="text-[10px] text-gray-400">PDF or Images accepted</p>
               </div>
-
-              <p className="text-sm text-gray-500 pl-4">
-                Verified owners get 3x more inquiries.
-              </p>
             </div>
           </form>
         </main>
 
-        {/* Bottom CTA */}
-        <div className="fixed bottom-0 left-1/2 w-full max-w-md -translate-x-1/2 bg-[#f8f6f6]/95 backdrop-blur-sm border-t border-gray-200 p-4 pb-8 z-20">
+        {/* Footer CTA */}
+        <footer className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-100 p-4 pb-10 z-30">
+          {error && <p className="text-center text-red-500 text-xs font-bold mb-3">{error}</p>}
           <button
-            type="button"
-            onClick={() => void handleSave("/add-property-requirements")}
-            className="w-full bg-[#0a44b8] hover:bg-[#083691] active:scale-[0.98] transition-all text-white text-xl font-bold py-4 rounded-full shadow-lg shadow-[#0a44b8]/20 flex items-center justify-center gap-2 group"
+            onClick={() => handleSave("/add-property-requirements")}
+            disabled={isSaving}
+            className="w-full bg-[#0a44b8] text-white py-4 rounded-2xl text-lg font-black shadow-xl shadow-[#0a44b8]/20 active:scale-95 transition-all disabled:opacity-50"
           >
-            <span>{isSaving ? "Saving..." : "Next Step"}</span>
-            <span
-              className="material-symbols-outlined group-hover:translate-x-1 transition-transform"
-              style={solidIconStyle}
-            >
-              arrow_forward
-            </span>
+            {isSaving ? "Saving..." : "Next Step"}
           </button>
-          {error ? (
-            <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
-          ) : null}
-        </div>
+        </footer>
       </div>
     </div>
   );
