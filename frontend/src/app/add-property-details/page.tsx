@@ -136,7 +136,7 @@ export default function AddPropertyDetailsPage() {
       return;
     }
     try {
-      const uploadedUrl = await uploadLandlordProof(file.name);
+      const uploadedUrl = await uploadLandlordProof(file);
       if (!uploadedUrl) throw new Error("Upload failed.");
       setProofName(file.name);
       setLandlordDraft({ proofOfOwnership: uploadedUrl });
