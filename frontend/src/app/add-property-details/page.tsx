@@ -126,10 +126,13 @@ export default function AddPropertyDetailsPage() {
     const lngValue = lng ? Number(lng) : undefined;
     const sqftValue = sqft ? Number(sqft) : undefined;
 
-    setLandlordDraft({
-      monthlyPrice: Number.isNaN(rentValue)
+    const monthlyPrice =
+      rentValue === undefined || Number.isNaN(rentValue)
         ? undefined
-        : Math.round(rentValue / 12),
+        : Math.round(rentValue / 12);
+
+    setLandlordDraft({
+      monthlyPrice,
       propertyType: propertyType || undefined,
       description: desc || undefined,
       bedCount: beds ?? undefined,
