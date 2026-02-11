@@ -127,9 +127,9 @@ export default function AddPropertyDetailsPage() {
     const sqftValue = sqft ? Number(sqft) : undefined;
 
     const monthlyPrice =
-      rentValue === undefined || Number.isNaN(rentValue)
-        ? undefined
-        : Math.round(rentValue / 12);
+      typeof rentValue === "number" && !Number.isNaN(rentValue)
+        ? Math.round(rentValue / 12)
+        : undefined;
 
     setLandlordDraft({
       monthlyPrice,
