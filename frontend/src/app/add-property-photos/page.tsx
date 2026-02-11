@@ -18,7 +18,7 @@ type Photo = {
 export default function AddPropertyPhotosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const propertyId = searchParams.get("propertyId") || "";
+  const propertyId = searchParams?.get("propertyId") ?? "";
   const authToken = useAppStore((state) => state.authToken);
   const draft = useAppStore((state) => state.landlordDraft);
   const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
