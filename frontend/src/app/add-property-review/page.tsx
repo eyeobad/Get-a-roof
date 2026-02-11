@@ -10,6 +10,19 @@ const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
 };
 
+const formatNaira = (value?: number) => {
+  if (value === undefined || value === null) return "—";
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `₦${value}`;
+  }
+};
+
 function EditBtn({ href }: { href?: string }) {
   const cls =
     "inline-flex items-center gap-1 text-[#0a44b8] text-[14px] font-semibold hover:opacity-80";
@@ -78,10 +91,13 @@ export default function ReviewPublishPage() {
     return parts.join(", ");
   }, [draft.address]);
 
-  const rentLabel = useMemo(() => {
-    if (draft.monthlyPrice === undefined) return "—";
-    return `$${draft.monthlyPrice.toLocaleString()}`;
-  }, [draft.monthlyPrice]);
+  const rentLabel = useMemo(
+    () =>
+      draft.monthlyPrice !== undefined
+        ? formatNaira(draft.monthlyPrice * 12)
+        : "—",
+    [draft.monthlyPrice]
+  );
 
   const propertyTypeLabel = useMemo(() => {
     if (!draft.propertyType) return "Not set";
@@ -114,11 +130,11 @@ export default function ReviewPublishPage() {
     const requirements = draft.landlordRequirements;
     const budget =
       requirements?.budgetRange?.max !== undefined
-        ? `$${requirements.budgetRange.max.toLocaleString()}`
+        ? formatNaira(requirements.budgetRange.max)
         : "Not set";
     const income =
       requirements?.annualIncome?.min !== undefined
-        ? `$${requirements.annualIncome.min.toLocaleString()}`
+        ? formatNaira(requirements.annualIncome.min)
         : "Not set";
     const pets =
       requirements?.petsAllowed === undefined
@@ -268,12 +284,12 @@ export default function ReviewPublishPage() {
                   </div>
                   <div>
                     <div className="text-[10px] font-bold tracking-widest text-black/45 uppercase">
-                      Monthly Rent
+                      Annual Rent
                     </div>
                     <div className="text-[15px] font-semibold mt-1">
                       {rentLabel}{" "}
                       <span className="text-[13px] font-medium text-black/45">
-                        /month
+                        /year
                       </span>
                     </div>
                   </div>

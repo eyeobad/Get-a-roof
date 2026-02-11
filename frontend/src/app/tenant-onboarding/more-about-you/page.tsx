@@ -260,24 +260,24 @@ export default function TenantMoreAboutYou() {
                   Yearly Income
                 </label>
                 <span className="text-2xl font-bold text-primary tabular-nums">
-                  ${earnings.toLocaleString()}
+                  ₦{new Intl.NumberFormat("en-NG").format(earnings)}
                 </span>
               </div>
 
               <input
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary focus:outline-none"
                 id="earnings"
-                max={250000}
-                min={0}
-                step={5000}
+                max={50000000}
+                min={1000000}
+                step={100000}
                 type="range"
                 value={earnings}
                 onChange={(event) => setEarnings(Number(event.target.value))}
               />
 
               <div className="flex justify-between mt-3 text-sm font-medium text-slate-500">
-                <span>$0</span>
-                <span>$250k+</span>
+                <span>₦1m</span>
+                <span>₦50m+</span>
               </div>
             </div>
           </section>

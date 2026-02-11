@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import mapboxgl from "mapbox-gl";
@@ -469,8 +470,11 @@ export default function MapView() {
   const loadMatches = useAppStore((state) => state.loadMatches);
   const likedIds = useAppStore((state) => state.likedIds);
   const toggleLikeListing = useAppStore((state) => state.toggleLikeListing);
+  const ensureThreadForListing = useAppStore(
+    (state) => state.ensureThreadForListing
+  );
   const authToken = useAppStore((state) => state.authToken);
-  const listingsById = useAppStore((state) => state.listingsById);
+  const router = useRouter();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [routeGeojson, setRouteGeojson] =
     useState<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
@@ -486,17 +490,13 @@ export default function MapView() {
     }
   }, [authToken, loadMapMatches, loadMatches]);
 
-  const demoListings = useMemo(() => Object.values(listingsById), [listingsById]);
-  const sourceListings = authToken ? mapMatches : demoListings;
-  const showEmptyState = authToken && mapMatches.length === 0;
+  const sourceListings = mapMatches;
+  const showEmptyState = mapMatches.length === 0;
 
   const acceptedIds = useMemo(() => {
     return new Set(
       matchSummaries
-        .filter(
-          (match) =>
-            match.status === "ChatInitiated" || match.status === "LandlordQualified"
-        )
+        .filter((match) => match.landlordReplied)
         .map((match) => match.listingId)
     );
   }, [matchSummaries]);
@@ -602,7 +602,7 @@ export default function MapView() {
 
   const requestDirections = async () => {
     if (!activeListing || !activeListing.isExact) {
-      setRoutingError("Directions are available after match acceptance.");
+      setRoutingError("Directions unlock after the landlord accepts your request.");
       return;
     }
     if (!navigator.geolocation) {
@@ -647,6 +647,16 @@ export default function MapView() {
       setRoutingError(err instanceof Error ? err.message : "Unable to load directions.");
     } finally {
       setIsRouting(false);
+    }
+  };
+
+  const requestRouteAccess = async () => {
+    if (!activeListing) return;
+    const threadId = await ensureThreadForListing(activeListing.id);
+    if (threadId) {
+      router.push(`/messages?thread=${threadId}&from=/map-view`);
+    } else {
+      router.push("/messages");
     }
   };
 
@@ -789,7 +799,7 @@ export default function MapView() {
                       <div>
                         <div className="flex justify-between items-start">
                           <h2 className="text-xl font-bold text-primary leading-none">
-                            {activeListing?.price ?? "$0"}
+                            {activeListing?.price ?? "₦0"}
                           </h2>
                           <button className="text-gray-400 hover:text-red-500 transition-colors">
                             <span className="material-symbols-outlined text-[20px]">
@@ -877,7 +887,14 @@ export default function MapView() {
                     </div>
                   ) : (
                     <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                      Directions unlock after the landlord accepts your request.
+                      <p>Directions unlock after the landlord accepts your request.</p>
+                      <button
+                        type="button"
+                        onClick={requestRouteAccess}
+                        className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white"
+                      >
+                        Message landlord to request directions
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1017,7 +1034,7 @@ export default function MapView() {
               <p className="text-xs text-slate-500 mt-1">
                 {activeListing.isExact
                   ? "Get a route to this property."
-                  : "Directions unlock after landlord acceptance."}
+                  : "Directions unlock after the landlord accepts your request."}
               </p>
               <div className="mt-3 flex items-center gap-2">
                 <select
@@ -1043,6 +1060,15 @@ export default function MapView() {
                   {isRouting ? "Routing..." : "Get Route"}
                 </button>
               </div>
+              {!activeListing.isExact && (
+                <button
+                  type="button"
+                  onClick={requestRouteAccess}
+                  className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary"
+                >
+                  Message landlord to request directions
+                </button>
+              )}
               {routingError && (
                 <p className="mt-2 text-xs text-red-600">{routingError}</p>
               )}

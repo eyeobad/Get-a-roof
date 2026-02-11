@@ -332,7 +332,7 @@ export default function MessagesPage() {
                   <button
                     key={conversation.id}
                     onClick={() => selectConversation(conversation.id, true)}
-                    className="group flex w-full cursor-pointer border-b border-slate-200 bg-background-light px-5 py-4 transition-colors hover:bg-white hover:text-primary"
+                    className="group flex w-full cursor-pointer border-b border-slate-200 bg-background-light px-5 py-4 transition-colors hover:bg-blue-50 hover:text-primary"
                   >
                     <div className="flex items-center gap-4 w-full">
                       <ConversationAvatar
@@ -562,7 +562,7 @@ export default function MessagesPage() {
                         className={`w-full px-6 py-4 border-b border-slate-100 text-left transition-colors ${
                           isActive
                             ? "bg-primary/5"
-                            : "bg-white hover:bg-slate-50"
+                            : "bg-white hover:bg-blue-50"
                         }`}
                       >
                         <div className="flex items-center gap-4">

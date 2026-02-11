@@ -133,32 +133,15 @@ type ContactField = {
 };
 
 const defaultProfile: ProfileState = {
-  fullName: "Sarah Jenkins",
-  email: "sarah.jenkins@example.com",
-  phone: "+1 (555) 123-4567",
+  fullName: "",
+  email: "",
+  phone: "",
   photoUrl:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCx6DzMNOzrYCXX4YWcckEWTfaCn19D0_qoed1dl1Curkg6F6_abZMP-Fkks-2jNdJQDQKSjndOSwj1bst8t-IvK6BtQACV3RgFMJob8FIAlMa4rrtHC3-S_HnYCKLlgvE0yCWIezjLP33utbei9KW4Dym6Py3HRxziATGkK0nJ7jQA695G1T4PyoKSQ0AutCOUuFhGhPNOh_vFgpYIDxb9iAns66XAR8yUGIqaeTxCUmmzpF_a4OgfwDa8hsP21nEciC__k3wmOHBq",
-  annualEarnings: 85000,
-  commuteRadius: 15,
-  preferences: {
-    gender: "Prefer not to say",
-    employment: "Employed",
-    marital: "Married",
-    vehicle: "Yes",
-    smoking: "No",
-    drinking: "Occasionally",
-    religion: "Muslim",
-    education: "Bachelors",
-    social: "Occasionally",
-  },
-  apartmentPrefs: {
-    "Pets Allowed": true,
-    "Non-owner-occupied": false,
-    "Shared Apartment": false,
-    Shortlet: false,
-    "Self Compound": false,
-    "Shared Compound": false,
-  },
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P",
+  annualEarnings: 0,
+  commuteRadius: 0,
+  preferences: {},
+  apartmentPrefs: {},
 };
 
 const mapUserToProfile = (user: ApiUser | null | undefined): ProfileState => {
@@ -676,16 +659,16 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
                       <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                        ${profile.annualEarnings.toLocaleString()}
+                        ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
                       </span>
                 </div>
 
                 <div className="mt-4">
                   <input
                     type="range"
-                    min={0}
-                    max={300000}
-                    step={5000}
+                    min={1500000}
+                    max={20000000}
+                    step={50000}
                     value={profile.annualEarnings}
                     onChange={(e) =>
                       setProfile((prev) => ({ ...prev, annualEarnings: Number(e.target.value) }))
@@ -693,9 +676,9 @@ export default function ProfilePage() {
                     className="w-full accent-primary"
                   />
                   <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                    <span>$0</span>
-                    <span>$150k</span>
-                    <span>$300k+</span>
+                    <span>₦1.5m</span>
+                    <span>₦10m</span>
+                    <span>₦20m+</span>
                   </div>
                 </div>
               </div>

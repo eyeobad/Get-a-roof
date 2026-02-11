@@ -17,6 +17,13 @@ import { Property, PropertyDocument } from "../properties/schemas/property.schem
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
 
+const profileMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -218,6 +225,9 @@ export class UsersService {
   async uploadProfilePhoto(id: string, file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException("File is required");
+    }
+    if (!file.mimetype || !profileMimeTypes.has(file.mimetype)) {
+      throw new BadRequestException("Unsupported file type");
     }
     const result = await this.appwriteStorage.uploadFile(
       file.originalname ?? file.filename ?? `profile-${Date.now()}`,

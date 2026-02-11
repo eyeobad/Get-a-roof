@@ -22,6 +22,10 @@ export class TenantPreferencesDto {
 
   @IsOptional()
   @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
   employmentStatus?: string;
 
   @IsOptional()

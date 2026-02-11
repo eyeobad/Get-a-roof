@@ -35,3 +35,6 @@ export class Match {
 }
 
 export const MatchSchema = SchemaFactory.createForClass(Match);
+MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
+MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
+MatchSchema.index({ propertyId: 1, tenantId: 1 });

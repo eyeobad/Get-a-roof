@@ -19,6 +19,18 @@ export default function PhoneVerificationPage() {
   const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
   const userId = searchParams.get("userId") || "";
   const phone = searchParams.get("phone") || "(555) 123-4567";
+  const nextParam = searchParams.get("next") || "";
+
+  const buildNextUrl = (target: string) => {
+    if (!target) return "";
+    const decoded = decodeURIComponent(target);
+    const [path, queryString] = decoded.split("?");
+    const params = new URLSearchParams(queryString || "");
+    if (userId) {
+      params.set("userId", userId);
+    }
+    return params.toString() ? `${path}?${params.toString()}` : path;
+  };
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
@@ -53,7 +65,8 @@ export default function PhoneVerificationPage() {
       setIsSubmitting(true);
       setError(null);
       await verifyPhoneOtp(userId, otp);
-      router.push("/tenant-onboarding");
+      const nextUrl = buildNextUrl(nextParam);
+      router.push(nextUrl || "/tenant-onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {

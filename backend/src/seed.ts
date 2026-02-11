@@ -46,6 +46,40 @@ async function seed() {
   const landlordEmail = "landlord@getaroof.dev";
   const tenantEmail = "tenant@getaroof.dev";
   const tenantTwoEmail = "tenant2@getaroof.dev";
+  const seedEmails = [landlordEmail, tenantEmail, tenantTwoEmail];
+
+  if (process.env.CLEAR_SEED === "true") {
+    const seedUsers = await UserModel.find({ email: { $in: seedEmails } })
+      .select("_id")
+      .exec();
+    const seedUserIds = seedUsers.map((user) => user._id);
+    const seedProperties = await PropertyModel.find({
+      description: { $regex: seedTag, $options: "i" },
+    })
+      .select("_id")
+      .exec();
+    const seedPropertyIds = seedProperties.map((property) => property._id);
+    const matchIds = await MatchModel.find({
+      $or: [
+        { propertyId: { $in: seedPropertyIds } },
+        { tenantId: { $in: seedUserIds } },
+      ],
+    })
+      .distinct("_id")
+      .exec();
+    if (matchIds.length) {
+      await MessageModel.deleteMany({ matchId: { $in: matchIds } });
+      await MatchModel.deleteMany({ _id: { $in: matchIds } });
+    }
+    if (seedPropertyIds.length) {
+      await PropertyModel.deleteMany({ _id: { $in: seedPropertyIds } });
+    }
+    if (seedUserIds.length) {
+      await UserModel.deleteMany({ _id: { $in: seedUserIds } });
+    }
+    console.log("Seed data cleared.");
+    return;
+  }
 
   const landlord = await UserModel.findOneAndUpdate(
     { email: landlordEmail },

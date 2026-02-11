@@ -24,8 +24,8 @@ export default function SignUpPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerLandlord = useAppStore((state) => state.registerLandlord);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
-  const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
   const login = useAppStore((state) => state.login);
+  const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
 
   const updateField = (key: keyof typeof form, value: string) => {
@@ -45,8 +45,9 @@ export default function SignUpPage() {
       return;
     }
 
-    try {
-      setIsSubmitting(true);
+  try {
+    clearAuth();
+    setIsSubmitting(true);
       const user = await registerLandlord({
         firstName: form.firstName,
         lastName: form.lastName,
@@ -56,7 +57,7 @@ export default function SignUpPage() {
       });
       let userId = user?.id || user?._id;
       if (userId) {
-        await Promise.all([sendEmailOtp(userId), sendPhoneOtp(userId)]);
+        await sendEmailOtp(userId);
       }
 
       const authResponse = await login(form.email, form.password);
@@ -69,14 +70,24 @@ export default function SignUpPage() {
       const query = new URLSearchParams({
         userId: userId ?? "",
         email: form.email,
-        phone: form.phoneNumber,
+        role: "landlord",
+        next: "/verify-identity",
+      });
+      showToast({
+        title: "Verification sent",
+        text: "Check your email for the next steps.",
+        variant: "success",
       });
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
       const message = getApiErrorMessage(err);
+      const isConflict = message.toLowerCase().includes("already in use");
+      const friendly = isConflict
+        ? "Account already exists. Log in instead."
+        : message;
       showToast({
         title: "Sign up failed",
-        text: message,
+        text: friendly,
         variant: "error",
       });
     } finally {

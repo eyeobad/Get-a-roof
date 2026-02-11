@@ -22,20 +22,28 @@ import {
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import type { Listing } from "@/lib/listings";
+import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 
 type FilterModalProps = {
   isOpen: boolean;
   close: () => void;
   onApply: () => void;
-  budget: number;
-  setBudget: Dispatch<SetStateAction<number>>;
-  distance: number;
-  setDistance: Dispatch<SetStateAction<number>>;
-  apartmentType: string;
-  setApartmentType: Dispatch<SetStateAction<string>>;
+  filters: {
+    budget: number;
+    distance: number;
+    propertyType: string;
+    toggles: Record<string, boolean>;
+  };
+  setFilters: Dispatch<
+    SetStateAction<{
+      budget: number;
+      distance: number;
+      propertyType: string;
+      toggles: Record<string, boolean>;
+    }>
+  >;
+  onReset: () => void;
   toggleOptions: { label: string; key: string }[];
-  toggles: Record<string, boolean>;
-  setToggles: Dispatch<SetStateAction<Record<string, boolean>>>;
 };
 
 const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
@@ -44,9 +52,6 @@ export default function ExploreCards() {
   const router = useRouter();
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [budget, setBudget] = useState(100000);
-  const [distance, setDistance] = useState(15);
-  const [apartmentType, setApartmentType] = useState("");
 
   const toggleOptions = useMemo(
     () => [
@@ -58,12 +63,21 @@ export default function ExploreCards() {
     []
   );
 
-  const [toggles, setToggles] = useState<Record<string, boolean>>(() =>
-    toggleOptions.reduce((acc, option, index) => {
-      const active = index % 2 === 1;
-      return { ...acc, [option.key]: active };
-    }, {})
+  const defaultFilters = useMemo(
+    () => ({
+      budget: 100000,
+      distance: 15,
+      propertyType: "",
+      toggles: toggleOptions.reduce<Record<string, boolean>>(
+        (acc, option) => ({ ...acc, [option.key]: false }),
+        {}
+      ),
+    }),
+    [toggleOptions]
   );
+
+  const [filters, setFilters] = useState(defaultFilters);
+  const [draftFilters, setDraftFilters] = useState(defaultFilters);
 
   const exploreQueue = useAppStore((state) => state.exploreQueue);
   const listingsById = useAppStore((state) => state.listingsById);
@@ -90,31 +104,26 @@ export default function ExploreCards() {
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
     void loadExploreListings({
-      budget,
-      distance,
-      apartmentType,
-      toggles,
+      budget: filters.budget,
+      distance: filters.distance,
+      propertyType: filters.propertyType,
+      toggles: filters.toggles,
     });
   };
 
   const applyFilters = () => {
-    void loadExploreListings({
-      budget,
-      distance,
-      apartmentType,
-      toggles,
-    });
+    setFilters(draftFilters);
     setFiltersOpen(false);
   };
 
   useEffect(() => {
     void loadExploreListings({
-      budget,
-      distance,
-      apartmentType,
-      toggles,
+      budget: filters.budget,
+      distance: filters.distance,
+      propertyType: filters.propertyType,
+      toggles: filters.toggles,
     });
-  }, [loadExploreListings, budget, distance, apartmentType, toggles]);
+  }, [loadExploreListings, filters]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (isSwipeAnimating || visibleCards.length === 0) return;
@@ -223,7 +232,10 @@ export default function ExploreCards() {
 
         <div className="w-12 flex justify-end">
           <button
-            onClick={() => setFiltersOpen(true)}
+            onClick={() => {
+              setDraftFilters(filters);
+              setFiltersOpen(true);
+            }}
             className="flex items-center justify-center w-12 h-12 rounded-full hover:bg-black/5 transition-colors"
           >
             <span className="material-symbols-outlined text-primary text-3xl">tune</span>
@@ -295,15 +307,10 @@ export default function ExploreCards() {
         isOpen={filtersOpen}
         close={() => setFiltersOpen(false)}
         onApply={applyFilters}
-        budget={budget}
-        setBudget={setBudget}
-        distance={distance}
-        setDistance={setDistance}
-        apartmentType={apartmentType}
-        setApartmentType={setApartmentType}
+        filters={draftFilters}
+        setFilters={setDraftFilters}
+        onReset={() => setDraftFilters(defaultFilters)}
         toggleOptions={toggleOptions}
-        toggles={toggles}
-        setToggles={setToggles}
       />
 
       <style>{`
@@ -401,15 +408,10 @@ function FilterModal({
   isOpen,
   close,
   onApply,
-  budget,
-  setBudget,
-  distance,
-  setDistance,
-  apartmentType,
-  setApartmentType,
+  filters,
+  setFilters,
+  onReset,
   toggleOptions,
-  toggles,
-  setToggles,
 }: FilterModalProps) {
   if (!isOpen) return null;
 
@@ -435,7 +437,7 @@ function FilterModal({
               <div className="flex justify-between items-baseline">
                 <label className="text-sm font-bold text-gray-900">Budget</label>
                 <span className="text-xs font-semibold text-active-blue">
-                  ${budget.toLocaleString()} /mo
+                  ₦{new Intl.NumberFormat("en-NG").format(filters.budget)} /yr
                 </span>
               </div>
               <input
@@ -444,27 +446,37 @@ function FilterModal({
                 min={100000}
                 max={20000000}
                 step={50000}
-                value={budget}
-                onChange={(event) => setBudget(Number(event.target.value))}
+                value={filters.budget}
+                onChange={(event) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    budget: Number(event.target.value),
+                  }))
+                }
               />
               <div className="flex justify-between text-[10px] text-gray-400 font-medium">
-                <span>100k</span>
-                <span>20mil</span>
+                <span>₦100k</span>
+                <span>₦20m</span>
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between items-baseline">
                 <label className="text-sm font-bold text-gray-900">Distance</label>
-                <span className="text-xs font-semibold text-active-blue">{distance}km</span>
+                <span className="text-xs font-semibold text-active-blue">{filters.distance}km</span>
               </div>
               <input
                 className="w-full h-1.5 bg-gray-200 rounded-lg accent-active-blue focus:ring-0 border-0"
                 type="range"
                 min={1}
                 max={50}
-                value={distance}
-                onChange={(event) => setDistance(Number(event.target.value))}
+                value={filters.distance}
+                onChange={(event) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    distance: Number(event.target.value),
+                  }))
+                }
               />
               <div className="flex justify-between text-[10px] text-gray-400 font-medium">
                 <span>1km</span>
@@ -473,23 +485,26 @@ function FilterModal({
             </div>
 
             <div className="space-y-3">
-              <label className="text-sm font-bold text-gray-900 block">Type of Apartment</label>
+              <label className="text-sm font-bold text-gray-900 block">Type of Property</label>
               <div className="relative">
                 <select
-                  value={apartmentType}
-                  onChange={(event) => setApartmentType(event.target.value)}
+                  value={filters.propertyType}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      propertyType: event.target.value,
+                    }))
+                  }
                   className="w-full py-3.5 pl-4 pr-10 text-sm font-medium bg-gray-50 rounded-xl text-gray-900 focus:ring-2 focus:ring-active-blue focus:border-active-blue appearance-none transition-shadow"
                 >
                   <option value="" disabled>
-                    Select Type of Apartment
+                    Select property type
                   </option>
-                  <option value="singleRoom">Single Room</option>
-                  <option value="miniflat">Mini Flat</option>
-                  <option value="studio1">Studio (1 Bedroom)</option>
-                  <option value="two">2 Bedrooms</option>
-                  <option value="threePlus">3+ Bedrooms</option>
-                  <option value="fourPlus">4+ Bedroom</option>
-                  <option value="duplex">Duplex</option>
+                  {PROPERTY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <span className="material-symbols-outlined text-gray-500">expand_more</span>
@@ -499,7 +514,7 @@ function FilterModal({
 
             <div className="space-y-5 pt-2 border-t border-gray-50 mt-4">
               {toggleOptions.map((option) => {
-                const isActive = toggles[option.key];
+                const isActive = filters.toggles[option.key];
                 return (
                   <div key={option.key} className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-gray-900">{option.label}</span>
@@ -508,9 +523,12 @@ function FilterModal({
                       role="switch"
                       aria-checked={isActive}
                       onClick={() =>
-                        setToggles((prev) => ({
+                        setFilters((prev) => ({
                           ...prev,
-                          [option.key]: !prev[option.key],
+                          toggles: {
+                            ...prev.toggles,
+                            [option.key]: !prev.toggles[option.key],
+                          },
                         }))
                       }
                       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition duration-200 ease-in-out ${
@@ -534,17 +552,7 @@ function FilterModal({
             <div className="flex gap-3">
               <button
                 className="flex-1 rounded-xl bg-white px-3 py-3.5 text-xs font-bold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-200 hover:bg-gray-50"
-                onClick={() => {
-                  setBudget(100000);
-                  setDistance(15);
-                  setApartmentType("");
-                  setToggles(
-                    toggleOptions.reduce<Record<string, boolean>>(
-                      (acc, option) => ({ ...acc, [option.key]: false }),
-                      {}
-                    )
-                  );
-                }}
+                onClick={onReset}
               >
                 Reset
               </button>

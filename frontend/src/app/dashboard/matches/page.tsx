@@ -21,56 +21,6 @@ type PropertyCard = {
   tone?: "primary" | "warning";
 };
 
-const sampleProperties: PropertyCard[] = [
-  {
-    id: "maple",
-    title: "123 Maple Avenue",
-    area: "South District",
-    type: "House",
-    beds: 3,
-    baths: 2,
-    newCount: 5,
-    tone: "primary",
-    coverUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAqIAu0kQ1GflhWMuP-A5gKpS2fSgzH-SceEq9D060pr9ZxuICllWfBPljMmLN5bZvVvQLx8ivvOyNcU_C1GkD7LRxPL79nF50665aqcCP7TtwZdNWa3f_EIB9hC0F1MP_urlxAR-GXMEEVyBPS7bn00W2dGtrRb3Q2NTTFLckdrCFt_td1r5tlOU8P6eYd4HMwWSoqcusT_p2c-Ifux6ozHUG9FV-9yWHE3Zu3CK9ZQcWXbXD-g8RLO7y47GDXgKAxzaL5T5Qv4XnA",
-  },
-  {
-    id: "broadway",
-    title: "450 Broadway St, #4B",
-    area: "Downtown",
-    type: "Apartment",
-    beds: 1,
-    baths: 1,
-    newCount: 2,
-    tone: "primary",
-    coverUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuA44ONytmRLzcTkqPylL4JJl1VvH1QFba_NqAXjnurF0GvRbdYvMsTV1RFKbsnRi69_9aHr93KnQ9K-W2gGHTYIr4mesXj-DPWmtArjQhT_OMHO8HhrY01n1ypBI-no1Xe3PdsC1PzA2NmPpYaPaFhAjhlHKOCC5_OnkWpUjaK2kYwA9JLlgRsP0w0oDqM7W6TWMko6u4lmQyGFrHP5GooZChKHZVXpyoAvUxxFclF_VV7yyUnsssk6kkg5h7WjRWOWgbpKDD45QhY1",
-  },
-  {
-    id: "oak",
-    title: "78 Oak Lane",
-    area: "West End",
-    type: "House",
-    beds: 2,
-    baths: 1.5,
-    newCount: 1,
-    tone: "warning",
-    coverUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBbG5LZXzt_L22GE6qjRpDVKxIAgSvdm19YMOrrzQeFX-f5oXEAMSpYE9cSe1YVWYEa0qhoXmJHvgCN9Sc3sZglpHKcLwTRcmZUARwJejlu3WJgu_07hOJ-7gPhGSRSxqfdyvFOzUDUM6fN3pj3pd4CVoygg0ObgPl9o_akuInaF-i1xRQj9SowvzaDt4Gs_I5bTRlN6ask0rEgnYJfrg6lDOqa4gfElYnpE5ewVX7WZN00T9HBnnpDQKeFZnPwzOeuBOoLljRMaIz9",
-  },
-  {
-    id: "willow",
-    title: "22 Willow Lane",
-    area: "Northside",
-    type: "House",
-    beds: 3,
-    baths: 2,
-    newCount: 0,
-    coverUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAS2F3qjzYuh38GXwptFH3zVJBCv8N-MXljlwCjbeZxqVLLvxLMpiTrl2odDe-yDJQd4eJFIvOGKUdxC-CUNOOqqU09PpDoPIR0UlQeWouKqPMPtsDW5jD-yp0XTDaAjvn16MzdcELYd2afZm-Skh21O0ZlbTFGsG2jG1DHt8bRrlN3-7PxC3b-b4NPhfLYMMynw2BV1la6V_aSzrWP5cOi3ZzSrkWfXhtRdznj0G3Yp3TKc4u2kCb1qKbQqFwOAtGBqEESVGDj7jtM",
-  },
-];
-
 function PropertyListCard({ card }: { card: PropertyCard }) {
   const isEmpty = card.newCount === 0;
   const badgeClass = isEmpty
@@ -127,7 +77,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
     <DashboardBottomNav
       active={active}
       chatHref="/dashboard/messages"
-      rootClassName="px-6 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"
+      rootClassName="px-6 py-2 pb-3 bottom-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"
       containerClassName="flex justify-between items-end h-14 max-w-md mx-auto"
     />
   );
@@ -143,7 +93,7 @@ export default function LandlordMatchesPropertyListPage() {
 
   const mappedProperties: PropertyCard[] = useMemo(
     () =>
-      (authToken ? landlordProperties : sampleProperties).map((property) => ({
+      landlordProperties.map((property) => ({
         id: property.id,
         title: property.title ?? "Untitled property",
         area: property.area ?? "",
@@ -154,7 +104,7 @@ export default function LandlordMatchesPropertyListPage() {
         coverUrl: property.coverUrl ?? "/hero.png",
         tone: (property.newCount ?? 0) > 0 ? "primary" : undefined,
       })),
-    [authToken, landlordProperties]
+    [landlordProperties]
   );
 
   const totalNew = useMemo(

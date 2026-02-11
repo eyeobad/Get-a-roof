@@ -111,7 +111,7 @@ async function handleRoleRouting(request: NextRequest, token: string) {
 }
 
 async function resolveRole(token: string) {
-  const candidates = [JWT_SECRET, DEV_SECRET].filter(Boolean);
+  const candidates = JWT_SECRET ? [JWT_SECRET] : [DEV_SECRET];
   for (const candidate of candidates) {
     try {
       const secret = new TextEncoder().encode(candidate);
@@ -122,7 +122,7 @@ async function resolveRole(token: string) {
     }
   }
 
-  if (process.env.NODE_ENV !== "production") {
+  if (!JWT_SECRET && process.env.NODE_ENV !== "production") {
     try {
       const payload = decodeJwt(token);
       return extractRole(payload?.role);

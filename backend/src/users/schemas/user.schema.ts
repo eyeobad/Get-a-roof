@@ -56,6 +56,9 @@ class TenantPreferences {
   lookingFor?: PropertyType[];
 
   @Prop()
+  gender?: string;
+
+  @Prop()
   employmentStatus?: string;
 
   @Prop()

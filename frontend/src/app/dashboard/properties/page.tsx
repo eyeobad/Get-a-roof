@@ -26,7 +26,15 @@ type Property = {
 };
 
 function Money({ value }: { value: number }) {
-  const formatted = useMemo(() => value.toLocaleString(), [value]);
+  const formatted = useMemo(
+    () =>
+      new Intl.NumberFormat("en-NG", {
+        style: "currency",
+        currency: "NGN",
+        maximumFractionDigits: 0,
+      }).format(value),
+    [value]
+  );
   return <>{formatted}</>;
 }
 
@@ -98,10 +106,9 @@ function PropertyCard({
 
           <div className="flex items-baseline gap-1">
             <span className="text-[20px] font-extrabold text-[#0a44b8]">
-              $
               <Money value={p.price} />
             </span>
-            <span className="text-[14px] text-gray-500 font-medium">/ mo</span>
+            <span className="text-[14px] text-gray-500 font-medium">/ yr</span>
           </div>
 
           <div className="flex items-center gap-4 mt-0.5">
@@ -202,52 +209,16 @@ export default function LandlordDashboardPage() {
   const [q, setQ] = useState("");
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
+  const user = useAppStore((state) => state.user);
+  const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const landlordProperties = useAppStore((state) => state.landlordProperties);
   const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
   const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
 
-  const sampleProperties: Property[] = useMemo(
-    () => [
-      {
-        id: "p1",
-        status: "Listed",
-        title: "123 Maple Avenue",
-        price: 1200,
-        beds: 3,
-        baths: 2,
-        matches: 12,
-        coverUrl:
-          "https://lh3.googleusercontent.com/aida-public/AB6AXuASNq12EGMCak0p_Mi5IJiFR2H_TUC43uKbPb3UDA3Drr2usbP0sbEyXKAiiIuy_rfrA5mSnrID4rcjMH6r63Ks8_m84AfNxGcqJ9NpaNmFzE-FeJ9dZa5s59CbhgiE57pnucWo7_zCdUKJDmr-PxKiyhHsMngsfHD0pgNlHhzZMzyOMLCcNv2oLh--U3ZUe3WUKryOL7DJJ5lbZzGGAYlckjXUyaGIBqmrWHgxygKNGmSZzU3nIE_fQddaOAV8vl8nv3fLFlXHVKTZ",
-      },
-      {
-        id: "p2",
-        status: "Listed",
-        title: "456 Oak Street",
-        price: 1500,
-        beds: 2,
-        baths: 2,
-        matches: 0,
-        coverUrl:
-          "https://lh3.googleusercontent.com/aida-public/AB6AXuCXjht26ed14yawZqKOUqCh8E9PcQmqFD11r9bf8YvFGpD24Y877h44AWab8l5pGr0RjZLcCc_vPCOqRmaR9mxiObHutlocgatm1BXd_b2inDL3S2xIl1XwBJkVQ2cYNHeGAziyLtxnz4OZrDULO3u-uGtZ3Al5D0ParCSPxOPCeLNwd-14dNGKE2-G0-jTiJTCB4nEfR2kjrcXYP6yTNr5CiEq4J5n6CxGxAmebmc63UyTCKQnfsYUAV9wat0yHwJbYPpQ5KQj8Ja8",
-      },
-      {
-        id: "p3",
-        status: "Draft",
-        title: "789 Pine Lane",
-        price: 950,
-        beds: 1,
-        baths: 1,
-        coverUrl:
-          "https://lh3.googleusercontent.com/aida-public/AB6AXuBaOh2T5Urtt9gq9SFJ6K-VegT_WT7Noz2alRwfAFVZuG4u_N0wmw53yGBNpeTBBMNmU3KNm6C56nW3rMgG50pfdaGIvvve3lVYAlWZn3I2fCpguvN3rpUlbwuSpSU0AXJD6TVzWEzSIrnrLkXlF7ruAJjgkVM9GF15sPSPmHKGHuuLli3FGllwFM-LYsUu2Q3s84gNFqus6EVh-VxPCD1KDt5D2IvRzf9wLhHugyKuK_X0VnIAd5VIeXk2pR4hptiyZbd2Z77UjrUI",
-      },
-    ],
-    []
-  );
-
   const mappedProperties: Property[] = useMemo(
     () =>
-      (authToken ? landlordProperties : sampleProperties).map((property) => ({
+      landlordProperties.map((property) => ({
         id: property.id,
         status: (property.status as PropertyStatus) ?? "Draft",
         title: property.title ?? "Untitled property",
@@ -258,13 +229,16 @@ export default function LandlordDashboardPage() {
         newCount: property.newCount ?? 0,
         coverUrl: property.coverUrl ?? "/hero.png",
       })),
-    [authToken, landlordProperties, sampleProperties]
+    [landlordProperties]
   );
 
   useEffect(() => {
     if (!authToken) return;
     void loadLandlordProperties();
-  }, [authToken, loadLandlordProperties]);
+    if (!user?.photoUrl) {
+      void fetchUserProfile();
+    }
+  }, [authToken, loadLandlordProperties, fetchUserProfile, user?.photoUrl]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -312,7 +286,10 @@ export default function LandlordDashboardPage() {
         <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 hover:ring-4 ring-[#0a44b8]/20 transition-all focus:outline-none focus:ring-4">
           <Image
             alt="Profile avatar"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGEzCpt0ILv2ShepIc-_verWSuPCwtAXDW-e6EeG4kkTaOBJuQSlu8nbc907JfpuXy3oBnj5in34iv_WuZi76heKMOon1pAmtMTf1m0ddee-icIOR50wiIAyoG53dQmOdxNGlMhdQR7l6Cia4LyFny-xYHhXBwlxFKuv1D7Eu66vs9ZewGeFbHhXRyoEbbdbnEo4DsY7dsX7nrOhcs0DRX90daZEkqZ9rV8V-hr5c39Vjv_Yr8Bh1HRUgdUQRj3KKqoZb38elb3iiy"
+            src={
+              user?.photoUrl ||
+              "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P"
+            }
             fill
             className="object-cover"
           />

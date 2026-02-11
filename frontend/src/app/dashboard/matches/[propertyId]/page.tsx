@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 
@@ -131,8 +131,13 @@ export default function LandlordMatchesPage() {
   const params = useParams<{ propertyId: string }>();
   const propertyId = params?.propertyId as string;
   const authToken = useAppStore((state) => state.authToken);
-  const landlordMatches = useAppStore(
-    (state) => state.landlordMatchesByProperty[propertyId] ?? []
+  const landlordMatchesByProperty = useAppStore(
+    (state) => state.landlordMatchesByProperty
+  );
+  const propertyMatches = landlordMatchesByProperty[propertyId];
+  const landlordMatches = useMemo(
+    () => propertyMatches ?? [],
+    [propertyMatches]
   );
   const loadLandlordPropertyMatches = useAppStore(
     (state) => state.loadLandlordPropertyMatches
@@ -140,7 +145,7 @@ export default function LandlordMatchesPage() {
   const markLandlordPropertyMatchesSeen = useAppStore(
     (state) => state.markLandlordPropertyMatchesSeen
   );
-  const [isLoading, setIsLoading] = useState(false);
+  const isLoading = Boolean(authToken && propertyId && propertyMatches === undefined);
 
   const matches = useMemo<MatchCard[]>(() => {
     return landlordMatches.map((match) => {
@@ -190,13 +195,15 @@ export default function LandlordMatchesPage() {
         tags: tags.length ? tags : [{ label: "New match" }],
         note,
         noteTone: note ? "info" : undefined,
-        avatarUrl: tenant?.photoUrl ?? "https://i.pravatar.cc/100?img=32",
+        avatarUrl:
+          tenant?.photoUrl ??
+          "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P",
         verified: tenant?.isVerified ?? false,
         tenantId: tenant?.id ?? match.tenantId,
         chatHref: `/dashboard/messages?thread=${match.id}`,
       };
     });
-  }, [landlordMatches, propertyId]);
+  }, [landlordMatches]);
 
   const newCount = useMemo(
     () => landlordMatches.filter((match) => match.isNewForLandlord).length,
@@ -206,13 +213,10 @@ export default function LandlordMatchesPage() {
   useEffect(() => {
     if (!authToken || !propertyId) return;
     let active = true;
-    setIsLoading(true);
     (async () => {
       await loadLandlordPropertyMatches(propertyId);
       await markLandlordPropertyMatchesSeen(propertyId);
-      if (active) {
-        setIsLoading(false);
-      }
+      if (!active) return;
     })();
     return () => {
       active = false;

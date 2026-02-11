@@ -10,7 +10,19 @@ const solidIconStyle: React.CSSProperties = {
 };
 
 function formatMoney(n: number) {
-  return n.toLocaleString("en-US");
+  return new Intl.NumberFormat("en-NG").format(n);
+}
+
+function formatNaira(n: number) {
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `₦${formatMoney(n)}`;
+  }
 }
 
 export default function AddPropertyRequirementsPage() {
@@ -20,7 +32,7 @@ export default function AddPropertyRequirementsPage() {
   const setLandlordDraft = useAppStore((state) => state.setLandlordDraft);
   const saveLandlordDraft = useAppStore((state) => state.saveLandlordDraft);
   const [initialized, setInitialized] = useState(false);
-  const [budget, setBudget] = useState(2500);
+  const [budget, setBudget] = useState(100000);
   const [income, setIncome] = useState("80000");
 
   const [pets, setPets] = useState(true);
@@ -32,7 +44,7 @@ export default function AddPropertyRequirementsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const budgetLabel = useMemo(() => `$${formatMoney(budget)}`, [budget]);
+  const budgetLabel = useMemo(() => formatNaira(budget), [budget]);
 
   useEffect(() => {
     if (initialized) return;
@@ -86,6 +98,18 @@ export default function AddPropertyRequirementsPage() {
       setIsSaving(false);
     }
   };
+
+  const incomeSuggestions = [
+    { label: "₦100k", value: "100000" },
+    { label: "₦250k", value: "250000" },
+    { label: "₦500k", value: "500000" },
+    { label: "₦1m", value: "1000000" },
+    { label: "₦2m", value: "2000000" },
+    { label: "₦5m", value: "5000000" },
+    { label: "₦10m", value: "10000000" },
+    { label: "₦15m", value: "15000000" },
+    { label: "₦20m", value: "20000000" },
+  ];
 
   return (
     <div className="min-h-screen font-display  bg-white/95 text-[#1A1A1A] antialiased selection:bg-[#0a44b8]/30">
@@ -193,9 +217,9 @@ export default function AddPropertyRequirementsPage() {
                 <input
                   id="budget"
                   type="range"
-                  min={500}
-                  max={5000}
-                  step={100}
+                  min={100000}
+                  max={15000000}
+                  step={50000}
                   value={budget}
                   onChange={(e) => setBudget(Number(e.target.value))}
                   className="w-full"
@@ -203,8 +227,8 @@ export default function AddPropertyRequirementsPage() {
               </div>
 
               <div className="flex justify-between text-sm font-medium text-stone-500 mt-1">
-                <span>$500</span>
-                <span>$5,000+</span>
+                <span>₦100k</span>
+                <span>₦15m+</span>
               </div>
             </div>
 
@@ -216,22 +240,41 @@ export default function AddPropertyRequirementsPage() {
 
               <div className="relative flex items-center">
                 <span className="absolute left-6 text-stone-500 text-xl font-bold">
-                  $
+                  ₦
                 </span>
                 <input
                   id="income"
                   type="text"
                   inputMode="numeric"
+                  list="income-suggestions"
                   value={income}
                   onChange={(e) => setIncome(e.target.value.replace(/[^\d]/g, ""))}
                   placeholder="80,000"
                   className="w-full bg-white/95 text-[#1A1A1A] text-xl font-bold py-4 pl-12 pr-4 rounded-full border-2 border-transparent focus:border-[#0a44b8] focus:ring-0 transition-all placeholder:text-stone-400 outline-none"
                 />
+                <datalist id="income-suggestions">
+                  {incomeSuggestions.map((suggestion) => (
+                    <option key={suggestion.value} value={suggestion.value} label={suggestion.label} />
+                  ))}
+                </datalist>
               </div>
 
               <p className="text-stone-500 text-sm mt-3 font-medium">
-                Recommended: 40x monthly rent
+                Recommended: 3x annual rent
               </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {incomeSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.value}
+                    type="button"
+                    onClick={() => setIncome(suggestion.value)}
+                    className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs font-semibold text-[#0A2463] shadow-sm transition-colors hover:border-[#0a44b8] hover:text-[#0a44b8]"
+                  >
+                    {suggestion.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Toggles list */}

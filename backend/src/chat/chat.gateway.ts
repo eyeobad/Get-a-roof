@@ -13,7 +13,29 @@ import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { JwtService } from "@nestjs/jwt";
 
-@WebSocketGateway({ cors: true })
+const defaultCorsOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+const socketCorsOrigins = (() => {
+  const raw = process.env.CORS_ORIGINS;
+  if (!raw) return defaultCorsOrigins;
+  const origins = raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (!origins.length) return defaultCorsOrigins;
+  if (origins.includes("*")) return true;
+  return origins;
+})();
+
+@WebSocketGateway({
+  cors: {
+    origin: socketCorsOrigins,
+    credentials: true,
+  },
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;

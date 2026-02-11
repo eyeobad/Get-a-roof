@@ -14,6 +14,21 @@ import { normalizePropertyType } from "../common/utils/property.utils";
 import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
 
+const propertyImageMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const propertyProofMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+]);
+
 @Injectable()
 export class PropertiesService {
   constructor(
@@ -125,16 +140,22 @@ export class PropertiesService {
   }
 
   async uploadImage(file?: Express.Multer.File) {
-    return this.uploadToAppwrite(file);
+    return this.uploadToAppwrite(file, propertyImageMimeTypes);
   }
 
   async uploadProof(file?: Express.Multer.File) {
-    return this.uploadToAppwrite(file);
+    return this.uploadToAppwrite(file, propertyProofMimeTypes);
   }
 
-  private async uploadToAppwrite(file?: Express.Multer.File) {
+  private async uploadToAppwrite(
+    file?: Express.Multer.File,
+    allowedTypes?: Set<string>
+  ) {
     if (!file) {
       throw new BadRequestException("File is required");
+    }
+    if (allowedTypes && (!file.mimetype || !allowedTypes.has(file.mimetype))) {
+      throw new BadRequestException("Unsupported file type");
     }
     const result = await this.appwriteStorage.uploadFile(
       file.originalname ?? file.filename ?? `property-${Date.now()}`,
@@ -165,7 +186,20 @@ export class PropertiesService {
       ];
     }
 
-    let query = this.propertyModel.find(filters);
+    const projection = {
+      address: 1,
+      neighborhood: 1,
+      status: 1,
+      monthlyPrice: 1,
+      bedCount: 1,
+      bathCount: 1,
+      propertyType: 1,
+      images: 1,
+      updatedAt: 1,
+      landlordId: 1,
+    };
+
+    let query = this.propertyModel.find(filters).select(projection);
     if (options?.sort === "priceAsc") {
       query = query.sort({ monthlyPrice: 1 });
     } else if (options?.sort === "priceDesc") {

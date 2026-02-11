@@ -374,7 +374,11 @@ export class MatchesService {
       {
         $lookup: {
           from: "messages",
-          let: { matchId: "$_id", currentUserId: tenantId },
+          let: {
+            matchId: "$_id",
+            currentUserId: tenantId,
+            landlordId: "$property.landlordId",
+          },
           pipeline: [
             {
               $match: {
@@ -407,6 +411,20 @@ export class MatchesService {
                     ],
                   },
                 },
+                landlordReplied: {
+                  $max: {
+                    $cond: [
+                      {
+                        $eq: [
+                          { $toString: "$senderId" },
+                          { $toString: "$$landlordId" },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
               },
             },
             {
@@ -414,6 +432,7 @@ export class MatchesService {
                 _id: 0,
                 lastMessage: 1,
                 unreadCount: 1,
+                landlordReplied: 1,
               },
             },
           ],
@@ -427,6 +446,12 @@ export class MatchesService {
           },
           unreadCount: {
             $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
+          },
+          landlordReplied: {
+            $ifNull: [
+              { $arrayElemAt: ["$messageMeta.landlordReplied", 0] },
+              0,
+            ],
           },
         },
       },

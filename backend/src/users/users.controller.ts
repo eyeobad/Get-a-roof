@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -21,6 +22,22 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { SavePropertyDto } from "./dto/save-property.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+
+const profileImageMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const createMimeTypeFilter =
+  (allowedTypes: Set<string>) =>
+  (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+      return cb(new BadRequestException("Unsupported file type"));
+    }
+    return cb(null, true);
+  };
 
 @Controller("api/users")
 export class UsersController {
@@ -125,6 +142,7 @@ export class UsersController {
     FileInterceptor("file", {
       storage: multer.memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: createMimeTypeFilter(profileImageMimeTypes),
     })
   )
   uploadPhoto(

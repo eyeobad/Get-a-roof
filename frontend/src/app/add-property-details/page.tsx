@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -49,20 +50,33 @@ export default function AddPropertyDetailsPage() {
     ],
     []
   );
+  const propertyTypeLookup = useMemo(
+    () =>
+      new Map(
+        PROPERTY_TYPE_OPTIONS.map((option) => [
+          option.value.toLowerCase().replace(/[\s_-]/g, ""),
+          option.value,
+        ])
+      ),
+    []
+  );
 
   useEffect(() => {
     if (initialized) return;
     setLocation(draft.address?.street ?? "");
-    setRent(draft.monthlyPrice !== undefined ? String(draft.monthlyPrice) : "");
+    setRent(
+      draft.monthlyPrice !== undefined
+        ? String(Math.round(draft.monthlyPrice * 12))
+        : ""
+    );
     const rawType = draft.propertyType ?? "";
-    const normalizedType = rawType ? rawType.toLowerCase() : "";
-    const allowedTypes = ["apartment", "house", "condo", "townhouse", "other"];
+    const normalizedType = rawType
+      ? rawType.toLowerCase().replace(/[\s_-]/g, "")
+      : "";
     if (!rawType) {
       setPropertyType("");
     } else {
-      setPropertyType(
-        allowedTypes.includes(normalizedType) ? normalizedType : "other"
-      );
+      setPropertyType(propertyTypeLookup.get(normalizedType) ?? "other");
     }
     setDesc(draft.description ?? "");
     setLat(
@@ -79,7 +93,7 @@ export default function AddPropertyDetailsPage() {
       setProofName("Document uploaded");
     }
     setInitialized(true);
-  }, [draft, initialized]);
+  }, [draft, initialized, propertyTypeLookup]);
 
   const handleUseLocation = () => {
     if (!navigator.geolocation) {
@@ -113,7 +127,9 @@ export default function AddPropertyDetailsPage() {
     const sqftValue = sqft ? Number(sqft) : undefined;
 
     setLandlordDraft({
-      monthlyPrice: Number.isNaN(rentValue) ? undefined : rentValue,
+      monthlyPrice: Number.isNaN(rentValue)
+        ? undefined
+        : Math.round(rentValue / 12),
       propertyType: propertyType || undefined,
       description: desc || undefined,
       bedCount: beds ?? undefined,
@@ -310,17 +326,12 @@ export default function AddPropertyDetailsPage() {
             {/* Rent */}
             <div className="flex flex-col gap-2">
               <label className="text-base font-semibold pl-1" htmlFor="rent">
-                Monthly Rent
+                Annual Rent
               </label>
 
               <div className="group relative flex items-center w-full input-active-ring rounded-full bg-white border border-[#0A1F33]/20 transition-all duration-200">
                 <div className="pl-4 pr-1 text-[#0a44b8] flex items-center justify-center pointer-events-none">
-                  <span
-                    className="material-symbols-outlined text-2xl"
-                    style={solidIconStyle}
-                  >
-                    attach_money
-                  </span>
+                  <span className="text-xl font-bold">₦</span>
                 </div>
 
                 <input
@@ -335,7 +346,7 @@ export default function AddPropertyDetailsPage() {
               </div>
 
               <p className="text-sm text-gray-500 pl-4">
-                Suggested: $1,200 based on area
+                Suggested: ₦1,200,000 per year based on area
               </p>
             </div>
 
@@ -364,11 +375,11 @@ export default function AddPropertyDetailsPage() {
                   <option value="" disabled>
                     Select property type
                   </option>
-                  <option value="apartment">Apartment</option>
-                  <option value="house">House</option>
-                  <option value="condo">Condo</option>
-                  <option value="townhouse">Townhouse</option>
-                  <option value="other">Other</option>
+                  {PROPERTY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
 
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#0a44b8]">

@@ -146,3 +146,4 @@ export class Property {
 }
 
 export const PropertySchema = SchemaFactory.createForClass(Property);
+PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });

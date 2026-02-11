@@ -67,9 +67,9 @@ export default function TenantReview() {
     const tenant = profile?.preferences?.tenant ?? {};
     const currency = (value?: number) =>
       value !== undefined && value !== null
-        ? new Intl.NumberFormat("en-US", {
+        ? new Intl.NumberFormat("en-NG", {
             style: "currency",
-            currency: "USD",
+            currency: "NGN",
             maximumFractionDigits: 0,
           }).format(value)
         : "Not set";

@@ -19,6 +19,19 @@ export default function EmailVerificationPage() {
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const userId = searchParams.get("userId") || "";
   const email = searchParams.get("email") || "user@example.com";
+  const role = searchParams.get("role") || "";
+  const nextParam = searchParams.get("next") || "";
+
+  const buildNextUrl = (target: string) => {
+    if (!target) return "";
+    const decoded = decodeURIComponent(target);
+    const [path, queryString] = decoded.split("?");
+    const params = new URLSearchParams(queryString || "");
+    if (userId) {
+      params.set("userId", userId);
+    }
+    return params.toString() ? `${path}?${params.toString()}` : path;
+  };
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
@@ -53,6 +66,15 @@ export default function EmailVerificationPage() {
       setIsSubmitting(true);
       await verifyEmailOtp(userId, otp);
       showToast({ title: "Email verified", variant: "success" });
+      const nextUrl = buildNextUrl(nextParam);
+      if (nextUrl) {
+        router.push(nextUrl);
+        return;
+      }
+      if (role === "landlord") {
+        router.push("/verify-identity");
+        return;
+      }
       const query = new URLSearchParams({ userId });
       router.push(`/auth/verification-success?${query.toString()}`);
     } catch (err) {

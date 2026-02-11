@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -27,6 +28,30 @@ import { Roles } from "../common/guards/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UserRole } from "../common/enums";
 
+const imageMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const proofMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+]);
+
+const createMimeTypeFilter =
+  (allowedTypes: Set<string>) =>
+  (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+      return cb(new BadRequestException("Unsupported file type"));
+    }
+    return cb(null, true);
+  };
+
 @Controller("api/properties")
 export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
@@ -38,6 +63,7 @@ export class PropertiesController {
     FileInterceptor("file", {
       storage: multer.memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: createMimeTypeFilter(imageMimeTypes),
     })
   )
   uploadImage(@UploadedFile() file?: Express.Multer.File) {
@@ -51,6 +77,7 @@ export class PropertiesController {
     FileInterceptor("file", {
       storage: multer.memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: createMimeTypeFilter(proofMimeTypes),
     })
   )
   uploadProof(@UploadedFile() file?: Express.Multer.File) {

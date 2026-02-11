@@ -21,8 +21,8 @@ export default function TenantSignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerTenant = useAppStore((state) => state.registerTenant);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
-  const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
   const login = useAppStore((state) => state.login);
+  const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
 
   const updateField = (key: keyof typeof form, value: string) => {
@@ -44,6 +44,7 @@ export default function TenantSignupPage() {
     }
 
   try {
+    clearAuth();
     setIsSubmitting(true);
       const user = await registerTenant({
         firstName: form.firstName,
@@ -54,7 +55,7 @@ export default function TenantSignupPage() {
       });
       let userId = user?.id || user?._id;
       if (userId) {
-        await Promise.all([sendEmailOtp(userId), sendPhoneOtp(userId)]);
+        await sendEmailOtp(userId);
       }
 
       const authResponse = await login(form.email, form.password);
@@ -67,20 +68,23 @@ export default function TenantSignupPage() {
       const query = new URLSearchParams({
         userId: userId ?? "",
         email: form.email,
-        phone: form.phoneNumber,
       });
       showToast({
         title: "Verification sent",
-        text: "Check your email and phone for the next steps.",
+        text: "Check your email for the next steps.",
         variant: "success",
       });
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
       const message = getApiErrorMessage(err);
-      setError(message);
+      const isConflict = message.toLowerCase().includes("already in use");
+      const friendly = isConflict
+        ? "Account already exists. Log in instead."
+        : message;
+      setError(friendly);
       showToast({
         title: "Sign up failed",
-        text: message,
+        text: friendly,
         variant: "error",
       });
     } finally {

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { listingIds, listingSeed, type Listing } from "@/lib/listings";
+import { type Listing } from "@/lib/listings";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 
@@ -16,6 +16,7 @@ export type MatchSummary = {
   lastMessage?: string;
   lastMessageAt?: string;
   unreadCount?: number;
+  landlordReplied?: boolean;
 };
 
 export type ConversationSummary = {
@@ -192,6 +193,7 @@ type ApiMatch = {
   property?: ApiProperty;
   lastMessage?: { content?: string; timestamp?: string };
   unreadCount?: number;
+  landlordReplied?: number | boolean;
   tenant?: ApiUser;
   isNewForLandlord?: boolean;
 };
@@ -207,6 +209,7 @@ type ApiConversation = {
 };
 
 export type ApiMessage = {
+  id?: string;
   _id?: string;
   senderId?: string;
   receiverId?: string;
@@ -228,7 +231,7 @@ type Thread = {
 type ExploreFilters = {
   budget?: number;
   distance?: number;
-  apartmentType?: string;
+  propertyType?: string;
   toggles?: Record<string, boolean>;
   lat?: number;
   lng?: number;
@@ -325,12 +328,8 @@ type AppState = {
   markLandlordPropertyMatchesSeen: (propertyId: string) => Promise<void>;
 };
 
-const listingMap = listingSeed.reduce<Record<string, Listing>>((acc, listing) => {
-  acc[listing.id] = listing;
-  return acc;
-}, {});
-
-const initialQueue = listingIds;
+const listingMap: Record<string, Listing> = {};
+const initialQueue: string[] = [];
 
 const isMongoId = (value?: string | null) =>
   Boolean(value && /^[a-f\d]{24}$/i.test(value));
@@ -342,12 +341,18 @@ const resolvePropertyId = (property?: ApiProperty | null) => {
   return typeof raw === "string" ? raw : String(raw);
 };
 
+const hasToString = (value: unknown): value is { toString: () => string } => {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("toString" in value)) return false;
+  return typeof (value as { toString?: unknown }).toString === "function";
+};
+
 const toIdString = (value?: unknown) => {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
-  if (typeof value === "object" && "toString" in (value as any)) {
-    const str = (value as any).toString?.();
+  if (hasToString(value)) {
+    const str = value.toString();
     return typeof str === "string" ? str : "";
   }
   return "";
@@ -366,7 +371,7 @@ const toTimestamp = (value?: unknown) => {
 };
 
 const buildMessageId = (message: ApiMessage) => {
-  const id = toIdString((message as any).id ?? message._id);
+  const id = toIdString(message.id ?? message._id);
   if (id) return id;
   const senderId = toIdString(message.senderId);
   const timestamp = toTimestamp(message.timestamp);
@@ -392,15 +397,15 @@ const isSameChatMessage = (a: ChatMessage, b: ChatMessage) => {
 };
 
 const formatCurrency = (value?: number) => {
-  if (value === undefined || value === null) return "$0";
+  if (value === undefined || value === null) return "₦0";
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-NG", {
       style: "currency",
-      currency: "USD",
+      currency: "NGN",
       maximumFractionDigits: 0,
     }).format(value);
   } catch {
-    return `$${value}`;
+    return `₦${value}`;
   }
 };
 
@@ -419,11 +424,7 @@ const formatTime = (value?: string) => {
   });
 };
 
-const buildConversationSummary = (
-  item: ApiConversation,
-  currentUserId?: string,
-  currentUser?: ApiUser | null
-) => {
+const buildConversationSummary = (item: ApiConversation, currentUserId?: string) => {
   const matchId = toIdString(item.matchId);
   const listing = item.property ? mapPropertyToListing(item.property) : null;
   const tenantId = item.tenantId ? toIdString(item.tenantId) : undefined;
@@ -481,13 +482,19 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
   const bathrooms = property?.bathCount ?? 0;
   const sqftValue = property?.sqFt ?? 0;
 
+  const monthlyPrice = property?.monthlyPrice;
+  const annualPrice =
+    monthlyPrice !== undefined && monthlyPrice !== null
+      ? monthlyPrice * 12
+      : monthlyPrice;
+
   return {
     id: propertyId,
     image: property?.images?.[0] ?? "/hero.png",
     images: property?.images ?? undefined,
     amenities: property?.amenities ?? undefined,
-    price: formatCurrency(property?.monthlyPrice),
-    period: "/mo",
+    price: formatCurrency(annualPrice),
+    period: "/yr",
     stats: [
       { icon: "bed", label: `${bedrooms} Beds` },
       { icon: "bathtub", label: `${bathrooms} Baths` },
@@ -519,20 +526,25 @@ const emptyLandlordDraft: LandlordDraft = {
   status: "Draft",
 };
 
-const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySummary => ({
-  id: resolvePropertyId(property),
-  status: property?.status,
-  title: property?.title ?? property?.address?.street ?? property?.neighborhood,
-  price: property?.price ?? property?.monthlyPrice,
-  beds: property?.beds ?? property?.bedCount ?? 0,
-  baths: property?.baths ?? property?.bathCount ?? 0,
-  matches: property?.matches ?? property?.matchCount ?? 0,
-  newCount: property?.newCount ?? 0,
-  coverUrl: property?.coverUrl ?? property?.images?.[0] ?? "/hero.png",
-  area: property?.area ?? property?.neighborhood ?? property?.address?.city,
-  type: property?.type ?? property?.propertyType,
-  matchCount: property?.matchCount ?? property?.matches ?? 0,
-});
+const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySummary => {
+  const basePrice = property?.price ?? property?.monthlyPrice;
+  const annualPrice =
+    basePrice !== undefined && basePrice !== null ? basePrice * 12 : basePrice;
+  return {
+    id: resolvePropertyId(property),
+    status: property?.status,
+    title: property?.title ?? property?.address?.street ?? property?.neighborhood,
+    price: annualPrice,
+    beds: property?.beds ?? property?.bedCount ?? 0,
+    baths: property?.baths ?? property?.bathCount ?? 0,
+    matches: property?.matches ?? property?.matchCount ?? 0,
+    newCount: property?.newCount ?? 0,
+    coverUrl: property?.coverUrl ?? property?.images?.[0] ?? "/hero.png",
+    area: property?.area ?? property?.neighborhood ?? property?.address?.city,
+    type: property?.type ?? property?.propertyType,
+    matchCount: property?.matchCount ?? property?.matches ?? 0,
+  };
+};
 
 const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
   id: resolvePropertyId(property),
@@ -619,6 +631,26 @@ const buildLandlordPayload = (draft: LandlordDraft) => {
   return payload;
 };
 
+const buildSessionReset = (overrides: Partial<AppState> = {}) => ({
+  listingsById: listingMap,
+  exploreQueue: initialQueue,
+  likedIds: [],
+  passedIds: [],
+  matchSummaries: [],
+  mapMatches: [],
+  selectedListingId: initialQueue[0] ?? null,
+  threadsById: {},
+  selectedThreadId: null,
+  conversations: [],
+  messagesByMatch: {},
+  typingByMatch: {},
+  landlordDraft: emptyLandlordDraft,
+  landlordProperties: [],
+  landlordPropertiesWithMatches: [],
+  landlordMatchesByProperty: {},
+  ...overrides,
+});
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -649,21 +681,19 @@ export const useAppStore = create<AppState>()(
           const socket = getSocket(state.authToken);
           socket?.emit("join", { matchId: id });
         }
-        if (id) {
+        if (id && state.conversations.some((conversation) => conversation.id === id)) {
           void get().markMatchRead(id);
         }
       },
       setAuth: (token, userId) => set({ authToken: token, userId }),
       clearAuth: () => {
-        set({
-          authToken: null,
-          userId: null,
-          user: null,
-          landlordDraft: emptyLandlordDraft,
-          landlordProperties: [],
-          landlordPropertiesWithMatches: [],
-          landlordMatchesByProperty: {},
-        });
+        set(
+          buildSessionReset({
+            authToken: null,
+            userId: null,
+            user: null,
+          })
+        );
         void fetch("/api/auth/session", { method: "DELETE" });
       },
       login: async (email, password) => {
@@ -676,9 +706,21 @@ export const useAppStore = create<AppState>()(
           return null;
         }
 
+        const state = get();
         const userId = response.user.id || response.user._id;
         if (userId) {
-          set({ authToken: response.accessToken, userId, user: response.user });
+          const shouldReset = state.userId !== userId;
+          if (shouldReset) {
+            set(
+              buildSessionReset({
+                authToken: response.accessToken,
+                userId,
+                user: response.user,
+              })
+            );
+          } else {
+            set({ authToken: response.accessToken, userId, user: response.user });
+          }
         }
         await fetch("/api/auth/session", {
           method: "POST",
@@ -738,13 +780,21 @@ export const useAppStore = create<AppState>()(
       fetchUserProfile: async () => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        const response = await apiFetch<ApiUser>(`/api/users/${state.userId}`, {
-          token: state.authToken,
-        });
-        if (response) {
-          set({ user: response });
+        try {
+          const response = await apiFetch<ApiUser>(`/api/users/${state.userId}`, {
+            token: state.authToken,
+          });
+          if (response) {
+            set({ user: response });
+          }
+          return response;
+        } catch (error) {
+          const message = (error as Error)?.message ?? "";
+          if (message.includes("Unauthorized")) {
+            get().clearAuth();
+          }
+          return null;
         }
-        return response;
       },
       updateUser: async (payload) => {
         const state = get();
@@ -908,11 +958,7 @@ export const useAppStore = create<AppState>()(
 
         if (!response?.matchId) return null;
 
-        const { summary, listing } = buildConversationSummary(
-          response,
-          state.userId,
-          state.user
-        );
+        const { summary, listing } = buildConversationSummary(response, state.userId);
         if (listing) {
           set((prev) => ({
             listingsById: { ...prev.listingsById, [listing.id]: listing },
@@ -948,10 +994,12 @@ export const useAppStore = create<AppState>()(
           set({ listingsById: listingMap, exploreQueue: initialQueue });
           return;
         }
+        const monthlyBudget =
+          filters?.budget !== undefined ? Math.round(filters.budget / 12) : undefined;
         const query = buildQuery({
-          budget: filters?.budget,
+          budget: monthlyBudget,
           distanceKm: filters?.distance,
-          apartmentType: filters?.apartmentType,
+          propertyType: filters?.propertyType,
           lat: filters?.lat,
           lng: filters?.lng,
           selfCompound: filters?.toggles?.selfCompound,
@@ -984,10 +1032,12 @@ export const useAppStore = create<AppState>()(
           set({ mapMatches: [] });
           return;
         }
+        const monthlyBudget =
+          filters?.budget !== undefined ? Math.round(filters.budget / 12) : undefined;
         const query = buildQuery({
-          budget: filters?.budget,
+          budget: monthlyBudget,
           distanceKm: filters?.distance,
-          apartmentType: filters?.apartmentType,
+          propertyType: filters?.propertyType,
           lat: filters?.lat,
           lng: filters?.lng,
           selfCompound: filters?.toggles?.selfCompound,
@@ -1035,6 +1085,7 @@ export const useAppStore = create<AppState>()(
             lastMessage: match.lastMessage?.content,
             lastMessageAt: match.lastMessage?.timestamp,
             unreadCount: match.unreadCount ?? 0,
+            landlordReplied: Boolean(match.landlordReplied),
           } as MatchSummary;
         });
 
@@ -1052,11 +1103,7 @@ export const useAppStore = create<AppState>()(
         });
 
         const conversations = (data ?? []).map((item) => {
-          const { summary, listing } = buildConversationSummary(
-            item,
-            state.userId,
-            state.user
-          );
+          const { summary, listing } = buildConversationSummary(item, state.userId);
           if (listing) {
             set((prev) => ({
               listingsById: { ...prev.listingsById, [listing.id]: listing },
@@ -1066,8 +1113,12 @@ export const useAppStore = create<AppState>()(
         });
 
         if (!conversations.length) {
-          if (state.conversations.length) return;
-          set({ conversations: [] });
+          set({
+            conversations: [],
+            messagesByMatch: {},
+            threadsById: {},
+            selectedThreadId: null,
+          });
           return;
         }
 
@@ -1124,7 +1175,6 @@ export const useAppStore = create<AppState>()(
         if (!message) return;
 
         const nextMessage = mapApiMessageToChat(message);
-        const messageId = nextMessage.id;
 
         const nextTime = formatTime(nextMessage.timestamp);
         set((prev) => {
@@ -1168,7 +1218,6 @@ export const useAppStore = create<AppState>()(
 
         const senderId = toIdString(incoming.senderId);
         const nextMessage = mapApiMessageToChat(incoming);
-        const messageId = nextMessage.id;
         const hasConversation = state.conversations.some(
           (conversation) => conversation.id === matchId
         );
@@ -1242,11 +1291,19 @@ export const useAppStore = create<AppState>()(
       markMatchRead: async (matchId) => {
         const state = get();
         if (!state.authToken || !isMongoId(matchId)) return;
-        await apiFetch(`/api/chat/mark-read`, {
-          method: "PATCH",
-          body: JSON.stringify({ matchId }),
-          token: state.authToken,
-        });
+        try {
+          await apiFetch(`/api/chat/mark-read`, {
+            method: "PATCH",
+            body: JSON.stringify({ matchId }),
+            token: state.authToken,
+          });
+        } catch (error) {
+          const message = (error as Error)?.message ?? "";
+          if (message.includes("Access denied") || message.includes("Forbidden")) {
+            return;
+          }
+          throw error;
+        }
         set((prev) => ({
           conversations: prev.conversations.map((conversation) =>
             conversation.id === matchId
