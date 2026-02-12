@@ -29,6 +29,11 @@ type MatchCard = {
   chatHref: string;
 };
 
+type TenantPreferences = {
+  employmentStatus?: string;
+  educationLevel?: string;
+};
+
 function MatchCardView({ match }: { match: MatchCard }) {
   return (
     <section className="bg-white rounded-xl shadow border p-5 space-y-4">
@@ -150,12 +155,15 @@ export default function LandlordMatchesPage() {
   const matches = useMemo<MatchCard[]>(() => {
     return landlordMatches.map((match) => {
       const tenant = match.tenant;
+      const tenantPreferences = (
+        tenant?.preferences as { tenant?: TenantPreferences } | undefined
+      )?.tenant;
       const name = tenant
         ? `${tenant.firstName ?? ""} ${tenant.lastName ?? ""}`.trim()
         : "Tenant";
       const role =
-        tenant?.preferences?.tenant?.employmentStatus ||
-        tenant?.preferences?.tenant?.educationLevel ||
+        tenantPreferences?.employmentStatus ||
+        tenantPreferences?.educationLevel ||
         "Tenant";
       const tags: MatchTag[] = [];
       if (match.isNewForLandlord) {
