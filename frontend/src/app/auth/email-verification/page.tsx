@@ -17,10 +17,10 @@ export default function EmailVerificationPage() {
   const searchParams = useSearchParams();
   const verifyEmailOtp = useAppStore((state) => state.verifyEmailOtp);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
-  const userId = searchParams.get("userId") || "";
-  const email = searchParams.get("email") || "user@example.com";
-  const role = searchParams.get("role") || "";
-  const nextParam = searchParams.get("next") || "";
+  const userId = searchParams?.get("userId") ?? "";
+  const email = searchParams?.get("email") ?? "user@example.com";
+  const role = searchParams?.get("role") ?? "";
+  const nextParam = searchParams?.get("next") ?? "";
 
   const buildNextUrl = (target: string) => {
     if (!target) return "";
