@@ -284,10 +284,12 @@ type AppState = {
   resetPassword: (token: string, password: string) => Promise<Record<string, unknown>>;
   fetchUserProfile: () => Promise<ApiUser | null>;
   updateUser: (payload: Record<string, unknown>) => Promise<ApiUser | null>;
+  uploadProfilePhoto: (file: File) => Promise<string | null>;
   updatePreferences: (payload: {
     tenant?: Record<string, unknown>;
     landlord?: Record<string, unknown>;
   }) => Promise<ApiUser | null>;
+  deleteAccount: () => Promise<boolean>;
   likeListing: (listingId: string) => Promise<void>;
   unlikeListing: (listingId: string) => Promise<void>;
   createMatchForListing: (listingId: string, tenantLiked: boolean) => Promise<void>;
