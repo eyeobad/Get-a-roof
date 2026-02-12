@@ -130,6 +130,9 @@ type ApiUser = {
   phoneNumber?: string;
   photoUrl?: string;
   isVerified?: boolean;
+  listingsCount?: number;
+  matchesCount?: number;
+  unreadMessages?: number;
   preferences?: {
     tenant?: Record<string, unknown>;
     landlord?: Record<string, unknown>;
