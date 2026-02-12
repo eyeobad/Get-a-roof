@@ -8,7 +8,7 @@ export default function SetNewPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const resetPassword = useAppStore((state) => state.resetPassword);
-  const token = searchParams.get("token") || "";
+  const token = searchParams?.get("token") ?? "";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
