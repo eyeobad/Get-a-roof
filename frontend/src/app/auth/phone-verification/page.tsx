@@ -17,9 +17,9 @@ export default function PhoneVerificationPage() {
   const searchParams = useSearchParams();
   const verifyPhoneOtp = useAppStore((state) => state.verifyPhoneOtp);
   const sendPhoneOtp = useAppStore((state) => state.sendPhoneOtp);
-  const userId = searchParams.get("userId") || "";
-  const phone = searchParams.get("phone") || "(555) 123-4567";
-  const nextParam = searchParams.get("next") || "";
+  const userId = searchParams?.get("userId") ?? "";
+  const phone = searchParams?.get("phone") ?? "(555) 123-4567";
+  const nextParam = searchParams?.get("next") ?? "";
 
   const buildNextUrl = (target: string) => {
     if (!target) return "";
