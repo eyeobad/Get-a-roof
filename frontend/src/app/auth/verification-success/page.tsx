@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 export default function VerificationSuccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const userId = searchParams.get("userId");
+  const userId = searchParams?.get("userId") ?? "";
 
   useEffect(() => {
     const params = new URLSearchParams(userId ? { userId } : {});
