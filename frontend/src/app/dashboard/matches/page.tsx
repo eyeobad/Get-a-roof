@@ -77,8 +77,8 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
     <DashboardBottomNav
       active={active}
       chatHref="/dashboard/messages"
-      rootClassName="px-6 py-2 pb-3 bottom-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]"
-      containerClassName="flex justify-between items-end h-14 max-w-md mx-auto"
+      rootClassName="h-20"
+      containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
     />
   );
 }
