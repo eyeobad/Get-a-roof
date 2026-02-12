@@ -405,7 +405,7 @@ function MapCanvas({
       markersRef.current.push(marker);
     });
 
-    const approxFeatures = points
+    const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points
       .filter((point) => !point.isExact)
       .map((point) => ({
         type: "Feature",
@@ -438,7 +438,9 @@ function MapCanvas({
     const coords = routeGeojson.geometry.coordinates;
     if (coords.length) {
       const bounds = new mapboxgl.LngLatBounds();
-      coords.forEach((coord) => bounds.extend(coord));
+      coords.forEach((coord) => {
+        bounds.extend([coord[0], coord[1]]);
+      });
       map.fitBounds(bounds, { padding: 80, duration: 600 });
     }
   }, [routeGeojson]);

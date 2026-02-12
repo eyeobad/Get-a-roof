@@ -16,7 +16,7 @@ type Match = {
   price: string;
   image: string;
   tags: string[];
-  badge?: string;
+  badge: string | undefined;
 };
 
 export default function MatchesPage() {

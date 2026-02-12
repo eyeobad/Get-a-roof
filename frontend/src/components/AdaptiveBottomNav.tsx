@@ -35,7 +35,7 @@ export default function AdaptiveBottomNav({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const normalizedPath = pathname === "/" ? "/explore" : pathname ?? "";
-  const fromParam = searchParams.get("from") ?? "";
+  const fromParam = searchParams?.get("from") ?? "";
   const decodedFrom = fromParam ? decodeURIComponent(fromParam) : "";
   const isDashboard =
     decodedFrom.includes("dashboard") || pathname?.startsWith("/dashboard");

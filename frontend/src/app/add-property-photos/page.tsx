@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
@@ -15,7 +15,7 @@ type Photo = {
   alt: string;
 };
 
-export default function AddPropertyPhotosPage() {
+function AddPropertyPhotosContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const propertyId = searchParams?.get("propertyId") ?? "";
@@ -298,5 +298,13 @@ export default function AddPropertyPhotosPage() {
         <div className="fixed bottom-[96px] w-full max-w-md h-12 bg-gradient-to-t from-white to-transparent pointer-events-none z-30" />
       </div>
     </div>
+  );
+}
+
+export default function AddPropertyPhotosPage() {
+  return (
+    <Suspense fallback={null}>
+      <AddPropertyPhotosContent />
+    </Suspense>
   );
 }

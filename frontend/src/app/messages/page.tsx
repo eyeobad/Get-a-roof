@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import { useAppStore } from "@/store/useAppStore";
@@ -107,11 +107,11 @@ function TypingIndicator({ visible }: { visible: boolean }) {
   );
 }
 
-export default function MessagesPage() {
+function MessagesContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const threadParam = searchParams.get("thread") ?? "";
-  const fromParam = searchParams.get("from") ?? "";
+  const threadParam = searchParams?.get("thread") ?? "";
+  const fromParam = searchParams?.get("from") ?? "";
   const isLandlordContext =
     fromParam.startsWith("/dashboard") || pathname?.startsWith("/dashboard");
   const storeConversations = useAppStore((state) => state.conversations);
@@ -746,5 +746,13 @@ export default function MessagesPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={null}>
+      <MessagesContent />
+    </Suspense>
   );
 }

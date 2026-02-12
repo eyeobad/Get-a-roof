@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
@@ -8,7 +8,7 @@ import { getApiErrorMessage, showToast } from "@/lib/alerts";
 
 const DIGITS = 6;
 
-export default function EmailVerificationPage() {
+function EmailVerificationContent() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const [values, setValues] = useState<string[]>(Array(DIGITS).fill(""));
   const [timer, setTimer] = useState(59);
@@ -186,5 +186,13 @@ export default function EmailVerificationPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function EmailVerificationPage() {
+  return (
+    <Suspense fallback={null}>
+      <EmailVerificationContent />
+    </Suspense>
   );
 }

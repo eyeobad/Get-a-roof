@@ -35,7 +35,9 @@ export default function LoginPage() {
       const isLandlord = roles.some(
         (value) => value?.toString().toLowerCase() === "landlord"
       );
-      const tenantPreferences = result.user?.preferences?.tenant;
+      const tenantPreferences = (
+        result.user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+      )?.tenant;
       const needsTenantOnboarding =
         !isLandlord &&
         (!tenantPreferences ||

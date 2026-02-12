@@ -564,7 +564,10 @@ const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
   description: property?.description,
   proofOfOwnership: property?.proofOfOwnership,
   landlordRequirements: property?.landlordRequirements,
-  status: property?.status ?? "Draft",
+  status:
+    property?.status === "Listed" || property?.status === "Draft"
+      ? property.status
+      : "Draft",
 });
 
 const buildLandlordPayload = (draft: LandlordDraft) => {
@@ -963,7 +966,10 @@ export const useAppStore = create<AppState>()(
 
         if (!response?.matchId) return null;
 
-        const { summary, listing } = buildConversationSummary(response, state.userId);
+        const { summary, listing } = buildConversationSummary(
+          response,
+          state.userId ?? undefined
+        );
         if (listing) {
           set((prev) => ({
             listingsById: { ...prev.listingsById, [listing.id]: listing },
@@ -1108,7 +1114,10 @@ export const useAppStore = create<AppState>()(
         });
 
         const conversations = (data ?? []).map((item) => {
-          const { summary, listing } = buildConversationSummary(item, state.userId);
+          const { summary, listing } = buildConversationSummary(
+            item,
+            state.userId ?? undefined
+          );
           if (listing) {
             set((prev) => ({
               listingsById: { ...prev.listingsById, [listing.id]: listing },

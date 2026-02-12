@@ -5,16 +5,22 @@ export const API_BASE_URL =
 
 type ApiOptions = RequestInit & { token?: string };
 
-export async function apiFetch<T = unknown>(path: string, options: ApiOptions = {}) {
+export async function apiFetch<T = unknown>(
+  path: string,
+  options: ApiOptions = {}
+): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
   const isFormData = options.body instanceof FormData;
-  const headers: HeadersInit = {
-    ...(isFormData ? {} : { "Content-Type": "application/json" }),
-    ...(options.headers ?? {}),
-  };
-
+  const headers = new Headers(
+    isFormData ? undefined : { "Content-Type": "application/json" }
+  );
+  if (options.headers) {
+    new Headers(options.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
   if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
+    headers.set("Authorization", `Bearer ${options.token}`);
   }
 
   const response = await fetch(url, {
@@ -29,7 +35,7 @@ export async function apiFetch<T = unknown>(path: string, options: ApiOptions = 
 
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    return response.json();
+    return (await response.json()) as T;
   }
 
   return null as T;

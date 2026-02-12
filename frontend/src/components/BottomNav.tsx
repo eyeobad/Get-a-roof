@@ -21,7 +21,7 @@ type BottomNavProps = {
 
 export default function BottomNav({ className = "", scheme }: BottomNavProps) {
   const pathname = usePathname();
-  const normalizedPath = pathname === "/" ? "/explore" : pathname;
+  const normalizedPath = pathname === "/" ? "/explore" : pathname ?? "";
   const authToken = useAppStore((state) => state.authToken);
   const conversations = useAppStore((state) => state.conversations);
   const loadConversations = useAppStore((state) => state.loadConversations);

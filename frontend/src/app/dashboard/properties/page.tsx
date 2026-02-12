@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 
@@ -205,7 +205,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
   );
 }
 
-export default function LandlordDashboardPage() {
+function LandlordDashboardContent() {
   const [q, setQ] = useState("");
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
@@ -369,5 +369,13 @@ export default function LandlordDashboardPage() {
       {/* Bottom Nav */}
       <BottomNav active="properties" />
     </div>
+  );
+}
+
+export default function LandlordDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <LandlordDashboardContent />
+    </Suspense>
   );
 }

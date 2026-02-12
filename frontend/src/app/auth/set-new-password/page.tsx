@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
-export default function SetNewPasswordPage() {
+function SetNewPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const resetPassword = useAppStore((state) => state.resetPassword);
@@ -160,5 +160,13 @@ export default function SetNewPasswordPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function SetNewPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <SetNewPasswordContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 type Tab = "license" | "passport" | "nin";
 type UploadKey = "licenseFront" | "licenseBack" | "passport";
 
@@ -9,10 +9,10 @@ const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
 };
 
-export default function VerifyIdentityPage() {
+function VerifyIdentityContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const userId = params.get("userId");
+  const userId = params?.get("userId") ?? "";
   const [tab, setTab] = useState<Tab>("license");
   const [uploads, setUploads] = useState<Record<UploadKey, File | null>>({
     licenseFront: null,
@@ -196,6 +196,14 @@ export default function VerifyIdentityPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyIdentityPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyIdentityContent />
+    </Suspense>
   );
 }
 

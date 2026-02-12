@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function VerificationSuccessPage() {
+function VerificationSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams?.get("userId") ?? "";
@@ -47,5 +47,13 @@ export default function VerificationSuccessPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function VerificationSuccessPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerificationSuccessContent />
+    </Suspense>
   );
 }
