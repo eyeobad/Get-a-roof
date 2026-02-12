@@ -126,8 +126,8 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
     <DashboardBottomNav
       active={active}
       chatHref="/dashboard/messages"
-      rootClassName="py-2 shadow flex justify-around bg-white border-t z-50"
-      containerClassName="flex justify-between items-end h-14 w-full max-w-md mx-auto"
+      rootClassName="h-20"
+      containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
     />
   );
 }

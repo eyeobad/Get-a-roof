@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
+import DashboardBottomNav from "@/components/DashboardBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import { getSocket } from "@/lib/socket";
 
@@ -363,10 +364,19 @@ function MessagesContent() {
               )}
             </main>
 
-            <AdaptiveBottomNav
-              layout="fixed"
-              className="lg:hidden"
-            />
+            {!isLandlordContext ? (
+              <AdaptiveBottomNav
+                layout="fixed"
+                className="lg:hidden h-20 "
+              />
+            ) : (
+              <DashboardBottomNav
+                active="chat"
+                chatHref="/dashboard/messages"
+                rootClassName="h-20"
+                containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
+              />
+            )}
           </>
         )}
 
@@ -597,10 +607,19 @@ function MessagesContent() {
               </main>
 
               {/* BottomNav pinned to the bottom of the LEFT column only */}
-              <AdaptiveBottomNav
-                layout="inline"
-                className="hidden lg:flex"
-              />
+              {!isLandlordContext ? (
+                <AdaptiveBottomNav
+                  layout="inline"
+                  className="hidden lg:flex h-20"
+                />
+              ) : (
+                <DashboardBottomNav
+                  active="chat"
+                  chatHref="/dashboard/messages"
+                  rootClassName="relative h-20"
+                  containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
+                />
+              )}
             </aside>
 
             {/* RIGHT: chat panel (NO BottomNav under here) */}
