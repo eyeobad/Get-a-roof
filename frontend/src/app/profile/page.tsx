@@ -320,6 +320,12 @@ export default function ProfilePage() {
   }, [profile.preferences]);
 
   useEffect(() => {
+    if (!authToken || !userId) {
+      router.replace("/login");
+    }
+  }, [authToken, userId, router]);
+
+  useEffect(() => {
     if (!authToken || !userId) return;
     let mounted = true;
     setIsLoading(true);

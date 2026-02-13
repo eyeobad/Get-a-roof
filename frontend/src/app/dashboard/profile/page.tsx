@@ -43,6 +43,8 @@ export default function DashboardProfilePage() {
   const router = useRouter();
 
   // --- Store Integration ---
+  const authToken = useAppStore((state) => state.authToken);
+  const userId = useAppStore((state) => state.userId);
   const user = useAppStore((state) => state.user);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updateUser = useAppStore((state) => state.updateUser);
@@ -77,8 +79,18 @@ export default function DashboardProfilePage() {
 
   // --- Effects ---
   useEffect(() => {
+    if (!authToken || !userId) {
+      router.replace("/login");
+    }
+  }, [authToken, userId, router]);
+
+  useEffect(() => {
     let mounted = true;
     const load = async () => {
+        if (!authToken || !userId) {
+            if (mounted) setIsLoading(false);
+            return;
+        }
         try {
             await fetchUserProfile();
         } finally {
@@ -87,7 +99,7 @@ export default function DashboardProfilePage() {
     }
     load();
     return () => { mounted = false; };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, authToken, userId]);
 
   // Sync edit form with user data when modal opens
   useEffect(() => {
