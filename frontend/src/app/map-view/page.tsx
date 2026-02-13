@@ -33,32 +33,12 @@ type MapPoint = {
   isExact: boolean;
 };
 
-const MAPBOX_TOKEN =
-  "pk.eyJ1IjoiZXllb2JhZCIsImEiOiJjbWw2eTFpcGowZzQ1M2NzY2cycjJweHZkIn0.xlR97W8pEWAFRkDEBlxf9g";
+const MAPBOX_TOKEN = (process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "").trim();
+const MAPBOX_STYLE_URL = "mapbox://styles/mapbox/streets-v11";
 
-mapboxgl.accessToken = MAPBOX_TOKEN;
-
-const MAPBOX_RASTER_STYLE: mapboxgl.Style = {
-  version: 8,
-  sources: {
-    "mapbox-raster": {
-      type: "raster",
-      tiles: [
-        `https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
-      ],
-      tileSize: 256,
-      attribution:
-        '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    },
-  },
-  layers: [
-    {
-      id: "mapbox-raster-layer",
-      type: "raster",
-      source: "mapbox-raster",
-    },
-  ],
-};
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+}
 
 const hashString = (value: string) => {
   let hash = 0;
@@ -240,10 +220,16 @@ function MapCanvas({
       onMapError("Mapbox is not supported in this browser.");
       return;
     }
+    if (!MAPBOX_TOKEN || !MAPBOX_TOKEN.startsWith("pk.")) {
+      onMapError(
+        "Mapbox token is missing or invalid. Set NEXT_PUBLIC_MAPBOX_TOKEN and redeploy."
+      );
+      return;
+    }
 
     const map = new mapboxgl.Map({
       container: mapElementRef.current,
-      style: MAPBOX_RASTER_STYLE,
+      style: MAPBOX_STYLE_URL,
       center: [3.4251, 6.4358],
       zoom: 12,
       attributionControl: false,
@@ -256,7 +242,7 @@ function MapCanvas({
     const loadTimeout = window.setTimeout(() => {
       if (!mapLoadedRef.current) {
         onMapError(
-          "Map style failed to load. Check Mapbox token restrictions for localhost."
+          "Map style failed to load. Check Mapbox token restrictions for this domain."
         );
       }
     }, 5000);
@@ -266,6 +252,18 @@ function MapCanvas({
         typeof event.error?.message === "string"
           ? event.error.message
           : "Map error (check Network for 401/403 tile requests).";
+      const normalized = message.toLowerCase();
+      if (
+        normalized.includes("403") ||
+        normalized.includes("401") ||
+        normalized.includes("forbidden") ||
+        normalized.includes("unauthorized")
+      ) {
+        onMapError(
+          "Mapbox denied this token on this domain. Update token URL restrictions and enable Styles:Read + Tilesets:Read."
+        );
+        return;
+      }
       onMapError(message);
     });
 
@@ -607,6 +605,10 @@ export default function MapView() {
       setRoutingError("Directions unlock after the landlord accepts your request.");
       return;
     }
+    if (!MAPBOX_TOKEN || !MAPBOX_TOKEN.startsWith("pk.")) {
+      setRoutingError("Directions unavailable: missing valid Mapbox token.");
+      return;
+    }
     if (!navigator.geolocation) {
       setRoutingError("Geolocation is not supported in this browser.");
       return;
@@ -631,6 +633,11 @@ export default function MapView() {
       const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${originLng},${originLat};${target.lng},${target.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
       const response = await fetch(url);
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(
+            "Directions blocked by Mapbox token restrictions for this domain."
+          );
+        }
         throw new Error("Failed to fetch route.");
       }
       const data = (await response.json()) as {
@@ -1154,3 +1161,4 @@ export default function MapView() {
     </>
   );
 }
+
