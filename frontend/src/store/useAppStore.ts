@@ -363,6 +363,23 @@ const toIdString = (value?: unknown) => {
   return "";
 };
 
+const decodeJwtSub = (token?: string) => {
+  if (!token) return "";
+  const parts = token.split(".");
+  if (parts.length < 2) return "";
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    if (typeof atob !== "function") return "";
+    const decoded = atob(padded);
+    const payload = JSON.parse(decoded) as { sub?: unknown };
+    return typeof payload.sub === "string" ? payload.sub : "";
+  } catch {
+    return "";
+  }
+};
+
 const toTimestamp = (value?: unknown) => {
   if (!value) return new Date().toISOString();
   if (value instanceof Date) return value.toISOString();
@@ -715,20 +732,24 @@ export const useAppStore = create<AppState>()(
         }
 
         const state = get();
-        const userId = response.user.id || response.user._id;
-        if (userId) {
-          const shouldReset = state.userId !== userId;
-          if (shouldReset) {
-            set(
-              buildSessionReset({
-                authToken: response.accessToken,
-                userId,
-                user: response.user,
-              })
-            );
-          } else {
-            set({ authToken: response.accessToken, userId, user: response.user });
-          }
+        const userId =
+          toIdString(response.user.id ?? response.user._id) ||
+          decodeJwtSub(response.accessToken);
+        if (!userId) {
+          throw new Error("Login succeeded but no user id was returned.");
+        }
+
+        const shouldReset = state.userId !== userId;
+        if (shouldReset) {
+          set(
+            buildSessionReset({
+              authToken: response.accessToken,
+              userId,
+              user: response.user,
+            })
+          );
+        } else {
+          set({ authToken: response.accessToken, userId, user: response.user });
         }
         await fetch("/api/auth/session", {
           method: "POST",
@@ -798,7 +819,15 @@ export const useAppStore = create<AppState>()(
           return response;
         } catch (error) {
           const message = (error as Error)?.message ?? "";
-          if (message.includes("Unauthorized")) {
+          const normalizedMessage = message.toLowerCase();
+          if (
+            normalizedMessage.includes("unauthorized") ||
+            normalizedMessage.includes("access denied") ||
+            normalizedMessage.includes("user not found") ||
+            normalizedMessage.includes('"statuscode":401') ||
+            normalizedMessage.includes('"statuscode":403') ||
+            normalizedMessage.includes('"statuscode":404')
+          ) {
             get().clearAuth();
           }
           return null;
@@ -844,11 +873,34 @@ export const useAppStore = create<AppState>()(
       deleteAccount: async () => {
         const state = get();
         if (!state.authToken || !state.userId) return false;
-        await apiFetch(`/api/users/${state.userId}`, {
-          method: "DELETE",
-          token: state.authToken,
-        });
-        return true;
+        try {
+          await apiFetch(`/api/users/${state.userId}`, {
+            method: "DELETE",
+            token: state.authToken,
+          });
+          return true;
+        } catch (error) {
+          const message = (error as Error)?.message ?? "";
+          const normalizedMessage = message.toLowerCase();
+
+          if (normalizedMessage.includes("cannot delete /api/users/")) {
+            throw new Error(
+              "Account deletion is not available on the current backend deployment. Redeploy the backend API so DELETE /api/users/:id is enabled."
+            );
+          }
+
+          if (
+            normalizedMessage.includes("unauthorized") ||
+            normalizedMessage.includes("user not found") ||
+            normalizedMessage.includes('"statuscode":401') ||
+            normalizedMessage.includes('"statuscode":404')
+          ) {
+            get().clearAuth();
+            return true;
+          }
+
+          throw error;
+        }
       },
       createMatchForListing: async (listingId, tenantLiked) => {
         const state = get();
