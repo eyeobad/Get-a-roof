@@ -25,6 +25,7 @@ export async function apiFetch<T = unknown>(
 
   const response = await fetch(url, {
     ...options,
+    cache: options.cache ?? "no-store",
     headers,
   });
 

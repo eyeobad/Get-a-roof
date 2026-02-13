@@ -1109,10 +1109,20 @@ export const useAppStore = create<AppState>()(
           nonOwner: filters?.toggles?.nonOwner,
         });
 
-        const data = await apiFetch<ApiProperty[]>(`/api/properties/matches/map?${query}`, {
-          token: state.authToken,
-        });
-        const listings = (data ?? []).map(mapPropertyToListing);
+        const matched = await apiFetch<ApiProperty[]>(
+          `/api/properties/matches/map?${query}`,
+          {
+            token: state.authToken,
+          }
+        );
+        const fallback =
+          matched && matched.length
+            ? matched
+            : await apiFetch<ApiProperty[]>(`/api/properties/explore?${query}`, {
+                token: state.authToken,
+              });
+
+        const listings = (fallback ?? []).map(mapPropertyToListing);
         set((prev) => {
           const nextMap = { ...prev.listingsById };
           listings.forEach((listing) => {
