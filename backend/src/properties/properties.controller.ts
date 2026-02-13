@@ -14,7 +14,7 @@ import {
   UploadedFile,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { Express } from "express";
+import * as express from "express";
 import * as multer from "multer";
 import { Request } from "express";
 import { PropertiesService } from "./properties.service";
@@ -45,7 +45,7 @@ const proofMimeTypes = new Set([
 
 const createMimeTypeFilter =
   (allowedTypes: Set<string>) =>
-  (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
     if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
       return cb(new BadRequestException("Unsupported file type"));
     }
@@ -66,8 +66,8 @@ export class PropertiesController {
       fileFilter: createMimeTypeFilter(imageMimeTypes),
     })
   )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
-    return this.propertiesService.uploadImage(file);
+  uploadImage(@UploadedFile() file?: unknown) {
+    return this.propertiesService.uploadImage(file as express.Multer.File);
   }
 
   @Post("upload-proof")
@@ -80,8 +80,8 @@ export class PropertiesController {
       fileFilter: createMimeTypeFilter(proofMimeTypes),
     })
   )
-  uploadProof(@UploadedFile() file?: Express.Multer.File) {
-    return this.propertiesService.uploadProof(file);
+  uploadProof(@UploadedFile() file?: unknown) {
+    return this.propertiesService.uploadProof(file as express.Multer.File);
   }
 
   @Post()

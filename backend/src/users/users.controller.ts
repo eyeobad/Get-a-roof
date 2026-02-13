@@ -13,7 +13,8 @@ import {
   UseInterceptors,
   UploadedFile,
 } from "@nestjs/common";
-import { Express, Request } from "express";
+import * as express from "express";
+import { Request } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import * as multer from "multer";
 import { UsersService } from "./users.service";
@@ -32,7 +33,7 @@ const profileImageMimeTypes = new Set([
 
 const createMimeTypeFilter =
   (allowedTypes: Set<string>) =>
-  (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
     if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
       return cb(new BadRequestException("Unsupported file type"));
     }
@@ -147,13 +148,13 @@ export class UsersController {
   )
   uploadPhoto(
     @Param("id") id: string,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile() file?: unknown,
     @Req() req: Request & { user?: any }
   ) {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.usersService.uploadProfilePhoto(id, file);
+    return this.usersService.uploadProfilePhoto(id, file as express.Multer.File);
   }
 
   @Delete(":id")
