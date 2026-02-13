@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
-export default function TenantOnboarding() {
+function TenantOnboardingContent() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
@@ -179,5 +179,13 @@ export default function TenantOnboarding() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TenantOnboarding() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background-light" />}>
+      <TenantOnboardingContent />
+    </Suspense>
   );
 }

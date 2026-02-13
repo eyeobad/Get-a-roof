@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
 import { useAppStore } from "@/store/useAppStore";
@@ -19,7 +19,7 @@ const initialForm: AccountForm = {
   phoneNumber: "",
 };
 
-export default function TenantAccountDetailsPage() {
+function TenantAccountDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
@@ -162,3 +162,10 @@ export default function TenantAccountDetailsPage() {
   );
 }
 
+export default function TenantAccountDetailsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background-light" />}>
+      <TenantAccountDetailsContent />
+    </Suspense>
+  );
+}

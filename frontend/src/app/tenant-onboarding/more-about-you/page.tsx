@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -115,7 +115,7 @@ const sections: readonly SectionConfig[] = [
 type Selections = Record<SectionKey, number>;
 type SectionWithSelection = SectionConfig & { selectedIndex: number };
 
-export default function TenantMoreAboutYou() {
+function TenantMoreAboutYouContent() {
   const [earnings, setEarnings] = useState(85000);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
@@ -384,5 +384,13 @@ export default function TenantMoreAboutYou() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function TenantMoreAboutYou() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background-light" />}>
+      <TenantMoreAboutYouContent />
+    </Suspense>
   );
 }
