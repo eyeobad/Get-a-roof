@@ -47,4 +47,5 @@ exports.Message = Message = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Message);
 exports.MessageSchema = mongoose_1.SchemaFactory.createForClass(Message);
-//# sourceMappingURL=message.schema.js.map
+exports.MessageSchema.index({ matchId: 1, timestamp: -1 });
+exports.MessageSchema.index({ receiverId: 1, isRead: 1 });

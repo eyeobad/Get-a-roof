@@ -25,6 +25,13 @@ var PropertyType;
     PropertyType["House"] = "House";
     PropertyType["Condo"] = "Condo";
     PropertyType["Townhouse"] = "Townhouse";
+    PropertyType["Duplex"] = "Duplex";
+    PropertyType["Bungalow"] = "Bungalow";
+    PropertyType["Penthouse"] = "Penthouse";
+    PropertyType["Villa"] = "Villa";
+    PropertyType["Studio"] = "Studio";
+    PropertyType["Loft"] = "Loft";
+    PropertyType["Other"] = "Other";
     PropertyType["SelfCompound"] = "SelfCompound";
     PropertyType["SharedApartment"] = "SharedApartment";
     PropertyType["SharedCompound"] = "SharedCompound";
@@ -44,4 +51,3 @@ var VehiclePreference;
     VehiclePreference["No"] = "No";
     VehiclePreference["Any"] = "Any";
 })(VehiclePreference || (exports.VehiclePreference = VehiclePreference = {}));
-//# sourceMappingURL=index.js.map

@@ -15,6 +15,7 @@ const class_transformer_1 = require("class-transformer");
 const enums_1 = require("../../common/enums");
 const property_address_dto_1 = require("./property-address.dto");
 const landlord_requirements_dto_1 = require("./landlord-requirements.dto");
+const property_utils_1 = require("../../common/utils/property.utils");
 class CreatePropertyDto {
 }
 exports.CreatePropertyDto = CreatePropertyDto;
@@ -37,9 +38,15 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === "string" ? { street: value } : value),
     (0, class_transformer_1.Type)(() => property_address_dto_1.PropertyAddressDto),
     __metadata("design:type", property_address_dto_1.PropertyAddressDto)
 ], CreatePropertyDto.prototype, "address", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePropertyDto.prototype, "location", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -68,6 +75,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(enums_1.PropertyType),
+    (0, class_transformer_1.Transform)(({ value }) => (0, property_utils_1.normalizePropertyType)(value)),
     __metadata("design:type", String)
 ], CreatePropertyDto.prototype, "propertyType", void 0);
 __decorate([
@@ -97,4 +105,3 @@ __decorate([
     (0, class_transformer_1.Type)(() => landlord_requirements_dto_1.LandlordRequirementsDto),
     __metadata("design:type", landlord_requirements_dto_1.LandlordRequirementsDto)
 ], CreatePropertyDto.prototype, "landlordRequirements", void 0);
-//# sourceMappingURL=create-property.dto.js.map

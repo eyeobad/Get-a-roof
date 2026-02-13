@@ -1,4 +1,9 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "sourceMap": false,
+    "lib": ["ES2021"]
+  },
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }

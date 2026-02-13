@@ -12,14 +12,14 @@ const landlord_controller_1 = require("./landlord.controller");
 const landlord_service_1 = require("./landlord.service");
 const properties_module_1 = require("../properties/properties.module");
 const matches_module_1 = require("../matches/matches.module");
+const users_module_1 = require("../users/users.module");
 let LandlordModule = class LandlordModule {
 };
 exports.LandlordModule = LandlordModule;
 exports.LandlordModule = LandlordModule = __decorate([
     (0, common_1.Module)({
-        imports: [properties_module_1.PropertiesModule, matches_module_1.MatchesModule],
+        imports: [properties_module_1.PropertiesModule, matches_module_1.MatchesModule, users_module_1.UsersModule],
         controllers: [landlord_controller_1.LandlordController],
         providers: [landlord_service_1.LandlordService],
     })
 ], LandlordModule);
-//# sourceMappingURL=landlord.module.js.map

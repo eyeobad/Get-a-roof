@@ -71,4 +71,3 @@ exports.MatchesController = MatchesController = __decorate([
     (0, common_1.Controller)("api/matches"),
     __metadata("design:paramtypes", [matches_service_1.MatchesService])
 ], MatchesController);
-//# sourceMappingURL=matches.controller.js.map

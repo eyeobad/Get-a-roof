@@ -21,18 +21,39 @@ const users_service_1 = require("../users/users.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const geo_utils_1 = require("../common/utils/geo.utils");
 const match_helpers_1 = require("../common/utils/match.helpers");
+const match_schema_1 = require("../matches/schemas/match.schema");
+const enums_1 = require("../common/enums");
+const property_utils_1 = require("../common/utils/property.utils");
+const appwrite_service_1 = require("../appwrite/appwrite.service");
+const propertyImageMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
+const propertyProofMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "application/pdf",
+]);
 let PropertiesService = class PropertiesService {
-    constructor(propertyModel, usersService) {
+    constructor(propertyModel, matchModel, usersService, appwriteStorage) {
         this.propertyModel = propertyModel;
+        this.matchModel = matchModel;
         this.usersService = usersService;
+        this.appwriteStorage = appwriteStorage;
     }
     async createProperty(dto) {
-        const created = new this.propertyModel(dto);
+        const normalized = this.normalizePropertyPayload(dto);
+        const created = new this.propertyModel(normalized);
         return created.save();
     }
     async updateProperty(id, dto) {
+        const normalized = this.normalizePropertyPayload(dto);
         const updated = await this.propertyModel
-            .findByIdAndUpdate(id, dto, { new: true })
+            .findByIdAndUpdate(id, normalized, { new: true })
             .exec();
         if (!updated) {
             throw new common_1.NotFoundException("Property not found");
@@ -48,15 +69,37 @@ let PropertiesService = class PropertiesService {
     }
     async exploreProperties(filters, options) {
         const limit = options?.limit ?? 50;
-        const properties = await this.propertyModel.find(filters).limit(limit).exec();
+        const queryFilters = { ...filters };
+        if (options?.userId) {
+            const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
+            if (excludedIds.length) {
+                if (queryFilters._id && typeof queryFilters._id === "object") {
+                    queryFilters._id.$nin = excludedIds;
+                }
+                else {
+                    queryFilters._id = { $nin: excludedIds };
+                }
+            }
+        }
+        const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
         return this.applyScoringAndFilters(properties, options);
     }
     async getMapMatches(filters, options) {
+        const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
+        if (!matchIds.length) {
+            return [];
+        }
         const withCoords = {
             ...filters,
             "address.lat": { $ne: null },
             "address.lng": { $ne: null },
         };
+        if (withCoords._id && typeof withCoords._id === "object") {
+            withCoords._id.$in = matchIds;
+        }
+        else {
+            withCoords._id = { $in: matchIds };
+        }
         const limit = options?.limit ?? 50;
         const properties = await this.propertyModel
             .find(withCoords)
@@ -68,6 +111,11 @@ let PropertiesService = class PropertiesService {
             address: property.address,
             monthlyPrice: property.monthlyPrice,
             propertyType: property.propertyType,
+            bedCount: property.bedCount,
+            bathCount: property.bathCount,
+            sqFt: property.sqFt,
+            neighborhood: property.neighborhood,
+            amenities: property.amenities,
             images: property.images,
             matchScore: property.matchScore,
             preferencesMatchPercentage: property.preferencesMatchPercentage,
@@ -75,13 +123,74 @@ let PropertiesService = class PropertiesService {
             distanceKm: property.distanceKm,
         }));
     }
-    async uploadImageStub(fileName) {
-        const slug = fileName ? fileName.replace(/\s+/g, "-") : "upload";
-        const url = `https://example.com/uploads/${Date.now()}-${slug}`;
-        return { url };
+    async uploadImage(file) {
+        return this.uploadToAppwrite(file, propertyImageMimeTypes);
     }
-    async getLandlordProperties(landlordId) {
-        return this.propertyModel.find({ landlordId }).exec();
+    async uploadProof(file) {
+        return this.uploadToAppwrite(file, propertyProofMimeTypes);
+    }
+    async uploadToAppwrite(file, allowedTypes) {
+        if (!file) {
+            throw new common_1.BadRequestException("File is required");
+        }
+        if (allowedTypes && (!file.mimetype || !allowedTypes.has(file.mimetype))) {
+            throw new common_1.BadRequestException("Unsupported file type");
+        }
+        const result = await this.appwriteStorage.uploadFile(file.originalname ?? file.filename ?? `property-${Date.now()}`, file.buffer, file.mimetype ?? "image/jpeg");
+        if (!result?.url) {
+            throw new common_1.BadRequestException("Unable to upload file");
+        }
+        return { url: result.url };
+    }
+    async getLandlordProperties(landlordId, options) {
+        const filters = { landlordId };
+        if (options?.status) {
+            filters.status = options.status;
+        }
+        if (options?.q) {
+            const regex = new RegExp(options.q, "i");
+            filters.$or = [
+                { "address.street": regex },
+                { "address.city": regex },
+                { "address.state": regex },
+                { neighborhood: regex },
+            ];
+        }
+        const projection = {
+            address: 1,
+            neighborhood: 1,
+            status: 1,
+            monthlyPrice: 1,
+            bedCount: 1,
+            bathCount: 1,
+            propertyType: 1,
+            images: 1,
+            updatedAt: 1,
+            landlordId: 1,
+        };
+        let query = this.propertyModel.find(filters).select(projection);
+        if (options?.sort === "priceAsc") {
+            query = query.sort({ monthlyPrice: 1 });
+        }
+        else if (options?.sort === "priceDesc") {
+            query = query.sort({ monthlyPrice: -1 });
+        }
+        else {
+            query = query.sort({ updatedAt: -1 });
+        }
+        return query.exec();
+    }
+    normalizePropertyPayload(dto) {
+        const normalized = { ...dto };
+        if (normalized.location && !normalized.address) {
+            normalized.address = { street: normalized.location };
+        }
+        delete normalized.location;
+        if (normalized.propertyType) {
+            normalized.propertyType =
+                (0, property_utils_1.normalizePropertyType)(normalized.propertyType) ?? normalized.propertyType;
+        }
+        return normalized;
     }
     async applyScoringAndFilters(properties, options) {
         let tenantPreferences;
@@ -140,12 +249,31 @@ let PropertiesService = class PropertiesService {
         }
         return filtered;
     }
+    async getTenantMatchPropertyIds(tenantId, includeDismissed) {
+        if (!tenantId) {
+            return [];
+        }
+        const filter = {};
+        if (mongoose_2.Types.ObjectId.isValid(tenantId)) {
+            const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
+            filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
+        }
+        else {
+            filter.tenantId = tenantId;
+        }
+        if (!includeDismissed) {
+            filter.status = { $ne: enums_1.MatchStatus.Dismissed };
+        }
+        return this.matchModel.find(filter).distinct("propertyId").exec();
+    }
 };
 exports.PropertiesService = PropertiesService;
 exports.PropertiesService = PropertiesService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(property_schema_1.Property.name)),
+    __param(1, (0, mongoose_1.InjectModel)(match_schema_1.Match.name)),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        users_service_1.UsersService])
+        mongoose_2.Model,
+        users_service_1.UsersService,
+        appwrite_service_1.AppwriteStorageService])
 ], PropertiesService);
-//# sourceMappingURL=properties.service.js.map

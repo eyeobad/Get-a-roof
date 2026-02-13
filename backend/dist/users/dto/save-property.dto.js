@@ -18,4 +18,3 @@ __decorate([
     (0, class_validator_1.IsMongoId)(),
     __metadata("design:type", String)
 ], SavePropertyDto.prototype, "propertyId", void 0);
-//# sourceMappingURL=save-property.dto.js.map

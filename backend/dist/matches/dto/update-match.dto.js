@@ -20,4 +20,3 @@ __decorate([
     (0, class_validator_1.IsEnum)(enums_1.MatchStatus),
     __metadata("design:type", String)
 ], UpdateMatchDto.prototype, "status", void 0);
-//# sourceMappingURL=update-match.dto.js.map

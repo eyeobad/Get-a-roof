@@ -24,4 +24,3 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UploadUtilityBillDto.prototype, "documentUrl", void 0);
-//# sourceMappingURL=upload-utility-bill.dto.js.map

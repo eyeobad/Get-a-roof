@@ -13,6 +13,7 @@ const properties_controller_1 = require("./properties.controller");
 const properties_service_1 = require("./properties.service");
 const property_schema_1 = require("./schemas/property.schema");
 const users_module_1 = require("../users/users.module");
+const appwrite_module_1 = require("../appwrite/appwrite.module");
 const match_schema_1 = require("../matches/schemas/match.schema");
 let PropertiesModule = class PropertiesModule {
 };
@@ -23,10 +24,10 @@ exports.PropertiesModule = PropertiesModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
             users_module_1.UsersModule,
+            appwrite_module_1.AppwriteModule,
         ],
         controllers: [properties_controller_1.PropertiesController],
         providers: [properties_service_1.PropertiesService],
         exports: [properties_service_1.PropertiesService],
     })
 ], PropertiesModule);
-//# sourceMappingURL=properties.module.js.map

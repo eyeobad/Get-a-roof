@@ -13,6 +13,7 @@ const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
 const match_schema_1 = require("../matches/schemas/match.schema");
 const property_schema_1 = require("../properties/schemas/property.schema");
+const user_schema_1 = require("../users/schemas/user.schema");
 const chat_controller_1 = require("./chat.controller");
 const chat_service_1 = require("./chat.service");
 const chat_gateway_1 = require("./chat.gateway");
@@ -26,6 +27,7 @@ exports.ChatModule = ChatModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: message_schema_1.Message.name, schema: message_schema_1.MessageSchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: user_schema_1.User.name, schema: user_schema_1.UserSchema }]),
             jwt_1.JwtModule.registerAsync({
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => ({
@@ -37,4 +39,3 @@ exports.ChatModule = ChatModule = __decorate([
         providers: [chat_service_1.ChatService, chat_gateway_1.ChatGateway],
     })
 ], ChatModule);
-//# sourceMappingURL=chat.module.js.map

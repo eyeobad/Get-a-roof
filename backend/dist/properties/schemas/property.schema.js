@@ -60,7 +60,7 @@ __decorate([
     __metadata("design:type", String)
 ], IdealTenantPreferences.prototype, "maritalStatus", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.VehiclePreference }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.VehiclePreference }),
     __metadata("design:type", String)
 ], IdealTenantPreferences.prototype, "vehicles", void 0);
 __decorate([
@@ -173,7 +173,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Property.prototype, "petFriendly", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.PropertyType }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.PropertyType }),
     __metadata("design:type", String)
 ], Property.prototype, "propertyType", void 0);
 __decorate([
@@ -189,7 +189,7 @@ __decorate([
     __metadata("design:type", String)
 ], Property.prototype, "proofOfOwnership", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.PropertyStatus, default: enums_1.PropertyStatus.Draft }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.PropertyStatus, default: enums_1.PropertyStatus.Draft }),
     __metadata("design:type", String)
 ], Property.prototype, "status", void 0);
 __decorate([
@@ -200,4 +200,4 @@ exports.Property = Property = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Property);
 exports.PropertySchema = mongoose_1.SchemaFactory.createForClass(Property);
-//# sourceMappingURL=property.schema.js.map
+exports.PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });

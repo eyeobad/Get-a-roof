@@ -39,4 +39,3 @@ function toNumber(value) {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? undefined : parsed;
 }
-//# sourceMappingURL=match.helpers.js.map

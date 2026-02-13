@@ -18,4 +18,3 @@ __decorate([
     (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
 ], RequestPasswordResetDto.prototype, "email", void 0);
-//# sourceMappingURL=request-password-reset.dto.js.map

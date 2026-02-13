@@ -31,4 +31,3 @@ exports.MatchesModule = MatchesModule = __decorate([
         exports: [matches_service_1.MatchesService],
     })
 ], MatchesModule);
-//# sourceMappingURL=matches.module.js.map

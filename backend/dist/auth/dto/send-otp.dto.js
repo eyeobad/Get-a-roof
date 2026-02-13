@@ -18,4 +18,3 @@ __decorate([
     (0, class_validator_1.IsMongoId)(),
     __metadata("design:type", String)
 ], SendOtpDto.prototype, "userId", void 0);
-//# sourceMappingURL=send-otp.dto.js.map

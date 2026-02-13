@@ -76,6 +76,10 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], TenantPreferences.prototype, "gender", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], TenantPreferences.prototype, "employmentStatus", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
@@ -86,7 +90,7 @@ __decorate([
     __metadata("design:type", String)
 ], TenantPreferences.prototype, "maritalStatus", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.VehiclePreference }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.VehiclePreference }),
     __metadata("design:type", String)
 ], TenantPreferences.prototype, "vehicles", void 0);
 __decorate([
@@ -139,7 +143,7 @@ let User = class User {
 };
 exports.User = User;
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.UserRole, default: enums_1.UserRole.Unassigned }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.UserRole, default: enums_1.UserRole.Unassigned }),
     __metadata("design:type", String)
 ], User.prototype, "role", void 0);
 __decorate([
@@ -171,7 +175,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], User.prototype, "isVerified", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.VerificationStatus, default: enums_1.VerificationStatus.None }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.VerificationStatus, default: enums_1.VerificationStatus.None }),
     __metadata("design:type", String)
 ], User.prototype, "verificationStatus", void 0);
 __decorate([
@@ -226,4 +230,3 @@ exports.User = User = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
-//# sourceMappingURL=user.schema.js.map

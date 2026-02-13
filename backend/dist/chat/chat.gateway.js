@@ -19,6 +19,24 @@ const websockets_2 = require("@nestjs/websockets");
 const chat_service_1 = require("./chat.service");
 const create_chat_dto_1 = require("./dto/create-chat.dto");
 const jwt_1 = require("@nestjs/jwt");
+const defaultCorsOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+];
+const socketCorsOrigins = (() => {
+    const raw = process.env.CORS_ORIGINS;
+    if (!raw)
+        return defaultCorsOrigins;
+    const origins = raw
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+    if (!origins.length)
+        return defaultCorsOrigins;
+    if (origins.includes("*"))
+        return true;
+    return origins;
+})();
 let ChatGateway = class ChatGateway {
     constructor(chatService, jwtService) {
         this.chatService = chatService;
@@ -33,12 +51,29 @@ let ChatGateway = class ChatGateway {
         try {
             const payload = this.jwtService.verify(token);
             client.data.user = payload;
+            if (payload?.sub) {
+                client.join(payload.sub);
+            }
         }
         catch (error) {
             client.disconnect();
         }
     }
     handleDisconnect(_client) { }
+    emitMessage(message) {
+        if (!message)
+            return;
+        const matchId = message.matchId?.toString?.() ??
+            (typeof message.matchId === "string" ? message.matchId : "");
+        const receiverId = message.receiverId?.toString?.() ??
+            (typeof message.receiverId === "string" ? message.receiverId : "");
+        if (matchId) {
+            this.server.to(matchId).emit("message", message);
+        }
+        if (receiverId) {
+            this.server.to(receiverId).emit("conversation:update", message);
+        }
+    }
     handleJoin(body, client) {
         if (!body?.matchId) {
             throw new websockets_2.WsException("matchId is required");
@@ -58,9 +93,34 @@ let ChatGateway = class ChatGateway {
             ...body,
             senderId,
         });
-        this.server.to(body.matchId).emit("message", message);
+        this.emitMessage(message);
         client.emit("message:sent", message);
         return message;
+    }
+    async handleTyping(body, client) {
+        const senderId = client.data.user?.sub;
+        if (!senderId) {
+            throw new websockets_2.WsException("Unauthorized");
+        }
+        if (!body?.matchId) {
+            throw new websockets_2.WsException("matchId is required");
+        }
+        try {
+            const participants = await this.chatService.getParticipantIds(body.matchId);
+            const isParticipant = senderId === participants.tenantId || senderId === participants.landlordId;
+            if (!isParticipant) {
+                throw new websockets_2.WsException("Access denied");
+            }
+        }
+        catch (error) {
+            throw new websockets_2.WsException(error instanceof Error ? error.message : "Unable to validate participant");
+        }
+        this.server.to(body.matchId).emit("typing", {
+            matchId: body.matchId,
+            senderId,
+            isTyping: Boolean(body.isTyping),
+        });
+        return { ok: true };
     }
     async handleMarkRead(body, client) {
         const readerId = client.data.user?.sub;
@@ -117,6 +177,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ChatGateway.prototype, "handleSendMessage", null);
 __decorate([
+    (0, websockets_1.SubscribeMessage)("typing"),
+    __param(0, (0, websockets_1.MessageBody)()),
+    __param(1, (0, websockets_1.ConnectedSocket)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, socket_io_1.Socket]),
+    __metadata("design:returntype", Promise)
+], ChatGateway.prototype, "handleTyping", null);
+__decorate([
     (0, websockets_1.SubscribeMessage)("markRead"),
     __param(0, (0, websockets_1.MessageBody)()),
     __param(1, (0, websockets_1.ConnectedSocket)()),
@@ -125,8 +193,12 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ChatGateway.prototype, "handleMarkRead", null);
 exports.ChatGateway = ChatGateway = __decorate([
-    (0, websockets_1.WebSocketGateway)({ cors: true }),
+    (0, websockets_1.WebSocketGateway)({
+        cors: {
+            origin: socketCorsOrigins,
+            credentials: true,
+        },
+    }),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
         jwt_1.JwtService])
 ], ChatGateway);
-//# sourceMappingURL=chat.gateway.js.map

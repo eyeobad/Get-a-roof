@@ -27,4 +27,3 @@ __decorate([
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], UpdatePreferencesDto.prototype, "landlord", void 0);
-//# sourceMappingURL=update-preferences.dto.js.map

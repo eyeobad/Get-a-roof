@@ -23,4 +23,3 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SubmitNinDto.prototype, "nin", void 0);
-//# sourceMappingURL=submit-nin.dto.js.map

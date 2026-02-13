@@ -44,4 +44,3 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], PropertyAddressDto.prototype, "lng", void 0);
-//# sourceMappingURL=property-address.dto.js.map

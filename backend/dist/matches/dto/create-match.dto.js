@@ -34,4 +34,3 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateMatchDto.prototype, "tenantLiked", void 0);
-//# sourceMappingURL=create-match.dto.js.map

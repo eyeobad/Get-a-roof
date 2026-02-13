@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeMatchScore = computeMatchScore;
+const enums_1 = require("../enums");
+const property_utils_1 = require("./property.utils");
 const match_helpers_1 = require("./match.helpers");
 const tenantPreferenceKeys = [
     "employmentStatus",
@@ -24,14 +26,33 @@ function computeMatchScore(tenant, property) {
     };
 }
 function computeApartmentPreferenceMatch(tenant, property) {
-    const lookingFor = tenant?.lookingFor?.map((value) => value.toString());
+    const lookingFor = tenant?.lookingFor
+        ?.map((value) => (0, property_utils_1.normalizePropertyType)(value)?.toString() ?? value.toString())
+        .filter(Boolean);
     if (!lookingFor || !lookingFor.length) {
         return 100;
     }
-    if (!property.propertyType) {
-        return 0;
+    const matches = new Set();
+    const normalizedType = (0, property_utils_1.normalizePropertyType)(property.propertyType);
+    if (normalizedType) {
+        matches.add(normalizedType.toString());
     }
-    return lookingFor.includes(property.propertyType.toString()) ? 100 : 0;
+    if (property.landlordRequirements?.nonOwnerOccupied) {
+        matches.add(enums_1.PropertyType.NonOwnerOccupied);
+    }
+    if (property.landlordRequirements?.sharedApartment) {
+        matches.add(enums_1.PropertyType.SharedApartment);
+    }
+    if (property.landlordRequirements?.shortlet) {
+        matches.add(enums_1.PropertyType.Shortlet);
+    }
+    if (property.landlordRequirements?.selfCompound) {
+        matches.add(enums_1.PropertyType.SelfCompound);
+    }
+    if (property.landlordRequirements?.sharedCompound) {
+        matches.add(enums_1.PropertyType.SharedCompound);
+    }
+    return lookingFor.some((type) => matches.has(type)) ? 100 : 0;
 }
 function computePreferencesMatch(tenant, property) {
     const requirements = property.landlordRequirements;
@@ -90,4 +111,3 @@ function computePreferencesMatch(tenant, property) {
     }
     return (0, match_helpers_1.computePercentage)(matched, considered);
 }
-//# sourceMappingURL=match.utils.js.map

@@ -12,15 +12,26 @@ const mongoose_1 = require("@nestjs/mongoose");
 const users_controller_1 = require("./users.controller");
 const users_service_1 = require("./users.service");
 const user_schema_1 = require("./schemas/user.schema");
+const appwrite_module_1 = require("../appwrite/appwrite.module");
+const property_schema_1 = require("../properties/schemas/property.schema");
+const match_schema_1 = require("../matches/schemas/match.schema");
+const message_schema_1 = require("../chat/schemas/message.schema");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
 exports.UsersModule = UsersModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ name: user_schema_1.User.name, schema: user_schema_1.UserSchema }])],
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: user_schema_1.User.name, schema: user_schema_1.UserSchema },
+                { name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema },
+                { name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema },
+                { name: message_schema_1.Message.name, schema: message_schema_1.MessageSchema },
+            ]),
+            appwrite_module_1.AppwriteModule,
+        ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],
         exports: [users_service_1.UsersService],
     })
 ], UsersModule);
-//# sourceMappingURL=users.module.js.map

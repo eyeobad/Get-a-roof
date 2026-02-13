@@ -17,4 +17,3 @@ function haversineDistanceKm(a, b) {
     const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
     return EARTH_RADIUS_KM * c;
 }
-//# sourceMappingURL=geo.utils.js.map

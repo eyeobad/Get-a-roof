@@ -11,15 +11,30 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a, _b;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer = require("multer");
 const users_service_1 = require("./users.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
 const update_user_dto_1 = require("./dto/update-user.dto");
 const update_preferences_dto_1 = require("./dto/update-preferences.dto");
 const save_property_dto_1 = require("./dto/save-property.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
+const profileImageMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
+const createMimeTypeFilter = (allowedTypes) => (_req, file, cb) => {
+    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+        return cb(new common_1.BadRequestException("Unsupported file type"));
+    }
+    return cb(null, true);
+};
 let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
@@ -57,6 +72,14 @@ let UsersController = class UsersController {
         }
         return this.usersService.getSavedProperties(id);
     }
+    removeSavedProperty(id, propertyId, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.usersService
+            .removeSavedProperty(id, propertyId)
+            .then((user) => this.usersService.sanitizeUser(user));
+    }
     async getVerificationStatus(id, req) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
@@ -66,6 +89,19 @@ let UsersController = class UsersController {
             isVerified: user.isVerified,
             verificationStatus: user.verificationStatus,
         };
+    }
+    uploadPhoto(id, file, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.usersService.uploadProfilePhoto(id, file);
+    }
+    async deleteAccount(id, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        await this.usersService.deleteUser(id);
+        return { success: true };
     }
 };
 exports.UsersController = UsersController;
@@ -125,6 +161,16 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "getSavedProperties", null);
 __decorate([
+    (0, common_1.Delete)(":id/saved-properties/:propertyId"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Param)("propertyId")),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "removeSavedProperty", null);
+__decorate([
     (0, common_1.Get)(":id/verification-status"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)("id")),
@@ -133,8 +179,31 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getVerificationStatus", null);
+__decorate([
+    (0, common_1.Post)(":id/photo"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("file", {
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 5 * 1024 * 1024 },
+        fileFilter: createMimeTypeFilter(profileImageMimeTypes),
+    })),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, typeof (_b = typeof express_1.Express !== "undefined" && (_a = express_1.Express.Multer) !== void 0 && _a.File) === "function" ? _b : Object, Object]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "uploadPhoto", null);
+__decorate([
+    (0, common_1.Delete)(":id"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "deleteAccount", null);
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)("api/users"),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);
-//# sourceMappingURL=users.controller.js.map

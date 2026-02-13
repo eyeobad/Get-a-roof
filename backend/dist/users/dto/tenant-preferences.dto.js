@@ -11,7 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TenantPreferencesDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 const enums_1 = require("../../common/enums");
+const property_utils_1 = require("../../common/utils/property.utils");
 class TenantPreferencesDto {
 }
 exports.TenantPreferencesDto = TenantPreferencesDto;
@@ -19,8 +21,21 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(enums_1.PropertyType, { each: true }),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (!Array.isArray(value)) {
+            return value;
+        }
+        return value
+            .map((item) => (0, property_utils_1.normalizePropertyType)(item) ?? item)
+            .filter(Boolean);
+    }),
     __metadata("design:type", Array)
 ], TenantPreferencesDto.prototype, "lookingFor", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], TenantPreferencesDto.prototype, "gender", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -39,6 +54,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(enums_1.VehiclePreference),
+    (0, class_transformer_1.Transform)(({ value }) => (0, property_utils_1.normalizeVehiclePreference)(value)),
     __metadata("design:type", String)
 ], TenantPreferencesDto.prototype, "vehicles", void 0);
 __decorate([
@@ -86,4 +102,3 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], TenantPreferencesDto.prototype, "maxCommuteRadius", void 0);
-//# sourceMappingURL=tenant-preferences.dto.js.map

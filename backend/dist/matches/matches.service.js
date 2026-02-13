@@ -43,14 +43,27 @@ let MatchesService = class MatchesService {
         };
         const matchScoreData = (0, match_utils_1.computeMatchScore)(tenant.preferences?.tenant, matchInput);
         const baseStatus = dto.tenantLiked === false ? enums_1.MatchStatus.Dismissed : enums_1.MatchStatus.TenantLiked;
-        const status = dto.status ||
+        const computedStatus = dto.status ||
             (baseStatus === enums_1.MatchStatus.TenantLiked && matchScoreData.matchScore >= 70
                 ? enums_1.MatchStatus.LandlordQualified
                 : baseStatus);
+        const existing = await this.matchModel
+            .findOne({ tenantId: dto.tenantId, propertyId: dto.propertyId })
+            .exec();
+        if (existing) {
+            existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
+            existing.status = this.mergeMatchStatus(existing.status, computedStatus);
+            existing.matchScore = matchScoreData.matchScore;
+            existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
+            existing.apartmentPreferenceMatchPercentage =
+                matchScoreData.apartmentPreferenceMatchPercentage;
+            existing.timestamp = new Date();
+            return existing.save();
+        }
         const created = new this.matchModel({
             tenantId: dto.tenantId,
             propertyId: dto.propertyId,
-            status,
+            status: computedStatus,
             tenantLiked: dto.tenantLiked,
             matchScore: matchScoreData.matchScore,
             preferencesMatchPercentage: matchScoreData.preferencesMatchPercentage,
@@ -78,29 +91,245 @@ let MatchesService = class MatchesService {
             throw new common_1.ForbiddenException("Access denied");
         }
         match.status = dto.status ?? match.status;
+        match.landlordSeenAt = new Date();
         return match.save();
     }
     async findByProperty(propertyId) {
-        return this.matchModel.find({ propertyId }).exec();
-    }
-    async countByProperty(propertyId) {
-        return this.matchModel.countDocuments({ propertyId }).exec();
-    }
-    async findPropertyIdsWithMatches(landlordPropertyIds) {
         return this.matchModel
-            .find({ propertyId: { $in: landlordPropertyIds } })
-            .distinct("propertyId")
+            .find({ propertyId, status: { $ne: enums_1.MatchStatus.Dismissed } })
             .exec();
     }
+    async countByProperty(propertyId) {
+        const propertyIdString = propertyId?.toString?.() ?? propertyId;
+        return this.matchModel
+            .countDocuments({
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+            $expr: {
+                $eq: [{ $toString: "$propertyId" }, propertyIdString],
+            },
+        })
+            .exec();
+    }
+    async countNewByProperty(propertyId) {
+        const propertyIdString = propertyId?.toString?.() ?? propertyId;
+        return this.matchModel
+            .countDocuments({
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+            $expr: {
+                $eq: [{ $toString: "$propertyId" }, propertyIdString],
+            },
+            $or: [
+                { landlordSeenAt: { $exists: false } },
+                { landlordSeenAt: null },
+                { $expr: { $gt: ["$updatedAt", "$landlordSeenAt"] } },
+            ],
+        })
+            .exec();
+    }
+    async getMatchCountsByPropertyIds(propertyIds) {
+        if (!propertyIds.length) {
+            return [];
+        }
+        const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
+        const pipeline = [
+            {
+                $match: {
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    $expr: {
+                        $in: [{ $toString: "$propertyId" }, idStrings],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: "$propertyId",
+                    count: { $sum: 1 },
+                },
+            },
+        ];
+        return this.matchModel.aggregate(pipeline).exec();
+    }
+    async getNewMatchCountsByPropertyIds(propertyIds) {
+        if (!propertyIds.length) {
+            return [];
+        }
+        const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
+        const pipeline = [
+            {
+                $match: {
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    $expr: {
+                        $in: [{ $toString: "$propertyId" }, idStrings],
+                    },
+                    $or: [
+                        { landlordSeenAt: { $exists: false } },
+                        { landlordSeenAt: null },
+                        { $expr: { $gt: ["$updatedAt", "$landlordSeenAt"] } },
+                    ],
+                },
+            },
+            {
+                $group: {
+                    _id: "$propertyId",
+                    count: { $sum: 1 },
+                },
+            },
+        ];
+        return this.matchModel.aggregate(pipeline).exec();
+    }
+    async findPropertyIdsWithMatches(landlordPropertyIds) {
+        if (!landlordPropertyIds.length) {
+            return [];
+        }
+        const idStrings = landlordPropertyIds.map((id) => id?.toString?.() ?? id);
+        const results = await this.matchModel
+            .aggregate([
+            {
+                $match: {
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    $expr: {
+                        $in: [{ $toString: "$propertyId" }, idStrings],
+                    },
+                },
+            },
+            { $group: { _id: "$propertyId" } },
+        ])
+            .exec();
+        return results.map((item) => item._id);
+    }
+    async getPropertyMatchesWithTenant(propertyId) {
+        const propertyIdString = propertyId?.toString?.() ?? propertyId;
+        const pipeline = [
+            {
+                $match: {
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    $expr: {
+                        $eq: [{ $toString: "$propertyId" }, propertyIdString],
+                    },
+                },
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    let: { tenantId: "$tenantId" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: [{ $toString: "$_id" }, { $toString: "$$tenantId" }],
+                                },
+                            },
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                firstName: 1,
+                                lastName: 1,
+                                email: 1,
+                                phoneNumber: 1,
+                                photoUrl: 1,
+                                isVerified: 1,
+                                preferences: 1,
+                            },
+                        },
+                    ],
+                    as: "tenant",
+                },
+            },
+            { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    propertyId: 1,
+                    tenantId: 1,
+                    status: 1,
+                    matchScore: 1,
+                    preferencesMatchPercentage: 1,
+                    apartmentPreferenceMatchPercentage: 1,
+                    tenantLiked: 1,
+                    timestamp: 1,
+                    createdAt: 1,
+                    updatedAt: 1,
+                    landlordSeenAt: 1,
+                    isNewForLandlord: {
+                        $cond: [
+                            {
+                                $or: [
+                                    {
+                                        $eq: [
+                                            { $ifNull: ["$landlordSeenAt", null] },
+                                            null,
+                                        ],
+                                    },
+                                    { $gt: ["$updatedAt", "$landlordSeenAt"] },
+                                ],
+                            },
+                            true,
+                            false,
+                        ],
+                    },
+                    tenant: {
+                        _id: "$tenant._id",
+                        firstName: "$tenant.firstName",
+                        lastName: "$tenant.lastName",
+                        email: "$tenant.email",
+                        phoneNumber: "$tenant.phoneNumber",
+                        photoUrl: "$tenant.photoUrl",
+                        isVerified: "$tenant.isVerified",
+                        preferences: "$tenant.preferences",
+                    },
+                },
+            },
+            { $sort: { updatedAt: -1 } },
+        ];
+        return this.matchModel.aggregate(pipeline).exec();
+    }
+    async markMatchesSeenForProperty(propertyId) {
+        const now = new Date();
+        await this.matchModel.updateMany({ propertyId, status: { $ne: enums_1.MatchStatus.Dismissed } }, { $set: { landlordSeenAt: now } });
+        return { propertyId, seenAt: now.toISOString() };
+    }
+    async landlordHasTenantMatch(landlordPropertyIds, tenantId) {
+        if (!landlordPropertyIds.length) {
+            return false;
+        }
+        const idStrings = landlordPropertyIds.map((id) => id?.toString?.() ?? id);
+        const exists = await this.matchModel.exists({
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+            $expr: {
+                $and: [
+                    { $in: [{ $toString: "$propertyId" }, idStrings] },
+                    { $eq: [{ $toString: "$tenantId" }, tenantId] },
+                ],
+            },
+        });
+        return Boolean(exists);
+    }
     async getTenantMatches(tenantId) {
+        if (!mongoose_2.Types.ObjectId.isValid(tenantId)) {
+            throw new common_1.BadRequestException("Invalid tenantId");
+        }
         const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
         const pipeline = [
-            { $match: { tenantId: tenantObjectId } },
+            {
+                $match: {
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    $or: [{ tenantId: tenantObjectId }, { tenantId }],
+                },
+            },
             {
                 $lookup: {
                     from: "properties",
-                    localField: "propertyId",
-                    foreignField: "_id",
+                    let: { propId: "$propertyId" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: [{ $toString: "$_id" }, { $toString: "$$propId" }],
+                                },
+                            },
+                        },
+                    ],
                     as: "property",
                 },
             },
@@ -108,9 +337,19 @@ let MatchesService = class MatchesService {
             {
                 $lookup: {
                     from: "messages",
-                    let: { matchId: "$_id" },
+                    let: {
+                        matchId: "$_id",
+                        currentUserId: tenantId,
+                        landlordId: "$property.landlordId",
+                    },
                     pipeline: [
-                        { $match: { $expr: { $eq: ["$matchId", "$$matchId"] } } },
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: [{ $toString: "$matchId" }, { $toString: "$$matchId" }],
+                                },
+                            },
+                        },
                         { $sort: { timestamp: -1 } },
                         {
                             $group: {
@@ -121,8 +360,27 @@ let MatchesService = class MatchesService {
                                         $cond: [
                                             {
                                                 $and: [
-                                                    { $eq: ["$receiverId", tenantObjectId] },
+                                                    {
+                                                        $eq: [
+                                                            { $toString: "$receiverId" },
+                                                            "$$currentUserId",
+                                                        ],
+                                                    },
                                                     { $eq: ["$isRead", false] },
+                                                ],
+                                            },
+                                            1,
+                                            0,
+                                        ],
+                                    },
+                                },
+                                landlordReplied: {
+                                    $max: {
+                                        $cond: [
+                                            {
+                                                $eq: [
+                                                    { $toString: "$senderId" },
+                                                    { $toString: "$$landlordId" },
                                                 ],
                                             },
                                             1,
@@ -137,6 +395,7 @@ let MatchesService = class MatchesService {
                                 _id: 0,
                                 lastMessage: 1,
                                 unreadCount: 1,
+                                landlordReplied: 1,
                             },
                         },
                     ],
@@ -151,6 +410,12 @@ let MatchesService = class MatchesService {
                     unreadCount: {
                         $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
                     },
+                    landlordReplied: {
+                        $ifNull: [
+                            { $arrayElemAt: ["$messageMeta.landlordReplied", 0] },
+                            0,
+                        ],
+                    },
                 },
             },
             {
@@ -161,6 +426,22 @@ let MatchesService = class MatchesService {
             { $sort: { updatedAt: -1 } },
         ];
         return this.matchModel.aggregate(pipeline).exec();
+    }
+    mergeMatchStatus(current, incoming) {
+        if (incoming === enums_1.MatchStatus.Dismissed) {
+            return enums_1.MatchStatus.Dismissed;
+        }
+        if (current === enums_1.MatchStatus.ChatInitiated) {
+            return enums_1.MatchStatus.ChatInitiated;
+        }
+        if (incoming === enums_1.MatchStatus.ChatInitiated) {
+            return enums_1.MatchStatus.ChatInitiated;
+        }
+        if (current === enums_1.MatchStatus.LandlordQualified ||
+            incoming === enums_1.MatchStatus.LandlordQualified) {
+            return enums_1.MatchStatus.LandlordQualified;
+        }
+        return enums_1.MatchStatus.TenantLiked;
     }
 };
 exports.MatchesService = MatchesService;
@@ -173,4 +454,3 @@ exports.MatchesService = MatchesService = __decorate([
         users_service_1.UsersService,
         properties_service_1.PropertiesService])
 ], MatchesService);
-//# sourceMappingURL=matches.service.js.map

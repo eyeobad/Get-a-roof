@@ -58,4 +58,3 @@ __decorate([
     (0, class_validator_1.IsEnum)(enums_1.VerificationStatus),
     __metadata("design:type", String)
 ], UpdateUserDto.prototype, "verificationStatus", void 0);
-//# sourceMappingURL=update-user.dto.js.map

@@ -111,4 +111,3 @@ exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)("api/auth"),
     __metadata("design:paramtypes", [auth_service_1.AuthService])
 ], AuthController);
-//# sourceMappingURL=auth.controller.js.map

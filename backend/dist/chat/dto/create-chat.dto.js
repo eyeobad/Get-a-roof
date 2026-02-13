@@ -32,4 +32,3 @@ __decorate([
     (0, class_validator_1.MinLength)(1),
     __metadata("design:type", String)
 ], CreateChatDto.prototype, "content", void 0);
-//# sourceMappingURL=create-chat.dto.js.map

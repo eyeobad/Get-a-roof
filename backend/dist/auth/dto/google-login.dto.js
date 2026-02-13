@@ -39,4 +39,3 @@ __decorate([
     (0, class_validator_1.IsEnum)(enums_1.UserRole),
     __metadata("design:type", String)
 ], GoogleLoginDto.prototype, "role", void 0);
-//# sourceMappingURL=google-login.dto.js.map

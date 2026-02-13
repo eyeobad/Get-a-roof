@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
@@ -15,10 +16,13 @@ const jwt_1 = require("@nestjs/jwt");
 const bcrypt = require("bcrypt");
 const crypto_1 = require("crypto");
 const users_service_1 = require("../users/users.service");
-let AuthService = class AuthService {
-    constructor(usersService, jwtService) {
+const mail_service_1 = require("../mail/mail.service");
+let AuthService = AuthService_1 = class AuthService {
+    constructor(usersService, jwtService, mailService) {
         this.usersService = usersService;
         this.jwtService = jwtService;
+        this.mailService = mailService;
+        this.logger = new common_1.Logger(AuthService_1.name);
     }
     async login(dto) {
         const user = await this.usersService.findByEmail(dto.email);
@@ -28,6 +32,9 @@ let AuthService = class AuthService {
         const isValid = await bcrypt.compare(dto.password, user.loginCredentials.passwordHash);
         if (!isValid) {
             throw new common_1.UnauthorizedException("Invalid credentials");
+        }
+        if (!user.emailVerified) {
+            throw new common_1.UnauthorizedException("Email not verified. Please verify your email before logging in.");
         }
         return this.issueToken(user);
     }
@@ -40,8 +47,9 @@ let AuthService = class AuthService {
                     ...(existing.loginCredentials || {}),
                     googleId: dto.googleId,
                 };
-                await existing.save();
             }
+            existing.emailVerified = true;
+            await existing.save();
             return this.issueToken(existing);
         }
         const created = await this.usersService.createOAuthUser({
@@ -51,6 +59,8 @@ let AuthService = class AuthService {
             role: dto.role,
             googleId: dto.googleId,
         });
+        created.emailVerified = true;
+        await created.save();
         return this.issueToken(created);
     }
     async sendEmailOtp(dto) {
@@ -59,7 +69,14 @@ let AuthService = class AuthService {
         user.emailOtp = otp;
         user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
         await user.save();
-        return { sent: true, channel: "email", otp, expiresAt: user.emailOtpExpiresAt };
+        try {
+            await this.mailService.sendVerificationOtp(user.email, otp);
+        }
+        catch (error) {
+            this.logger.error(`Failed to send verification email to ${user.email}: ${error?.message ?? "unknown error"}`);
+            throw new common_1.ServiceUnavailableException("Unable to deliver OTP email right now. Please try again shortly.");
+        }
+        return { sent: true, channel: "email", expiresAt: user.emailOtpExpiresAt };
     }
     async sendPhoneOtp(dto) {
         const user = await this.usersService.findById(dto.userId);
@@ -145,9 +162,9 @@ let AuthService = class AuthService {
     }
 };
 exports.AuthService = AuthService;
-exports.AuthService = AuthService = __decorate([
+exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [users_service_1.UsersService,
-        jwt_1.JwtService])
+        jwt_1.JwtService,
+        mail_service_1.MailService])
 ], AuthService);
-//# sourceMappingURL=auth.service.js.map

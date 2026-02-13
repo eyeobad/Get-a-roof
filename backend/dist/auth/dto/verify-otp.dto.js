@@ -23,4 +23,3 @@ __decorate([
     (0, class_validator_1.Length)(4, 8),
     __metadata("design:type", String)
 ], VerifyOtpDto.prototype, "otp", void 0);
-//# sourceMappingURL=verify-otp.dto.js.map

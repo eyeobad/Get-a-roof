@@ -11,24 +11,50 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PropertiesController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer = require("multer");
 const properties_service_1 = require("./properties.service");
 const create_property_dto_1 = require("./dto/create-property.dto");
 const update_property_dto_1 = require("./dto/update-property.dto");
 const match_helpers_1 = require("../common/utils/match.helpers");
 const enums_1 = require("../common/enums");
+const property_utils_1 = require("../common/utils/property.utils");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_decorator_1 = require("../common/guards/roles.decorator");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const enums_2 = require("../common/enums");
+const imageMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
+const proofMimeTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "application/pdf",
+]);
+const createMimeTypeFilter = (allowedTypes) => (_req, file, cb) => {
+    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+        return cb(new common_1.BadRequestException("Unsupported file type"));
+    }
+    return cb(null, true);
+};
 let PropertiesController = class PropertiesController {
     constructor(propertiesService) {
         this.propertiesService = propertiesService;
     }
-    uploadImage(body) {
-        return this.propertiesService.uploadImageStub(body?.fileName);
+    uploadImage(file) {
+        return this.propertiesService.uploadImage(file);
+    }
+    uploadProof(file) {
+        return this.propertiesService.uploadProof(file);
     }
     create(dto, req) {
         dto.landlordId = req.user?.sub;
@@ -59,6 +85,25 @@ let PropertiesController = class PropertiesController {
     buildFilters(query) {
         const filters = {};
         const propertyTypes = new Set();
+        const requirementFilters = [];
+        const requirementTypeMap = {
+            NonOwnerOccupied: "landlordRequirements.nonOwnerOccupied",
+            SharedApartment: "landlordRequirements.sharedApartment",
+            Shortlet: "landlordRequirements.shortlet",
+            SelfCompound: "landlordRequirements.selfCompound",
+            SharedCompound: "landlordRequirements.sharedCompound",
+        };
+        const addPropertyType = (rawType) => {
+            const normalized = (0, property_utils_1.normalizePropertyType)(rawType)?.toString() ?? rawType;
+            if (!normalized) {
+                return;
+            }
+            propertyTypes.add(normalized);
+            const requirementPath = requirementTypeMap[normalized];
+            if (requirementPath) {
+                requirementFilters.push({ [requirementPath]: true });
+            }
+        };
         if (query.minPrice || query.maxPrice || query.budget) {
             filters.monthlyPrice = {};
             if (query.minPrice) {
@@ -76,7 +121,7 @@ let PropertiesController = class PropertiesController {
                 .split(",")
                 .map((value) => value.trim())
                 .filter(Boolean);
-            types.forEach((type) => propertyTypes.add(type));
+            types.forEach(addPropertyType);
         }
         const toggleMap = {
             selfCompound: "SelfCompound",
@@ -88,12 +133,9 @@ let PropertiesController = class PropertiesController {
         };
         Object.entries(toggleMap).forEach(([key, value]) => {
             if (query[key] === "true") {
-                propertyTypes.add(value);
+                addPropertyType(value);
             }
         });
-        if (propertyTypes.size) {
-            filters.propertyType = { $in: Array.from(propertyTypes) };
-        }
         if (query.apartmentType) {
             const type = query.apartmentType;
             if (type === "two") {
@@ -109,7 +151,22 @@ let PropertiesController = class PropertiesController {
                 filters.bedCount = { $lte: 1 };
             }
             else if (type === "duplex") {
-                filters.propertyType = { $in: ["House", "Townhouse"] };
+                propertyTypes.clear();
+                propertyTypes.add("House");
+                propertyTypes.add("Townhouse");
+            }
+        }
+        if (propertyTypes.size || requirementFilters.length) {
+            const typeConditions = [];
+            if (propertyTypes.size) {
+                typeConditions.push({ propertyType: { $in: Array.from(propertyTypes) } });
+            }
+            typeConditions.push(...requirementFilters);
+            if (typeConditions.length === 1) {
+                Object.assign(filters, typeConditions[0]);
+            }
+            else {
+                filters.$or = typeConditions;
             }
         }
         if (query.minBeds || query.maxBeds) {
@@ -161,11 +218,30 @@ __decorate([
     (0, common_1.Post)("upload-image"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
-    __param(0, (0, common_1.Body)()),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("file", {
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+        fileFilter: createMimeTypeFilter(imageMimeTypes),
+    })),
+    __param(0, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [typeof (_b = typeof express_1.Express !== "undefined" && (_a = express_1.Express.Multer) !== void 0 && _a.File) === "function" ? _b : Object]),
     __metadata("design:returntype", void 0)
 ], PropertiesController.prototype, "uploadImage", null);
+__decorate([
+    (0, common_1.Post)("upload-proof"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("file", {
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+        fileFilter: createMimeTypeFilter(proofMimeTypes),
+    })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [typeof (_d = typeof express_1.Express !== "undefined" && (_c = express_1.Express.Multer) !== void 0 && _c.File) === "function" ? _d : Object]),
+    __metadata("design:returntype", void 0)
+], PropertiesController.prototype, "uploadProof", null);
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
@@ -217,4 +293,3 @@ exports.PropertiesController = PropertiesController = __decorate([
     (0, common_1.Controller)("api/properties"),
     __metadata("design:paramtypes", [properties_service_1.PropertiesService])
 ], PropertiesController);
-//# sourceMappingURL=properties.controller.js.map

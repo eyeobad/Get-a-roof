@@ -17,19 +17,29 @@ const common_1 = require("@nestjs/common");
 const chat_service_1 = require("./chat.service");
 const create_chat_dto_1 = require("./dto/create-chat.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
+const chat_gateway_1 = require("./chat.gateway");
 let ChatController = class ChatController {
-    constructor(chatService) {
+    constructor(chatService, chatGateway) {
         this.chatService = chatService;
+        this.chatGateway = chatGateway;
     }
-    create(dto, req) {
+    async create(dto, req) {
         dto.senderId = req.user?.sub;
-        return this.chatService.createMessage(dto);
+        const message = await this.chatService.createMessage(dto);
+        this.chatGateway.emitMessage(message);
+        return message;
     }
     startThread(body, req) {
         if (!body?.propertyId) {
             return { matchId: null };
         }
         return this.chatService.startThread(req.user?.sub, body.propertyId, body.message);
+    }
+    startLandlordThread(body, req) {
+        if (!body?.matchId) {
+            return { matchId: null };
+        }
+        return this.chatService.startLandlordThread(body.matchId, req.user?.sub, body.message);
     }
     getConversations(req, limit, offset) {
         const parsedLimit = limit && !Number.isNaN(Number(limit)) ? Number(limit) : 20;
@@ -65,7 +75,7 @@ __decorate([
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_chat_dto_1.CreateChatDto, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ChatController.prototype, "create", null);
 __decorate([
     (0, common_1.Post)("start"),
@@ -76,6 +86,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], ChatController.prototype, "startThread", null);
+__decorate([
+    (0, common_1.Post)("start-landlord"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], ChatController.prototype, "startLandlordThread", null);
 __decorate([
     (0, common_1.Get)("conversations"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -108,6 +127,6 @@ __decorate([
 ], ChatController.prototype, "markRead", null);
 exports.ChatController = ChatController = __decorate([
     (0, common_1.Controller)("api/chat"),
-    __metadata("design:paramtypes", [chat_service_1.ChatService])
+    __metadata("design:paramtypes", [chat_service_1.ChatService,
+        chat_gateway_1.ChatGateway])
 ], ChatController);
-//# sourceMappingURL=chat.controller.js.map

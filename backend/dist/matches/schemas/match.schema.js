@@ -25,7 +25,7 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Match.prototype, "propertyId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ enum: enums_1.MatchStatus, default: enums_1.MatchStatus.TenantLiked }),
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.MatchStatus, default: enums_1.MatchStatus.TenantLiked }),
     __metadata("design:type", String)
 ], Match.prototype, "status", void 0);
 __decorate([
@@ -48,8 +48,14 @@ __decorate([
     (0, mongoose_1.Prop)({ default: () => new Date() }),
     __metadata("design:type", Date)
 ], Match.prototype, "timestamp", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Match.prototype, "landlordSeenAt", void 0);
 exports.Match = Match = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Match);
 exports.MatchSchema = mongoose_1.SchemaFactory.createForClass(Match);
-//# sourceMappingURL=match.schema.js.map
+exports.MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
+exports.MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
+exports.MatchSchema.index({ propertyId: 1, tenantId: 1 });

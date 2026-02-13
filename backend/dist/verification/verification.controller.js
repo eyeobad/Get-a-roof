@@ -82,4 +82,3 @@ exports.VerificationController = VerificationController = __decorate([
     (0, common_1.Controller)("api/verification"),
     __metadata("design:paramtypes", [verification_service_1.VerificationService])
 ], VerificationController);
-//# sourceMappingURL=verification.controller.js.map

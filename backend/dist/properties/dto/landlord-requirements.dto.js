@@ -33,12 +33,42 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => BudgetRangeDto),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === undefined || value === null) {
+            return value;
+        }
+        if (typeof value === "number") {
+            return { max: value };
+        }
+        if (typeof value === "string") {
+            const parsed = Number(value);
+            if (!Number.isNaN(parsed)) {
+                return { max: parsed };
+            }
+        }
+        return value;
+    }),
     __metadata("design:type", BudgetRangeDto)
 ], LandlordRequirementsDto.prototype, "budgetRange", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => BudgetRangeDto),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === undefined || value === null) {
+            return value;
+        }
+        if (typeof value === "number") {
+            return { min: value };
+        }
+        if (typeof value === "string") {
+            const parsed = Number(value);
+            if (!Number.isNaN(parsed)) {
+                return { min: parsed };
+            }
+        }
+        return value;
+    }),
     __metadata("design:type", BudgetRangeDto)
 ], LandlordRequirementsDto.prototype, "annualIncome", void 0);
 __decorate([
@@ -82,4 +112,3 @@ __decorate([
     (0, class_transformer_1.Type)(() => ideal_tenant_preferences_dto_1.IdealTenantPreferencesDto),
     __metadata("design:type", ideal_tenant_preferences_dto_1.IdealTenantPreferencesDto)
 ], LandlordRequirementsDto.prototype, "idealTenantPreferences", void 0);
-//# sourceMappingURL=landlord-requirements.dto.js.map

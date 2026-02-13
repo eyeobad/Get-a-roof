@@ -21,4 +21,3 @@ exports.VerificationModule = VerificationModule = __decorate([
         providers: [verification_service_1.VerificationService],
     })
 ], VerificationModule);
-//# sourceMappingURL=verification.module.js.map

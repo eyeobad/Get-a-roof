@@ -11,7 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IdealTenantPreferencesDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 const enums_1 = require("../../common/enums");
+const property_utils_1 = require("../../common/utils/property.utils");
 class IdealTenantPreferencesDto {
 }
 exports.IdealTenantPreferencesDto = IdealTenantPreferencesDto;
@@ -28,6 +30,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(enums_1.VehiclePreference),
+    (0, class_transformer_1.Transform)(({ value }) => (0, property_utils_1.normalizeVehiclePreference)(value)),
     __metadata("design:type", String)
 ], IdealTenantPreferencesDto.prototype, "vehicles", void 0);
 __decorate([
@@ -63,6 +66,21 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === undefined || value === null || value === "") {
+            return undefined;
+        }
+        if (typeof value === "boolean") {
+            return value;
+        }
+        const normalized = String(value).trim().toLowerCase();
+        if (["have", "yes", "true"].includes(normalized)) {
+            return true;
+        }
+        if (["dont", "don't", "no", "false"].includes(normalized)) {
+            return false;
+        }
+        return undefined;
+    }),
     __metadata("design:type", Boolean)
 ], IdealTenantPreferencesDto.prototype, "hasChildren", void 0);
-//# sourceMappingURL=ideal-tenant-preferences.dto.js.map
