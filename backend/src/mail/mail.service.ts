@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createTransport } from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
@@ -11,11 +11,14 @@ type MailOptions = {
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
   private transporter?: ReturnType<typeof createTransport>;
   private sender: string;
   private resendApiKey?: string;
+  private readonly isProduction: boolean;
 
   constructor(private readonly configService: ConfigService) {
+    this.isProduction = configService.get("NODE_ENV") === "production";
     const host = configService.get("MAIL_HOST");
     const port = Number(configService.get("MAIL_PORT")) || 0;
     const user = configService.get("MAIL_USERNAME");
@@ -43,6 +46,16 @@ export class MailService {
 
       this.transporter = createTransport(transportOptions);
     }
+
+    if (this.resendApiKey) {
+      this.logger.log("Email provider enabled: Resend API");
+    } else if (this.transporter) {
+      this.logger.log("Email provider enabled: SMTP");
+    } else {
+      this.logger.warn(
+        "No email provider configured. Set RESEND_API_KEY or MAIL_HOST/MAIL_PORT."
+      );
+    }
   }
 
   async sendMail(options: MailOptions) {
@@ -63,7 +76,9 @@ export class MailService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "Resend email failed");
+        throw new Error(
+          `Resend email failed (${response.status}): ${errorText || "unknown error"}`
+        );
       }
       return;
     }
@@ -78,8 +93,14 @@ export class MailService {
       return;
     }
 
-    // No mail provider configured; fail softly to avoid blocking signup in dev.
-    // You can set RESEND_API_KEY (preferred) or MAIL_HOST/MAIL_PORT for SMTP.
+    if (this.isProduction) {
+      throw new Error("Email provider is not configured.");
+    }
+
+    // Dev fallback so local setup can proceed without a provider.
+    this.logger.warn(
+      `Email provider missing. Skipping send to ${options.to}. Subject: ${options.subject}`
+    );
   }
 
   async sendVerificationOtp(email: string, otp: string) {

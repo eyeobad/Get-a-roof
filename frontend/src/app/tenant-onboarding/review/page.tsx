@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -12,6 +13,7 @@ const propertyLabelMap: Record<string, string> = {
 };
 
 export default function TenantReview() {
+  const router = useRouter();
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   type TenantPreferences = {
     lookingFor?: string[];
@@ -125,7 +127,7 @@ export default function TenantReview() {
             Review Your Profile
           </h1>
           <p className="text-lg text-slate-500 dark:text-slate-400 leading-relaxed">
-            Please double-check your details below. You can edit any section before finalizing.
+            Please double-check your details below. Account details are read-only at this step.
           </p>
         </header>
 
@@ -136,9 +138,7 @@ export default function TenantReview() {
                 <span className="material-icons-round text-primary text-xl">person</span>
                 <h2 className="text-xl font-bold text-slate-800 ">Account Details</h2>
               </div>
-              <button className="touch-target text-primary hover:text-blue-700 dark:text-blue-400 font-bold text-sm px-3 py-1 rounded-lg hover:bg-blue-50  transition-colors flex items-center" type="button">
-                Edit
-              </button>
+             
             </div>
             <div className="space-y-4">
               {[
@@ -164,7 +164,11 @@ export default function TenantReview() {
                 <span className="material-icons-round text-primary text-xl">apartment</span>
                 <h2 className="text-xl font-bold text-slate-800 ">Apartment Preferences</h2>
               </div>
-              <button className="touch-target text-primary hover:text-blue-700 dark:text-blue-400 font-bold text-sm px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors flex items-center" type="button">
+              <button
+                className="touch-target text-primary hover:text-blue-700 dark:text-blue-400 font-bold text-sm px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors flex items-center"
+                type="button"
+                onClick={() => router.push("/tenant-onboarding?returnTo=review")}
+              >
                 Edit
               </button>
             </div>
@@ -183,7 +187,13 @@ export default function TenantReview() {
                 <span className="material-icons-round text-primary text-xl">tune</span>
                 <h2 className="text-xl font-bold text-slate-800 ">About You</h2>
               </div>
-              <button className="touch-target text-primary hover:text-blue-700 dark:text-blue-400 font-bold text-sm px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors flex items-center" type="button">
+              <button
+                className="touch-target text-primary hover:text-blue-700 dark:text-blue-400 font-bold text-sm px-3 py-1 rounded-lg hover:bg-blue-50 transition-colors flex items-center"
+                type="button"
+                onClick={() =>
+                  router.push("/tenant-onboarding/more-about-you?returnTo=review")
+                }
+              >
                 Edit
               </button>
             </div>
@@ -213,7 +223,7 @@ export default function TenantReview() {
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200  z-10 flex justify-center">
           <div className="max-w-md w-full">
            <Link href={'/explore'}
-              className=" w-full bg-primary hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+              className=" w-full bg-primary text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
               type="button"
             >
              Create Profile

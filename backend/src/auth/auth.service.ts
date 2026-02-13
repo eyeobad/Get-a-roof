@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -18,6 +20,8 @@ import { MailService } from "../mail/mail.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -39,6 +43,12 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException(
+        "Email not verified. Please verify your email before logging in."
+      );
+    }
+
     return this.issueToken(user);
   }
 
@@ -51,8 +61,10 @@ export class AuthService {
           ...(existing.loginCredentials || {}),
           googleId: dto.googleId,
         };
-        await existing.save();
       }
+      // Google accounts are already email-verified by provider.
+      existing.emailVerified = true;
+      await existing.save();
       return this.issueToken(existing);
     }
 
@@ -63,6 +75,8 @@ export class AuthService {
       role: dto.role,
       googleId: dto.googleId,
     });
+    created.emailVerified = true;
+    await created.save();
 
     return this.issueToken(created);
   }
@@ -73,9 +87,18 @@ export class AuthService {
     user.emailOtp = otp;
     user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
-    await this.mailService.sendVerificationOtp(user.email, otp);
+    try {
+      await this.mailService.sendVerificationOtp(user.email, otp);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send verification email to ${user.email}: ${(error as Error)?.message ?? "unknown error"}`
+      );
+      throw new ServiceUnavailableException(
+        "Unable to deliver OTP email right now. Please try again shortly."
+      );
+    }
 
-    return { sent: true, channel: "email", otp, expiresAt: user.emailOtpExpiresAt };
+    return { sent: true, channel: "email", expiresAt: user.emailOtpExpiresAt };
   }
 
   async sendPhoneOtp(dto: SendOtpDto) {

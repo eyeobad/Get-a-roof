@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
 type SectionKey =
@@ -117,14 +117,97 @@ type SectionWithSelection = SectionConfig & { selectedIndex: number };
 
 export default function TenantMoreAboutYou() {
   const [earnings, setEarnings] = useState(85000);
+  const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams?.get("returnTo") ?? "";
+  const [hydrated, setHydrated] = useState(false);
 
   const [selections, setSelections] = useState<Selections>(() => {
     const initial = {} as Selections;
     for (const s of sections) initial[s.key] = s.primaryIndex ?? 0;
     return initial;
   });
+
+  useEffect(() => {
+    if (hydrated) return;
+    let mounted = true;
+
+    const findLabelIndex = (key: SectionKey, rawValue?: string) => {
+      if (!rawValue) return undefined;
+      const section = sections.find((item) => item.key === key);
+      if (!section) return undefined;
+      const index = section.buttonLabels.findIndex(
+        (label) => label.toLowerCase() === rawValue.toLowerCase()
+      );
+      return index >= 0 ? index : undefined;
+    };
+
+    fetchUserProfile()
+      .then((user) => {
+        if (!mounted) return;
+        const tenant = (user?.preferences as { tenant?: Record<string, unknown> } | undefined)
+          ?.tenant;
+        if (!tenant) {
+          setHydrated(true);
+          return;
+        }
+        setSelections((prev) => {
+          const nextSelections = { ...prev };
+          const setIfNumber = (key: SectionKey, index?: number) => {
+            if (typeof index === "number") {
+              nextSelections[key] = index;
+            }
+          };
+
+          setIfNumber("gender", findLabelIndex("gender", String(tenant.gender ?? "")));
+          setIfNumber(
+            "employment",
+            findLabelIndex("employment", String(tenant.employmentStatus ?? ""))
+          );
+          setIfNumber("marital", findLabelIndex("marital", String(tenant.maritalStatus ?? "")));
+          setIfNumber("vehicles", findLabelIndex("vehicles", String(tenant.vehicles ?? "")));
+          setIfNumber("smoking", findLabelIndex("smoking", String(tenant.smokingHabits ?? "")));
+          setIfNumber(
+            "drinking",
+            findLabelIndex("drinking", String(tenant.drinkingHabits ?? ""))
+          );
+          setIfNumber(
+            "religion",
+            findLabelIndex("religion", String(tenant.religionPreference ?? ""))
+          );
+          setIfNumber(
+            "education",
+            findLabelIndex("education", String(tenant.educationLevel ?? ""))
+          );
+          setIfNumber("social", findLabelIndex("social", String(tenant.socialHabits ?? "")));
+
+          if (typeof tenant.hasPets === "boolean") {
+            setIfNumber("pets", tenant.hasPets ? 0 : 1);
+          }
+          if (typeof tenant.hasChildren === "boolean") {
+            setIfNumber("children", tenant.hasChildren ? 0 : 1);
+          }
+
+          return nextSelections;
+        });
+
+        const annualEarnings = tenant.annualEarnings;
+        if (typeof annualEarnings === "number" && Number.isFinite(annualEarnings)) {
+          setEarnings(annualEarnings);
+        }
+
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (mounted) setHydrated(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetchUserProfile, hydrated]);
 
   const handleSelect = (key: SectionKey, index: number) => {
     setSelections((prev) => ({ ...prev, [key]: index }));
@@ -174,6 +257,10 @@ export default function TenantMoreAboutYou() {
     });
 
     await updatePreferences({ tenant: payload });
+    if (returnTo === "review") {
+      router.push("/tenant-onboarding/review");
+      return;
+    }
     router.push("/tenant-onboarding/review");
   };
 

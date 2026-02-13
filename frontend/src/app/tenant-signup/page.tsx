@@ -21,7 +21,6 @@ export default function TenantSignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerTenant = useAppStore((state) => state.registerTenant);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
-  const login = useAppStore((state) => state.login);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
 
@@ -53,27 +52,37 @@ export default function TenantSignupPage() {
         phoneNumber: form.phoneNumber,
         password: form.password,
       });
-      let userId = user?.id || user?._id;
-      if (userId) {
-        await sendEmailOtp(userId);
+      const userId = user?.id || user?._id;
+      if (!userId) {
+        throw new Error("Unable to start verification. Please try again.");
       }
 
-      const authResponse = await login(form.email, form.password);
-      if (!authResponse) {
-        throw new Error("Login failed.");
+      let otpSent = true;
+      try {
+        await sendEmailOtp(userId);
+      } catch {
+        otpSent = false;
       }
-      if (!userId) {
-        userId = authResponse.user?.id || authResponse.user?._id;
-      }
+
       const query = new URLSearchParams({
-        userId: userId ?? "",
+        userId,
         email: form.email,
       });
-      showToast({
-        title: "Verification sent",
-        text: "Check your email for the next steps.",
-        variant: "success",
-      });
+
+      if (otpSent) {
+        showToast({
+          title: "Verification sent",
+          text: "Check your email for the next steps.",
+          variant: "success",
+        });
+      } else {
+        showToast({
+          title: "Account created",
+          text: "We could not send your OTP yet. Open verification and tap Resend.",
+          variant: "info",
+        });
+      }
+
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
       const message = getApiErrorMessage(err);

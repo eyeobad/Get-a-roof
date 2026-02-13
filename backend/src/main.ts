@@ -10,14 +10,19 @@ const defaultCorsOrigins = [
   "http://127.0.0.1:3000",
 ];
 
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, "");
+
 const parseCorsOrigins = () => {
   const raw = process.env.CORS_ORIGINS;
-  if (!raw) return defaultCorsOrigins;
-  const origins = raw
+  const envOrigins = (raw ?? "")
     .split(",")
     .map((origin) => origin.trim())
-    .filter(Boolean);
-  return origins.length ? origins : defaultCorsOrigins;
+    .filter(Boolean)
+    .map(normalizeOrigin);
+
+  const defaults = defaultCorsOrigins.map(normalizeOrigin);
+  const allowed = [...new Set([...defaults, ...envOrigins])];
+  return allowed.length ? allowed : defaults;
 };
 
 async function bootstrap() {
@@ -42,7 +47,7 @@ async function bootstrap() {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes("*")) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
       return callback(new Error("Not allowed by CORS"), false);
     },
     credentials: true,

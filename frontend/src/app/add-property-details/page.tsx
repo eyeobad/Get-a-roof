@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 
@@ -36,7 +36,6 @@ export default function AddPropertyDetailsPage() {
 
   const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
   const bathOptions = useMemo(() => [1, 2, 3, 4], []);
-  const sqftOptions = useMemo(() => [500, 750, 1000, 1500, 2000], []);
   
   const amenityOptions = useMemo(() => [
     { label: "Local Laundry Service", icon: "local_laundry_service" },

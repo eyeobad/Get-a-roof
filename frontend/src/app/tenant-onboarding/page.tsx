@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function TenantOnboarding() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
+  const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams?.get("returnTo") ?? "";
 
   const options = [
     { label: "Non-owner occupied", icon: "apartment", accent: "text-primary" },
@@ -22,8 +25,40 @@ export default function TenantOnboarding() {
     },
   ];
 
+  useEffect(() => {
+    let mounted = true;
+    fetchUserProfile()
+      .then((user) => {
+        if (!mounted) return;
+        const lookingFor = (user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined)
+          ?.tenant?.lookingFor;
+        const selectedValue = lookingFor?.[0];
+        const valueToIndex: Record<string, number> = {
+          NonOwnerOccupied: 0,
+          SharedApartment: 1,
+          Shortlet: 2,
+          SelfCompound: 3,
+          SharedCompound: 4,
+        };
+        if (selectedValue && valueToIndex[selectedValue] !== undefined) {
+          setSelectedIndex(valueToIndex[selectedValue]);
+        }
+      })
+      .catch(() => {
+        // Ignore prefill errors and keep defaults.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetchUserProfile]);
+
   const handleNext = async () => {
     if (selectedIndex === null) {
+      if (returnTo === "review") {
+        router.push("/tenant-onboarding/review");
+        return;
+      }
       router.push("/tenant-onboarding/more-about-you");
       return;
     }
@@ -37,6 +72,10 @@ export default function TenantOnboarding() {
     };
     const lookingFor = label && map[label] ? [map[label]] : [];
     await updatePreferences({ tenant: { lookingFor } });
+    if (returnTo === "review") {
+      router.push("/tenant-onboarding/review");
+      return;
+    }
     router.push("/tenant-onboarding/more-about-you");
   };
 
