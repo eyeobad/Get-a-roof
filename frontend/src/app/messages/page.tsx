@@ -79,9 +79,9 @@ function EmptyState({
 function SendingIndicator({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500 px-2">
-      <span className="inline-flex h-2 w-2 rounded-full bg-primary/60 animate-pulse" />
-      <span className="font-medium">Sending...</span>
+    <div className="flex items-center gap-1.5 text-xs text-primary/70 py-0.5">
+      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
+      <span className="font-medium tracking-wide">Sending</span>
     </div>
   );
 }
@@ -456,23 +456,23 @@ function MessagesContent() {
               </div>
             </main>
 
-            <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white">
-              <div className="px-4 pt-3 pb-2">
-                <div className="flex items-end gap-3">
+            <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-white/95 backdrop-blur-sm">
+              <div className="px-3 pt-3 pb-3">
+                <div className="flex items-end gap-2">
                   <button
                     aria-label="Attach"
-                    className="rounded-full p-2 hover:bg-slate-100 text-slate-700 transition-colors"
+                    className="mb-1 rounded-full p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     <Icon name="attach_file" />
                   </button>
 
-                  <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 transition-all duration-150 focus-within:border-primary/50 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(10,68,184,0.08)]">
                     <textarea
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
                       rows={1}
                       placeholder="Message..."
-                      className="w-full resize-none bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-400"
+                      className="w-full resize-none bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-400 leading-relaxed"
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
@@ -480,15 +480,14 @@ function MessagesContent() {
                         }
                       }}
                     />
+                    <SendingIndicator visible={isSending} />
                   </div>
-
-                  <SendingIndicator visible={isSending} />
 
                   <button
                     aria-label="Send"
                     onClick={() => void sendMessage()}
-                    className="rounded-full bg-primary p-3 text-white shadow-sm hover:brightness-110 active:scale-95 transition"
                     disabled={isSending}
+                    className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md shadow-primary/30 ring-2 ring-primary/10 hover:brightness-110 hover:shadow-lg hover:shadow-primary/40 active:scale-95 disabled:opacity-60 transition-all duration-150"
                   >
                     <Icon name="send" filled />
                   </button>
@@ -721,22 +720,22 @@ function MessagesContent() {
                     </div>
                   </main>
 
-                  <div className="border-t border-slate-200 bg-white px-6 py-4">
+                  <div className="border-t border-slate-100 bg-white/95 backdrop-blur-sm px-6 py-4">
                     <div className="mx-auto flex max-w-3xl items-end gap-3">
                       <button
                         aria-label="Attach"
-                        className="rounded-full p-2 hover:bg-slate-100 text-slate-700 transition-colors"
+                        className="mb-1 rounded-full p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                       >
                         <Icon name="attach_file" />
                       </button>
 
-                      <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition-all duration-150 focus-within:border-primary/50 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(10,68,184,0.08)]">
                         <textarea
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
                           rows={1}
                           placeholder="Type a message..."
-                          className="w-full resize-none bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-400"
+                          className="w-full resize-none bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-400 leading-relaxed"
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
@@ -744,15 +743,14 @@ function MessagesContent() {
                             }
                           }}
                         />
+                        <SendingIndicator visible={isSending} />
                       </div>
-
-                      <SendingIndicator visible={isSending} />
 
                       <button
                         aria-label="Send"
                         onClick={() => void sendMessage()}
-                        className="rounded-full bg-primary p-3 text-white shadow-sm hover:brightness-110 active:scale-95 transition"
                         disabled={isSending}
+                        className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-white shadow-md shadow-primary/30 ring-2 ring-primary/10 hover:brightness-110 hover:shadow-lg hover:shadow-primary/40 active:scale-95 disabled:opacity-60 transition-all duration-150"
                       >
                         <Icon name="send" filled />
                       </button>

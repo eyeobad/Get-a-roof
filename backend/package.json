@@ -9,7 +9,11 @@
     "build": "node --max-old-space-size=3072 ./node_modules/typescript/bin/tsc -p tsconfig.build.json --noCheck",
     "seed": "ts-node src/seed.ts",
     "cleanup:orphans": "ts-node src/maintenance/cleanup-orphan-properties.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "keywords": [],
   "author": "",

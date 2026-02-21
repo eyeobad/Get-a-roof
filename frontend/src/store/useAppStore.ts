@@ -1145,8 +1145,7 @@ export const useAppStore = create<AppState>()(
               listingsById: { ...prev.listingsById, [listing.id]: listing },
             }));
           }
-          const listingId =
-            listing?.id ?? (match.propertyId ? String(match.propertyId) : "");
+          const listingId = listing?.id ?? toIdString(match.propertyId);
           if (listingId && !state.listingsById[listingId]) {
             void get().fetchPropertyById(listingId);
           }

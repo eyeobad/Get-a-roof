@@ -8,6 +8,8 @@ function TenantOnboardingContent() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const authToken = useAppStore((state) => state.authToken);
+  const userId = useAppStore((state) => state.userId);
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams?.get("returnTo") ?? "";
@@ -26,12 +28,19 @@ function TenantOnboardingContent() {
   ];
 
   useEffect(() => {
+    if (!authToken || !userId) return;
     let mounted = true;
     fetchUserProfile()
       .then((user) => {
         if (!mounted) return;
-        const lookingFor = (user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined)
-          ?.tenant?.lookingFor;
+        const lookingFor = (
+          user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+        )?.tenant?.lookingFor;
+        const alreadyCompleted = Array.isArray(lookingFor) && lookingFor.length > 0;
+        if (alreadyCompleted && returnTo !== "review") {
+          router.replace("/explore");
+          return;
+        }
         const selectedValue = lookingFor?.[0];
         const valueToIndex: Record<string, number> = {
           NonOwnerOccupied: 0,
@@ -51,7 +60,7 @@ function TenantOnboardingContent() {
     return () => {
       mounted = false;
     };
-  }, [fetchUserProfile]);
+  }, [authToken, userId, fetchUserProfile, returnTo, router]);
 
   const handleNext = async () => {
     if (selectedIndex === null) {

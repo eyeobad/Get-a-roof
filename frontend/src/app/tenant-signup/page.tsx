@@ -33,11 +33,27 @@ export default function TenantSignupPage() {
     if (isSubmitting) return;
     setError(null);
 
-    if (!form.email || !form.password || !form.firstName || !form.lastName) {
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      firstName: String(formData.get("firstName") ?? form.firstName).trim(),
+      lastName: String(formData.get("lastName") ?? form.lastName).trim(),
+      email: String(formData.get("email") ?? form.email).trim(),
+      phoneNumber: String(formData.get("phoneNumber") ?? form.phoneNumber).trim(),
+      password: String(formData.get("password") ?? form.password),
+      verifyPassword: String(
+        formData.get("verifyPassword") ?? form.verifyPassword
+      ),
+    };
+
+    if (!payload.email || !payload.password || !payload.firstName || !payload.lastName) {
       setError("Please complete all required fields.");
       return;
     }
-    if (form.password !== form.verifyPassword) {
+    if (payload.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (payload.password !== payload.verifyPassword) {
       setError("Passwords do not match.");
       return;
     }
@@ -46,11 +62,11 @@ export default function TenantSignupPage() {
     clearAuth();
     setIsSubmitting(true);
       const user = await registerTenant({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        phoneNumber: form.phoneNumber,
-        password: form.password,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        password: payload.password,
       });
       const userId = user?.id || user?._id;
       if (!userId) {
@@ -66,7 +82,7 @@ export default function TenantSignupPage() {
 
       const query = new URLSearchParams({
         userId,
-        email: form.email,
+        email: payload.email,
       });
 
       if (otpSent) {
@@ -134,11 +150,25 @@ export default function TenantSignupPage() {
               </label>
               <input
                 id={field.id}
+                name={field.id}
                 type={field.type}
                 placeholder={field.placeholder}
+                autoComplete={
+                  field.id === "firstName"
+                    ? "given-name"
+                    : field.id === "lastName"
+                      ? "family-name"
+                      : "email"
+                }
                 value={form[field.id as keyof typeof form]}
                 onChange={(event) =>
                   updateField(field.id as keyof typeof form, event.target.value)
+                }
+                onInput={(event) =>
+                  updateField(
+                    field.id as keyof typeof form,
+                    (event.target as HTMLInputElement).value
+                  )
                 }
                 className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"
               />
@@ -151,10 +181,15 @@ export default function TenantSignupPage() {
             <div className="relative">
               <input
                 id="phone"
+                name="phoneNumber"
                 type="tel"
                 placeholder="(555) 000-0000"
+                autoComplete="tel"
                 value={form.phoneNumber}
                 onChange={(event) => updateField("phoneNumber", event.target.value)}
+                onInput={(event) =>
+                  updateField("phoneNumber", (event.target as HTMLInputElement).value)
+                }
                 className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"
               />
               <div className="pointer-events-none absolute inset-y-0 right-5 flex items-center">
@@ -191,8 +226,10 @@ export default function TenantSignupPage() {
                 <div className="relative">
                   <input
                     id={field.id}
+                    name={field.id}
                     type={visible ? "text" : "password"}
                     placeholder={field.placeholder}
+                    autoComplete={isVerify ? "new-password" : "new-password"}
                     value={
                       field.id === "password" ? form.password : form.verifyPassword
                     }
@@ -200,6 +237,12 @@ export default function TenantSignupPage() {
                       updateField(
                         field.id === "password" ? "password" : "verifyPassword",
                         event.target.value
+                      )
+                    }
+                    onInput={(event) =>
+                      updateField(
+                        field.id === "password" ? "password" : "verifyPassword",
+                        (event.target as HTMLInputElement).value
                       )
                     }
                     className="form-input w-full h-14 rounded-[1.25rem] border border-gray-300 bg-white px-5 text-lg text-[#1A1A1A] transition focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]/20"

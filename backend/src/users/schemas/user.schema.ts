@@ -154,13 +154,25 @@ export class User {
   emailOtp?: string;
 
   @Prop()
+  emailOtpHash?: string;
+
+  @Prop()
   emailOtpExpiresAt?: Date;
+
+  @Prop({ default: 0 })
+  emailOtpAttempts?: number;
 
   @Prop()
   phoneOtp?: string;
 
   @Prop()
+  phoneOtpHash?: string;
+
+  @Prop()
   phoneOtpExpiresAt?: Date;
+
+  @Prop({ default: 0 })
+  phoneOtpAttempts?: number;
 
   @Prop()
   passwordResetToken?: string;

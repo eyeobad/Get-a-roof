@@ -90,62 +90,71 @@ export default function MatchesPage() {
           </header>
 
           <main className="flex-1 px-5 pt-6 space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {matches.map((m) => (
-                <motion.button
-                  key={m.id}
-                  onClick={() => openMatch(m.id)}
-                  whileTap={{ scale: tapToken.scale }}
-                  transition={tapToken.transition}
-                  className="text-left bg-white rounded-[24px] overflow-hidden shadow-sm border border-black/5 flex flex-col active:scale-[0.98] transition-transform duration-200"
-                >
-                  <div className="relative aspect-[4/3] bg-gray-200">
-                    <Image
-                      src={m.image}
-                      alt={m.title}
-                      fill
-                      sizes="(max-width: 1024px) 90vw, 420px"
-                      className="object-cover"
-                    />
+            {matches.length === 0 ? (
+              <div className="rounded-3xl border border-black/5 bg-white p-8 text-center shadow-sm">
+                <p className="text-lg font-bold text-[#1A1A1A]">No matches yet</p>
+                <p className="mt-2 text-sm text-gray-500">
+                  Like listings in Explore to see them here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {matches.map((m) => (
+                  <motion.button
+                    key={m.id}
+                    onClick={() => openMatch(m.id)}
+                    whileTap={{ scale: tapToken.scale }}
+                    transition={tapToken.transition}
+                    className="text-left bg-white rounded-[24px] overflow-hidden shadow-sm border border-black/5 flex flex-col active:scale-[0.98] transition-transform duration-200"
+                  >
+                    <div className="relative aspect-[4/3] bg-gray-200">
+                      <Image
+                        src={m.image}
+                        alt={m.title}
+                        fill
+                        sizes="(max-width: 1024px) 90vw, 420px"
+                        className="object-cover"
+                      />
 
-                    {m.badge && (
-                      <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
-                        <span className="text-white text-sm font-semibold">
-                          {m.badge}
-                        </span>
+                      {m.badge && (
+                        <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
+                          <span className="text-white text-sm font-semibold">
+                            {m.badge}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 flex flex-col gap-3">
+                      <p className="text-primary font-extrabold text-xl">{m.price}</p>
+                      <div>
+                        <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
+                          {m.title}
+                        </h3>
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <span className="material-symbols-outlined text-[20px]">
+                            location_on
+                          </span>
+                          <span className="text-lg font-medium truncate">
+                            {m.location}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="p-5 flex flex-col gap-3">
-                    <p className="text-primary font-extrabold text-xl">{m.price}</p>
-                    <div>
-                      <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
-                        {m.title}
-                      </h3>
-                      <div className="flex items-center gap-1 text-gray-500">
-                        <span className="material-symbols-outlined text-[20px]">
-                          location_on
-                        </span>
-                        <span className="text-lg font-medium truncate">
-                          {m.location}
-                        </span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {m.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="px-3 py-1.5 rounded-full bg-[#e7ebf4] text-primary text-sm font-bold"
+                          >
+                            {t}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-1">
-              {m.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="px-3 py-1.5 rounded-full bg-[#e7ebf4] text-primary text-sm font-bold"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
 
             <div className="h-6 w-full" />
           </main>
@@ -185,62 +194,71 @@ export default function MatchesPage() {
           </header>
 
           <main className="flex-1 overflow-y-auto px-8 py-6">
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
-              {matches.map((m) => (
-                <motion.button
-                  key={m.id}
-                  onClick={() => openMatch(m.id)}
-                  whileTap={{ scale: tapToken.scale }}
-                  transition={tapToken.transition}
-                  className="text-left bg-white rounded-[24px] overflow-hidden shadow-sm border border-black/5 flex flex-col active:scale-[0.98] transition-transform duration-200"
-                >
-                  <div className="relative aspect-[4/3] bg-gray-200">
-                    <Image
-                      src={m.image}
-                      alt={m.title}
-                      fill
-                      sizes="(max-width: 1280px) 45vw, 420px"
-                      className="object-cover"
-                    />
+            {matches.length === 0 ? (
+              <div className="rounded-3xl border border-black/5 bg-white p-10 text-center shadow-sm">
+                <p className="text-xl font-bold text-[#1A1A1A]">No matches yet</p>
+                <p className="mt-2 text-sm text-gray-500">
+                  Like listings in Explore to see them here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+                {matches.map((m) => (
+                  <motion.button
+                    key={m.id}
+                    onClick={() => openMatch(m.id)}
+                    whileTap={{ scale: tapToken.scale }}
+                    transition={tapToken.transition}
+                    className="text-left bg-white rounded-[24px] overflow-hidden shadow-sm border border-black/5 flex flex-col active:scale-[0.98] transition-transform duration-200"
+                  >
+                    <div className="relative aspect-[4/3] bg-gray-200">
+                      <Image
+                        src={m.image}
+                        alt={m.title}
+                        fill
+                        sizes="(max-width: 1280px) 45vw, 420px"
+                        className="object-cover"
+                      />
 
-                    {m.badge && (
-                      <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
-                        <span className="text-white text-sm font-semibold">
-                          {m.badge}
-                        </span>
+                      {m.badge && (
+                        <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
+                          <span className="text-white text-sm font-semibold">
+                            {m.badge}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 flex flex-col gap-3">
+                      <p className="text-primary font-extrabold text-xl">{m.price}</p>
+                      <div>
+                        <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
+                          {m.title}
+                        </h3>
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <span className="material-symbols-outlined text-[20px]">
+                            location_on
+                          </span>
+                          <span className="text-lg font-medium truncate">
+                            {m.location}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="p-5 flex flex-col gap-3">
-                    <p className="text-primary font-extrabold text-xl">{m.price}</p>
-                    <div>
-                      <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
-                        {m.title}
-                      </h3>
-                      <div className="flex items-center gap-1 text-gray-500">
-                        <span className="material-symbols-outlined text-[20px]">
-                          location_on
-                        </span>
-                        <span className="text-lg font-medium truncate">
-                          {m.location}
-                        </span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {m.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="px-3 py-1.5 rounded-full bg-[#e7ebf4] text-primary text-sm font-bold"
+                          >
+                            {t}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {m.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="px-3 py-1.5 rounded-full bg-[#e7ebf4] text-primary text-sm font-bold"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
 
             <div className="h-10 w-full" />
           </main>

@@ -101,6 +101,40 @@ export default function AddPropertyDetailsPage() {
     const lngNum = parseFloat(lng);
     const sqftNum = parseInt(sqft);
 
+    const isAdvancing = Boolean(nextPath);
+    if (isAdvancing) {
+      if (!location.trim()) {
+        setError("Location is required.");
+        setIsSaving(false);
+        return;
+      }
+      if (!monthlyPrice || monthlyPrice <= 0) {
+        setError("Annual rent is required.");
+        setIsSaving(false);
+        return;
+      }
+      if (!propertyType) {
+        setError("Property type is required.");
+        setIsSaving(false);
+        return;
+      }
+      if (beds === null || beds <= 0) {
+        setError("Please set number of beds.");
+        setIsSaving(false);
+        return;
+      }
+      if (baths === null || baths <= 0) {
+        setError("Please set number of baths.");
+        setIsSaving(false);
+        return;
+      }
+      if (!desc.trim()) {
+        setError("Description is required.");
+        setIsSaving(false);
+        return;
+      }
+    }
+
     // Update Store
     setLandlordDraft({
       monthlyPrice,

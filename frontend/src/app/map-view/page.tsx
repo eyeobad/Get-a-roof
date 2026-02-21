@@ -124,11 +124,11 @@ function PropertyCard({
             event.stopPropagation();
             onToggleSave?.(item.id);
           }}
-          className="absolute top-3 right-3 bg-white/90 p-1.5 rounded-full shadow-sm hover:bg-white transition"
+          className="absolute top-3 right-3 h-9 w-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-full shadow-sm border border-white/50 hover:bg-white hover:scale-105 active:scale-95 transition-all duration-200 z-10"
           aria-label={item.isSaved ? "Remove saved listing" : "Save listing"}
         >
-          <span className="material-symbols-outlined text-xl text-gray-400">
-            {item.isSaved ? "favorite" : "favorite_border"}
+          <span className={`material-symbols-outlined text-[20px] transition-colors duration-200 ${item.isSaved ? "text-red-500 fill-current" : "text-gray-600"}`}>
+            {item.isSaved ? "favorite" : "favorite"}
           </span>
         </button>
         <div className="absolute bottom-3 left-3 bg-primary text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
@@ -324,14 +324,25 @@ function MapCanvas({
         });
         resizeObserverRef.current.observe(mapElementRef.current);
       }
-      const style = map.getStyle();
+      const styleLoaded = map.isStyleLoaded();
+      let layerCount = 0;
+      let sourceCount = 0;
+      if (styleLoaded) {
+        try {
+          const style = map.getStyle();
+          layerCount = style.layers?.length ?? 0;
+          sourceCount = Object.keys(style.sources ?? {}).length;
+        } catch {
+          // Mapbox can briefly throw "Style is not done loading" during transitions.
+        }
+      }
       onMapStatus({
         supported: true,
         loaded: map.loaded(),
-        styleLoaded: map.isStyleLoaded(),
+        styleLoaded,
         tilesLoaded: map.areTilesLoaded(),
-        layerCount: style.layers?.length ?? 0,
-        sourceCount: Object.keys(style.sources ?? {}).length,
+        layerCount,
+        sourceCount,
         zoom: map.getZoom(),
         center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
       });
@@ -354,14 +365,25 @@ function MapCanvas({
     const map = mapRef.current;
     if (!map) return;
     const updateStatus = () => {
-      const style = map.getStyle();
+      const styleLoaded = map.isStyleLoaded();
+      let layerCount = 0;
+      let sourceCount = 0;
+      if (styleLoaded) {
+        try {
+          const style = map.getStyle();
+          layerCount = style.layers?.length ?? 0;
+          sourceCount = Object.keys(style.sources ?? {}).length;
+        } catch {
+          // Ignore transient style-loading race during render ticks.
+        }
+      }
       onMapStatus({
         supported: true,
         loaded: map.loaded(),
-        styleLoaded: map.isStyleLoaded(),
+        styleLoaded,
         tilesLoaded: map.areTilesLoaded(),
-        layerCount: style.layers?.length ?? 0,
-        sourceCount: Object.keys(style.sources ?? {}).length,
+        layerCount,
+        sourceCount,
         zoom: map.getZoom(),
         center: { lat: map.getCenter().lat, lng: map.getCenter().lng },
       });
@@ -565,7 +587,7 @@ export default function MapView() {
     setMapError(null);
   }, []);
 
-  const handleMapStatus = useCallback(() => {}, []);
+  const handleMapStatus = useCallback(() => { }, []);
 
   const handleZoomIn = (mapRef: { current: mapboxgl.Map | null }) => {
     mapRef.current?.zoomIn();
@@ -587,10 +609,23 @@ export default function MapView() {
   };
 
   useEffect(() => {
-    const maps = [mobileMapRef.current, desktopMapRef.current];
-    const resizeMaps = () => {
-      maps.forEach((map) => map?.resize());
+    const safeResize = (map: mapboxgl.Map | null) => {
+      if (!map) return;
+      try {
+        const container = map.getContainer?.();
+        const canvas = map.getCanvas?.();
+        if (!container || !canvas || !container.isConnected) return;
+        map.resize();
+      } catch {
+        // Map may have been removed between renders/timeouts.
+      }
     };
+
+    const resizeMaps = () => {
+      safeResize(mobileMapRef.current);
+      safeResize(desktopMapRef.current);
+    };
+
     resizeMaps();
     const timerShort = window.setTimeout(resizeMaps, 100);
     const timerLong = window.setTimeout(resizeMaps, 400);
@@ -670,14 +705,14 @@ export default function MapView() {
   };
 
   return (
-    <>
+    <div>
       {/* Mobile */}
       <div className="lg:hidden h-screen bg-background-light text-[#0c141d] font-display antialiased flex flex-col">
         <header className="bg-primary text-white pt-10 pb-4 px-4 shadow-lg shrink-0 rounded-b-lg z-10 w-full">
           <div className="flex items-center justify-between mb-4">
-            <button className="flex items-center justify-center p-2 rounded-full hover:bg-white/10 transition-colors">
-              <span className="material-symbols-outlined text-[28px]">
-                menu
+            <button className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-slate-100 shadow-sm text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all active:scale-90 touch-manipulation">
+              <span className={`material-symbols-outlined text-[22px] ${activeListing?.isSaved ? "text-red-500 fill-current" : ""}`}>
+                favorite
               </span>
             </button>
 
@@ -698,11 +733,10 @@ export default function MapView() {
               <button
                 type="button"
                 onClick={() => setViewMode("map")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full transition-all duration-200 ${
-                  viewMode === "map"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-white/70"
-                }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full transition-all duration-200 ${viewMode === "map"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-white/70"
+                  }`}
               >
                 <span className="material-symbols-outlined text-[20px]">
                   map
@@ -713,11 +747,10 @@ export default function MapView() {
               <button
                 type="button"
                 onClick={() => setViewMode("list")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full transition-all duration-200 ${
-                  viewMode === "list"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-white/70"
-                }`}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full transition-all duration-200 ${viewMode === "list"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-white/70"
+                  }`}
               >
                 <span className="material-symbols-outlined text-[20px]">
                   view_list
@@ -792,8 +825,9 @@ export default function MapView() {
             {listItems.length > 0 && (
               <div className="absolute bottom-4 left-4 right-4 z-20">
                 <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-100 relative">
-                  <div className="flex gap-4 items-start">
-                    <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
+                  <div className="space-y-3">
+                    <div className="flex gap-4 items-start">
+                      <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
                       {activeListing ? (
                         <Image
                           src={activeListing.image}
@@ -810,102 +844,95 @@ export default function MapView() {
                           <h2 className="text-xl font-bold text-primary leading-none">
                             {activeListing?.price ?? "₦0"}
                           </h2>
-                          <button className="text-gray-400 hover:text-red-500 transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">
-                              favorite
-                            </span>
-                          </button>
                         </div>
 
-                        <p className="text-gray-600 text-sm mt-1 truncate">
-                          {activeListing?.displayAddress ?? "No matched properties yet"}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3 text-gray-500 mt-1">
-                        {[
-                          { icon: "bed", value: activeListing?.beds ?? 0, label: "bd" },
-                          { icon: "bathtub", value: activeListing?.baths ?? 0, label: "ba" },
-                          { icon: "square_foot", value: activeListing?.sqft ?? "0", label: "sqft" },
-                        ].map((item) => (
-                          <div
-                            key={`${item.icon}-${item.label}`}
-                            className="flex items-center gap-1 text-sm font-medium"
-                          >
-                            {item.icon && (
-                              <span className="material-symbols-outlined text-[18px]">
-                                {item.icon}
-                              </span>
-                            )}
-                            <span>{item.value}</span>
-                            <span>{item.label}</span>
-                          </div>
-                        ))}
+                        <div className="flex items-center gap-3 text-gray-500 mt-1">
+                          {[
+                            { icon: "bed", value: activeListing?.beds ?? 0, label: "bd" },
+                            { icon: "bathtub", value: activeListing?.baths ?? 0, label: "ba" },
+                            { icon: "square_foot", value: activeListing?.sqft ?? "0", label: "sqft" },
+                          ].map((item) => (
+                            <div
+                              key={`${item.icon}-${item.label}`}
+                              className="flex items-center gap-1 text-sm font-medium"
+                            >
+                              {item.icon && (
+                                <span className="material-symbols-outlined text-[18px]">
+                                  {item.icon}
+                                </span>
+                              )}
+                              <span>{item.value}</span>
+                              <span>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {activeListing && (
-                    <Link
-                      href={`/property-details/${activeListing.id}`}
-                      className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                    >
-                      <span>View Home Details</span>
-                      <span className="material-symbols-outlined text-sm">
-                        arrow_forward
-                      </span>
-                    </Link>
-                  )}
+                    {activeListing && (
+                      <Link
+                        href={`/property-details/${activeListing.id}`}
+                        className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/25 group relative overflow-hidden"
+                      >
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                        <span className="relative">View Home Details</span>
+                        <span className="material-symbols-outlined text-sm relative group-hover:translate-x-1 transition-transform duration-200">
+                          arrow_forward
+                        </span>
+                      </Link>
+                    )}
 
-                  {activeListing?.isExact ? (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[18px] text-primary">
-                          near_me
-                        </span>
-                        <span className="text-xs font-semibold text-slate-600">
-                          Directions
-                        </span>
+                    {activeListing?.isExact ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[18px] text-primary">
+                            near_me
+                          </span>
+                          <span className="text-xs font-semibold text-slate-600">
+                            Directions
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <select
+                            value={routingProfile}
+                            onChange={(event) =>
+                              setRoutingProfile(
+                                event.target.value as "driving" | "walking" | "cycling"
+                              )
+                            }
+                            className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                          >
+                            <option value="driving">Driving</option>
+                            <option value="walking">Walking</option>
+                            <option value="cycling">Cycling</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={requestDirections}
+                            disabled={isRouting}
+                            className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                          >
+                            {isRouting ? "Routing..." : "Get Route"}
+                          </button>
+                        </div>
+                        {routingError && (
+                          <p className="mt-2 text-xs text-red-600">{routingError}</p>
+                        )}
                       </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <select
-                          value={routingProfile}
-                          onChange={(event) =>
-                            setRoutingProfile(
-                              event.target.value as "driving" | "walking" | "cycling"
-                            )
-                          }
-                          className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                        >
-                          <option value="driving">Driving</option>
-                          <option value="walking">Walking</option>
-                          <option value="cycling">Cycling</option>
-                        </select>
+                    ) : (
+                      <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                        <p>Directions unlock after the landlord accepts your request.</p>
                         <button
                           type="button"
-                          onClick={requestDirections}
-                          disabled={isRouting}
-                          className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                          onClick={requestRouteAccess}
+                          className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white"
                         >
-                          {isRouting ? "Routing..." : "Get Route"}
+                          Message landlord to request directions
                         </button>
                       </div>
-                      {routingError && (
-                        <p className="mt-2 text-xs text-red-600">{routingError}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                      <p>Directions unlock after the landlord accepts your request.</p>
-                      <button
-                        type="button"
-                        onClick={requestRouteAccess}
-                        className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white"
-                      >
-                        Message landlord to request directions
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -935,230 +962,156 @@ export default function MapView() {
         <BottomNav />
       </div>
 
-      {/* Desktop (same as what you already have) */}
       <div className="hidden lg:flex h-screen overflow-hidden bg-background-light text-text-light font-display">
-        <aside className="w-[450px] h-full bg-surface-light shadow-2xl border-r border-gray-200 flex flex-col overflow-hidden">
-          <div className="p-6 border-b border-gray-200 shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-bold text-text-light">
-                {listItems.length} Properties Found
-              </h2>
-              <span className="text-xs font-medium text-text-muted-light bg-gray-100 px-2 py-1 rounded">
-                Springfield, IL
-              </span>
-            </div>
-            <div className="text-sm text-text-muted-light">
-              Sorted by:{" "}
-              <span className="font-medium text-primary cursor-pointer">
-                Price (Low to High)
-              </span>
-            </div>
-          </div>
+                            <aside className="w-[450px] h-full bg-surface-light shadow-2xl border-r border-gray-200 flex flex-col overflow-hidden">
+                              <div className="p-6 border-b border-gray-200 shrink-0">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h2 className="text-lg font-bold text-text-light">
+                                    {listItems.length} Properties Found
+                                  </h2>
+                                  <span className="text-xs font-medium text-text-muted-light bg-gray-100 px-2 py-1 rounded">
+                                    Springfield, IL
+                                  </span>
+                                </div>
+                                <div className="text-sm text-text-muted-light">
+                                  Sorted by:{" "}
+                                  <span className="font-medium text-primary cursor-pointer">
+                                    Price (Low to High)
+                                  </span>
+                                </div>
+                              </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-            {showEmptyState ? (
-              <EmptyState
-                title="No matches yet"
-                message="Like a few listings in Explore to see your matches here."
-                ctaLabel="Browse listings"
-                ctaHref="/explore"
-              />
-            ) : (
-              listItems.map((item) => (
-                <PropertyCard
-                  key={item.id}
-                  item={item}
-                  onToggleSave={toggleLikeListing}
-                />
-              ))
-            )}
-            {!showEmptyState && <div className="h-10" />}
-          </div>
-        </aside>
+                              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                                {showEmptyState ? (
+                                  <EmptyState
+                                    title="No matches yet"
+                                    message="Like a few listings in Explore to see your matches here."
+                                    ctaLabel="Browse listings"
+                                    ctaHref="/explore"
+                                  />
+                                ) : (
+                                  listItems.map((item) => (
+                                    <PropertyCard
+                                      key={item.id}
+                                      item={item}
+                                      onToggleSave={toggleLikeListing}
+                                    />
+                                  ))
+                                )}
+                                {!showEmptyState && <div className="h-10" />}
+                              </div>
+                            </aside>
 
-        <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
-          <MapCanvas
-            points={mapPoints}
-            activeIndex={activeIndex}
-            onSelect={setSelectedIndex}
-            onMapReady={handleDesktopMapReady}
-            routeGeojson={routeGeojson}
-            onMapError={setMapError}
-            onMapStatus={handleMapStatus}
-          />
-          {mapError && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
-              <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
-                <p className="font-semibold text-slate-900">Map failed to load</p>
-                <p className="mt-1">{mapError}</p>
-              </div>
-            </div>
-          )}
+                            <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
+                              <MapCanvas
+                                points={mapPoints}
+                                activeIndex={activeIndex}
+                                onSelect={setSelectedIndex}
+                                onMapReady={handleDesktopMapReady}
+                                routeGeojson={routeGeojson}
+                                onMapError={setMapError}
+                                onMapStatus={handleMapStatus}
+                              />
+                              {mapError && (
+                                <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
+                                  <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
+                                    <p className="font-semibold text-slate-900">Map failed to load</p>
+                                    <p className="mt-1">{mapError}</p>
+                                  </div>
+                                </div>
+                              )}
 
-          <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
-            <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
-              <button
-                type="button"
-                onClick={() => handleZoomIn(desktopMapRef)}
-                className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
-              >
-                <span className="material-symbols-outlined">add</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleZoomOut(desktopMapRef)}
-                className="p-3 hover:bg-gray-100 text-gray-600"
-              >
-                <span className="material-symbols-outlined">remove</span>
-              </button>
-            </div>
+                              <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
+                                <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleZoomIn(desktopMapRef)}
+                                    className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
+                                  >
+                                    <span className="material-symbols-outlined">add</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleZoomOut(desktopMapRef)}
+                                    className="p-3 hover:bg-gray-100 text-gray-600"
+                                  >
+                                    <span className="material-symbols-outlined">remove</span>
+                                  </button>
+                                </div>
 
-            <button
-              type="button"
-              onClick={() => handleLocate(desktopMapRef)}
-              className="bg-white p-3 rounded-full shadow-lg border border-gray-200"
-            >
-              <span className="material-symbols-outlined text-primary">
-                near_me
-              </span>
-            </button>
-          </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLocate(desktopMapRef)}
+                                  className="bg-white p-3 rounded-full shadow-lg border border-gray-200"
+                                >
+                                  <span className="material-symbols-outlined text-primary">
+                                    near_me
+                                  </span>
+                                </button>
+                              </div>
 
-          {showEmptyState && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
-              <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
-                <EmptyState
-                  title="No matches yet"
-                  message="Like a few listings in Explore to see your matches on the map."
-                  ctaLabel="Browse listings"
-                  ctaHref="/explore"
-                />
-              </div>
-            </div>
-          )}
+                              {showEmptyState && (
+                                <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+                                  <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                                    <EmptyState
+                                      title="No matches yet"
+                                      message="Like a few listings in Explore to see your matches on the map."
+                                      ctaLabel="Browse listings"
+                                      ctaHref="/explore"
+                                    />
+                                  </div>
+                                </div>
+                              )}
 
-          {activeListing && (
-            <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
-              <p className="text-sm font-semibold text-slate-700">Directions</p>
-              <p className="text-xs text-slate-500 mt-1">
-                {activeListing.isExact
-                  ? "Get a route to this property."
-                  : "Directions unlock after the landlord accepts your request."}
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <select
-                  value={routingProfile}
-                  onChange={(event) =>
-                    setRoutingProfile(
-                      event.target.value as "driving" | "walking" | "cycling"
-                    )
-                  }
-                  className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                  disabled={!activeListing.isExact}
-                >
-                  <option value="driving">Driving</option>
-                  <option value="walking">Walking</option>
-                  <option value="cycling">Cycling</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={requestDirections}
-                  disabled={isRouting || !activeListing.isExact}
-                  className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                >
-                  {isRouting ? "Routing..." : "Get Route"}
-                </button>
-              </div>
-              {!activeListing.isExact && (
-                <button
-                  type="button"
-                  onClick={requestRouteAccess}
-                  className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary"
-                >
-                  Message landlord to request directions
-                </button>
-              )}
-              {routingError && (
-                <p className="mt-2 text-xs text-red-600">{routingError}</p>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
+                              {activeListing && (
+                                <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
+                                  <p className="text-sm font-semibold text-slate-700">Directions</p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {activeListing.isExact
+                                      ? "Get a route to this property."
+                                      : "Directions unlock after the landlord accepts your request."}
+                                  </p>
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <select
+                                      value={routingProfile}
+                                      onChange={(event) =>
+                                        setRoutingProfile(
+                                          event.target.value as "driving" | "walking" | "cycling"
+                                        )
+                                      }
+                                      className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                                      disabled={!activeListing.isExact}
+                                    >
+                                      <option value="driving">Driving</option>
+                                      <option value="walking">Walking</option>
+                                      <option value="cycling">Cycling</option>
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={requestDirections}
+                                      disabled={isRouting || !activeListing.isExact}
+                                      className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                                    >
+                                      {isRouting ? "Routing..." : "Get Route"}
+                                    </button>
+                                  </div>
+                                  {!activeListing.isExact && (
+                                    <button
+                                      type="button"
+                                      onClick={requestRouteAccess}
+                                      className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary"
+                                    >
+                                      Message landlord to request directions
+                                    </button>
+                                  )}
+                                  {routingError && (
+                                    <p className="mt-2 text-xs text-red-600">{routingError}</p>
+                                  )}
+                                </div>
+                              )}
+                            </section>
+                          </div>
 
-      <style jsx global>{`
-        .mapboxgl-map {
-          font-family: var(--font-sans);
-          background: #e2e8f0;
-        }
-        .mapboxgl-canvas-container,
-        .mapboxgl-canvas,
-        .mapboxgl-map {
-          pointer-events: auto !important;
-        }
-        .mapboxgl-canvas {
-          outline: none;
-        }
-        .map-price-marker {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 6px 12px;
-          border-radius: 999px;
-          background: #ffffff;
-          color: #0c141d;
-          font-weight: 700;
-          font-size: 12px;
-          box-shadow: 0 12px 30px rgba(12, 20, 29, 0.2);
-          border: 1px solid rgba(15, 23, 42, 0.12);
-          transform: translate(-50%, -100%);
-          transition: transform 0.2s ease, background 0.2s ease,
-            color 0.2s ease, box-shadow 0.2s ease;
-          white-space: nowrap;
-        }
-        .map-price-marker::after {
-          content: "";
-          position: absolute;
-          left: 50%;
-          top: 100%;
-          transform: translate(-50%, 0);
-          width: 0;
-          height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-top: 8px solid #ffffff;
-        }
-        .map-price-marker.is-active {
-          background: var(--color-primary);
-          color: #ffffff;
-          box-shadow: 0 14px 32px rgba(10, 68, 184, 0.35);
-          transform: translate(-50%, -110%) scale(1.05);
-        }
-        .map-price-marker.is-active::after {
-          border-top-color: var(--color-primary);
-        }
-        .map-price-marker.is-approx {
-          width: 14px;
-          height: 14px;
-          padding: 0;
-          border-radius: 999px;
-          background: #0a44b8;
-          border: 2px solid #0a44b8;
-          box-shadow: 0 8px 18px rgba(10, 68, 184, 0.35);
-          font-size: 0;
-        }
-        .map-price-marker.is-approx::after {
-          display: none;
-        }
-        .pb-safe {
-          padding-bottom: env(safe-area-inset-bottom, 20px);
-        }
-        body {
-          min-height: 100vh;
-        }
-      `}</style>
-    </>
-  );
+    </div>
+        );
 }
-

@@ -6,6 +6,10 @@ import { normalizeVehiclePreference } from "../../common/utils/property.utils";
 export class IdealTenantPreferencesDto {
   @IsOptional()
   @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
   employmentStatus?: string;
 
   @IsOptional()

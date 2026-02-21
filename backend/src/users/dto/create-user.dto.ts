@@ -4,6 +4,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
+  MinLength,
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
@@ -15,19 +17,22 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  firstName?: string;
+  firstName: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  lastName?: string;
+  lastName: string;
 
   @IsEmail()
   email: string;
 
   @IsOptional()
   @IsString()
+  @Matches(/^\+?[1-9]\d{7,14}$/, {
+    message: "phoneNumber must be a valid international phone number",
+  })
   phoneNumber?: string;
 
   @IsOptional()
@@ -36,6 +41,7 @@ export class CreateUserDto {
 
   @IsNotEmpty()
   @IsString()
+  @MinLength(8)
   password: string;
 
   @IsOptional()

@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
-import { randomBytes } from "crypto";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { UsersService } from "../users/users.service";
 import { LoginDto } from "./dto/login.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
@@ -21,6 +21,10 @@ import { MailService } from "../mail/mail.service";
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly otpTtlMs = 10 * 60 * 1000;
+  private readonly otpMaxAttempts = 5;
+  private readonly otpSecret =
+    process.env.OTP_SECRET || process.env.JWT_SECRET || "dev-otp-secret";
 
   constructor(
     private readonly usersService: UsersService,
@@ -84,8 +88,10 @@ export class AuthService {
   async sendEmailOtp(dto: SendOtpDto) {
     const user = await this.usersService.findById(dto.userId);
     const otp = this.generateOtp();
-    user.emailOtp = otp;
-    user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    user.emailOtp = undefined;
+    user.emailOtpHash = this.hashOtp(otp, user.id, "email");
+    user.emailOtpExpiresAt = new Date(Date.now() + this.otpTtlMs);
+    user.emailOtpAttempts = 0;
     await user.save();
     try {
       await this.mailService.sendVerificationOtp(user.email, otp);
@@ -104,25 +110,24 @@ export class AuthService {
   async sendPhoneOtp(dto: SendOtpDto) {
     const user = await this.usersService.findById(dto.userId);
     const otp = this.generateOtp();
-    user.phoneOtp = otp;
-    user.phoneOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    user.phoneOtp = undefined;
+    user.phoneOtpHash = this.hashOtp(otp, user.id, "phone");
+    user.phoneOtpExpiresAt = new Date(Date.now() + this.otpTtlMs);
+    user.phoneOtpAttempts = 0;
     await user.save();
 
-    return { sent: true, channel: "phone", otp, expiresAt: user.phoneOtpExpiresAt };
+    return { sent: true, channel: "phone", expiresAt: user.phoneOtpExpiresAt };
   }
 
   async verifyEmailOtp(dto: VerifyOtpDto) {
     const user = await this.usersService.findById(dto.userId);
-    if (!user.emailOtp || user.emailOtp !== dto.otp) {
-      throw new BadRequestException("Invalid OTP");
-    }
-    if (user.emailOtpExpiresAt && user.emailOtpExpiresAt.getTime() < Date.now()) {
-      throw new BadRequestException("OTP expired");
-    }
+    await this.verifyOtpOrThrow(user, dto.otp, "email");
 
     user.emailVerified = true;
+    user.emailOtpHash = undefined;
     user.emailOtp = undefined;
     user.emailOtpExpiresAt = undefined;
+    user.emailOtpAttempts = 0;
     await user.save();
 
     return { verified: true };
@@ -130,16 +135,13 @@ export class AuthService {
 
   async verifyPhoneOtp(dto: VerifyOtpDto) {
     const user = await this.usersService.findById(dto.userId);
-    if (!user.phoneOtp || user.phoneOtp !== dto.otp) {
-      throw new BadRequestException("Invalid OTP");
-    }
-    if (user.phoneOtpExpiresAt && user.phoneOtpExpiresAt.getTime() < Date.now()) {
-      throw new BadRequestException("OTP expired");
-    }
+    await this.verifyOtpOrThrow(user, dto.otp, "phone");
 
     user.phoneVerified = true;
+    user.phoneOtpHash = undefined;
     user.phoneOtp = undefined;
     user.phoneOtpExpiresAt = undefined;
+    user.phoneOtpAttempts = 0;
     await user.save();
 
     return { verified: true };
@@ -194,9 +196,13 @@ export class AuthService {
     const {
       loginCredentials,
       emailOtp,
+      emailOtpHash,
       emailOtpExpiresAt,
+      emailOtpAttempts,
       phoneOtp,
+      phoneOtpHash,
       phoneOtpExpiresAt,
+      phoneOtpAttempts,
       passwordResetToken,
       passwordResetExpiresAt,
       ...safeUser
@@ -209,6 +215,72 @@ export class AuthService {
   }
 
   private generateOtp() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 1000000).toString();
+  }
+
+  private hashOtp(otp: string, userId: string, channel: "email" | "phone") {
+    return createHmac("sha256", this.otpSecret)
+      .update(`${channel}:${userId}:${otp}`)
+      .digest("hex");
+  }
+
+  private secureCompare(a: string, b: string) {
+    const left = Buffer.from(a, "utf8");
+    const right = Buffer.from(b, "utf8");
+    if (left.length !== right.length) return false;
+    return timingSafeEqual(left, right);
+  }
+
+  private async verifyOtpOrThrow(
+    user: any,
+    otp: string,
+    channel: "email" | "phone"
+  ) {
+    const hashField = channel === "email" ? "emailOtpHash" : "phoneOtpHash";
+    const legacyField = channel === "email" ? "emailOtp" : "phoneOtp";
+    const expiresField = channel === "email" ? "emailOtpExpiresAt" : "phoneOtpExpiresAt";
+    const attemptsField = channel === "email" ? "emailOtpAttempts" : "phoneOtpAttempts";
+
+    const expiresAt = user[expiresField] as Date | undefined;
+    if (!expiresAt || expiresAt.getTime() < Date.now()) {
+      user[hashField] = undefined;
+      user[legacyField] = undefined;
+      user[expiresField] = undefined;
+      user[attemptsField] = 0;
+      await user.save();
+      throw new BadRequestException("OTP expired");
+    }
+
+    const attempts = Number(user[attemptsField] ?? 0);
+    if (attempts >= this.otpMaxAttempts) {
+      user[hashField] = undefined;
+      user[legacyField] = undefined;
+      user[expiresField] = undefined;
+      user[attemptsField] = 0;
+      await user.save();
+      throw new BadRequestException("Too many invalid OTP attempts. Request a new code.");
+    }
+
+    const storedHash = user[hashField] as string | undefined;
+    const expectedHash = this.hashOtp(otp, user.id, channel);
+    const hasLegacyOtp = typeof user[legacyField] === "string";
+    const isValid = storedHash
+      ? this.secureCompare(storedHash, expectedHash)
+      : hasLegacyOtp
+      ? this.secureCompare(String(user[legacyField]), otp)
+      : false;
+
+    if (!isValid) {
+      const nextAttempts = attempts + 1;
+      user[attemptsField] = nextAttempts;
+      if (nextAttempts >= this.otpMaxAttempts) {
+        user[hashField] = undefined;
+        user[legacyField] = undefined;
+        user[expiresField] = undefined;
+        user[attemptsField] = 0;
+      }
+      await user.save();
+      throw new BadRequestException("Invalid OTP");
+    }
   }
 }

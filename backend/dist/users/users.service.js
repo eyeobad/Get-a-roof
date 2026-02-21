@@ -209,9 +209,13 @@ let UsersService = class UsersService {
         const obj = user.toObject();
         delete obj.loginCredentials;
         delete obj.emailOtp;
+        delete obj.emailOtpHash;
         delete obj.emailOtpExpiresAt;
+        delete obj.emailOtpAttempts;
         delete obj.phoneOtp;
+        delete obj.phoneOtpHash;
         delete obj.phoneOtpExpiresAt;
+        delete obj.phoneOtpAttempts;
         delete obj.passwordResetToken;
         delete obj.passwordResetExpiresAt;
         return obj;

@@ -35,11 +35,27 @@ export default function SignUpPage() {
     event.preventDefault();
     if (isSubmitting) return;
 
-    if (!form.email || !form.password || !form.firstName || !form.lastName) {
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      firstName: String(formData.get("firstName") ?? form.firstName).trim(),
+      lastName: String(formData.get("lastName") ?? form.lastName).trim(),
+      email: String(formData.get("email") ?? form.email).trim(),
+      phoneNumber: String(formData.get("phoneNumber") ?? form.phoneNumber).trim(),
+      password: String(formData.get("password") ?? form.password),
+      verifyPassword: String(
+        formData.get("verifyPassword") ?? form.verifyPassword
+      ),
+    };
+
+    if (!payload.email || !payload.password || !payload.firstName || !payload.lastName) {
       showToast({ title: "Please complete all required fields.", variant: "error" });
       return;
     }
-    if (form.password !== form.verifyPassword) {
+    if (payload.password.length < 8) {
+      showToast({ title: "Password must be at least 8 characters.", variant: "error" });
+      return;
+    }
+    if (payload.password !== payload.verifyPassword) {
       showToast({ title: "Passwords do not match.", variant: "error" });
       return;
     }
@@ -48,11 +64,11 @@ export default function SignUpPage() {
     clearAuth();
     setIsSubmitting(true);
       const user = await registerLandlord({
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        phoneNumber: form.phoneNumber,
-        password: form.password,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        password: payload.password,
       });
       const userId = user?.id || user?._id;
       if (!userId) {
@@ -68,7 +84,7 @@ export default function SignUpPage() {
 
       const query = new URLSearchParams({
         userId,
-        email: form.email,
+        email: payload.email,
         role: "landlord",
         next: "/verify-identity",
       });
@@ -128,11 +144,27 @@ export default function SignUpPage() {
                 {field.label}
               </label>
               <input
+                name={field.id}
                 type={field.type}
                 placeholder={field.placeholder}
+                autoComplete={
+                  field.id === "firstName"
+                    ? "given-name"
+                    : field.id === "lastName"
+                      ? "family-name"
+                      : field.id === "email"
+                        ? "email"
+                        : "tel"
+                }
                 value={form[field.id as keyof typeof form]}
                 onChange={(event) =>
                   updateField(field.id as keyof typeof form, event.target.value)
+                }
+                onInput={(event) =>
+                  updateField(
+                    field.id as keyof typeof form,
+                    (event.target as HTMLInputElement).value
+                  )
                 }
                 className="h-14 px-5 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />
@@ -146,10 +178,15 @@ export default function SignUpPage() {
             </label>
             <div className="relative">
               <input
+                name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Min. 8 characters"
+                autoComplete="new-password"
                 value={form.password}
                 onChange={(event) => updateField("password", event.target.value)}
+                onInput={(event) =>
+                  updateField("password", (event.target as HTMLInputElement).value)
+                }
                 className="h-14 w-full pl-5 pr-14 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />
               <button
@@ -175,11 +212,19 @@ export default function SignUpPage() {
             </label>
             <div className="relative">
               <input
+                name="verifyPassword"
                 type={showConfirm ? "text" : "password"}
                 placeholder="Re-enter password"
+                autoComplete="new-password"
                 value={form.verifyPassword}
                 onChange={(event) =>
                   updateField("verifyPassword", event.target.value)
+                }
+                onInput={(event) =>
+                  updateField(
+                    "verifyPassword",
+                    (event.target as HTMLInputElement).value
+                  )
                 }
                 className="h-14 w-full pl-5 pr-14 rounded-xl border border-[#d7cee8] bg-white text-[#1A1A1A] text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8] outline-none shadow-sm"
               />

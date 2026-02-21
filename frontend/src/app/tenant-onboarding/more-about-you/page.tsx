@@ -119,6 +119,8 @@ function TenantMoreAboutYouContent() {
   const [earnings, setEarnings] = useState(85000);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const authToken = useAppStore((state) => state.authToken);
+  const userId = useAppStore((state) => state.userId);
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams?.get("returnTo") ?? "";
@@ -131,6 +133,7 @@ function TenantMoreAboutYouContent() {
   });
 
   useEffect(() => {
+    if (!authToken || !userId) return;
     if (hydrated) return;
     let mounted = true;
 
@@ -149,6 +152,11 @@ function TenantMoreAboutYouContent() {
         if (!mounted) return;
         const tenant = (user?.preferences as { tenant?: Record<string, unknown> } | undefined)
           ?.tenant;
+        const lookingFor = tenant?.lookingFor;
+        if (Array.isArray(lookingFor) && lookingFor.length > 0 && returnTo !== "review") {
+          router.replace("/explore");
+          return;
+        }
         if (!tenant) {
           setHydrated(true);
           return;
@@ -207,7 +215,7 @@ function TenantMoreAboutYouContent() {
     return () => {
       mounted = false;
     };
-  }, [fetchUserProfile, hydrated]);
+  }, [authToken, userId, fetchUserProfile, hydrated, returnTo, router]);
 
   const handleSelect = (key: SectionKey, index: number) => {
     setSelections((prev) => ({ ...prev, [key]: index }));
