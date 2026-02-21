@@ -17,7 +17,6 @@ export default function TenantSignupPage() {
     password: "",
     verifyPassword: "",
   });
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerTenant = useAppStore((state) => state.registerTenant);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
@@ -31,8 +30,6 @@ export default function TenantSignupPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
-    setError(null);
-
     const formData = new FormData(event.currentTarget);
     const payload = {
       firstName: String(formData.get("firstName") ?? form.firstName).trim(),
@@ -46,15 +43,15 @@ export default function TenantSignupPage() {
     };
 
     if (!payload.email || !payload.password || !payload.firstName || !payload.lastName) {
-      setError("Please complete all required fields.");
+      showToast({ title: "Please complete all required fields.", variant: "error" });
       return;
     }
     if (payload.password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      showToast({ title: "Password must be at least 8 characters.", variant: "error" });
       return;
     }
     if (payload.password !== payload.verifyPassword) {
-      setError("Passwords do not match.");
+      showToast({ title: "Passwords do not match.", variant: "error" });
       return;
     }
 
@@ -106,7 +103,6 @@ export default function TenantSignupPage() {
       const friendly = isConflict
         ? "Account already exists. Log in instead."
         : message;
-      setError(friendly);
       showToast({
         title: "Sign up failed",
         text: friendly,
@@ -300,7 +296,6 @@ export default function TenantSignupPage() {
               </div>
             );
           })}
-          {error && <p className="text-sm font-medium text-red-600 text-center">{error}</p>}
             <button
               type="submit"
               disabled={isSubmitting}

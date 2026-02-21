@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -14,6 +15,7 @@ export default function FacialVerificationPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [matchState, setMatchState] = useState<"idle" | "checking" | "matched" | "failed">("idle");
+  useToastError(permissionError);
 
   useEffect(() => {
     let active = true;
@@ -149,9 +151,6 @@ export default function FacialVerificationPage() {
             Ensure your face is well-lit and not obstructed by accessories.
           </p>
         </div>
-        {permissionError && (
-          <p className="text-sm text-red-600 text-center mt-4">{permissionError}</p>
-        )}
       </main>
 
       <footer className="p-6 pt-0 w-full max-w-md mx-auto">

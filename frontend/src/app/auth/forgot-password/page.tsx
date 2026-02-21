@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/alerts";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const requestPasswordReset = useAppStore((state) => state.requestPasswordReset);
 
   const isEmailValid = useMemo(() => {
@@ -22,13 +22,15 @@ export default function ForgotPasswordPage() {
 
     try {
       setIsSubmitting(true);
-      setError(null);
       const response = await requestPasswordReset(email.trim());
       const token = response?.token ?? "";
       const query = new URLSearchParams({ token, email });
       router.push(`/auth/set-new-password?${query.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      showToast({
+        title: err instanceof Error ? err.message : "Request failed",
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -85,12 +87,6 @@ export default function ForgotPasswordPage() {
               </div>
             </div>
 
-            {/* Optional helper */}
-            {!email.length ? null : !isEmailValid ? (
-              <p className="mt-2 text-sm font-medium text-red-600 pl-1">
-                Please enter a valid email address.
-              </p>
-            ) : null}
           </label>
         </div>
 
@@ -107,12 +103,6 @@ export default function ForgotPasswordPage() {
             <span className="truncate">{isSubmitting ? "Sending..." : "Send Reset Link"}</span>
           </button>
         </div>
-
-        {error && (
-          <p className="text-center text-sm font-medium text-red-600 px-6 pb-4">
-            {error}
-          </p>
-        )}
 
         <div className="px-6 pb-10">
           <p className="text-sm text-near-black/60">

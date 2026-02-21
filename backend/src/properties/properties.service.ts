@@ -9,10 +9,11 @@ import { computeMatchScore, PropertyMatchInput } from "../common/utils/match.uti
 import { haversineDistanceKm } from "../common/utils/geo.utils";
 import { toNumber } from "../common/utils/match.helpers";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
-import { MatchStatus } from "../common/enums";
+import { MatchStatus, UserRole } from "../common/enums";
 import { normalizePropertyType } from "../common/utils/property.utils";
 import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
+import { User, UserDocument } from "../users/schemas/user.schema";
 
 const propertyImageMimeTypes = new Set([
   "image/jpeg",
@@ -34,11 +35,19 @@ export class PropertiesService {
   constructor(
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly usersService: UsersService,
     private readonly appwriteStorage: AppwriteStorageService
   ) {}
 
   async createProperty(dto: CreatePropertyDto) {
+    if (!dto.landlordId || !Types.ObjectId.isValid(dto.landlordId)) {
+      throw new BadRequestException("Invalid landlordId");
+    }
+    const landlord = await this.userModel.findById(dto.landlordId).select("role").lean();
+    if (!landlord || landlord.role !== UserRole.Landlord) {
+      throw new BadRequestException("Property must be tied to a valid landlord account");
+    }
     const normalized = this.normalizePropertyPayload(dto);
     const created = new this.propertyModel(normalized);
     return created.save();
@@ -58,6 +67,12 @@ export class PropertiesService {
   async getProperty(id: string) {
     const property = await this.propertyModel.findById(id).exec();
     if (!property) {
+      throw new NotFoundException("Property not found");
+    }
+    const landlordExists = await this.userModel
+      .exists({ _id: property.landlordId, role: UserRole.Landlord });
+    if (!landlordExists) {
+      await this.propertyModel.deleteOne({ _id: property._id });
       throw new NotFoundException("Property not found");
     }
     return property;
@@ -87,7 +102,8 @@ export class PropertiesService {
       }
     }
     const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
-    return this.applyScoringAndFilters(properties, options);
+    const validProperties = await this.removeOrphanedProperties(properties);
+    return this.applyScoringAndFilters(validProperties, options);
   }
 
   async getMapMatches(
@@ -120,7 +136,8 @@ export class PropertiesService {
       .find(withCoords)
       .limit(limit)
       .exec();
-    const results = await this.applyScoringAndFilters(properties, options);
+    const validProperties = await this.removeOrphanedProperties(properties);
+    const results = await this.applyScoringAndFilters(validProperties, options);
     return results.map((property) => ({
       _id: property._id,
       address: property.address,
@@ -329,5 +346,41 @@ export class PropertiesService {
       filter.status = { $ne: MatchStatus.Dismissed };
     }
     return this.matchModel.find(filter).distinct("propertyId").exec();
+  }
+
+  private async removeOrphanedProperties(properties: PropertyDocument[]) {
+    if (!properties.length) return properties;
+    const landlordIds = Array.from(
+      new Set(
+        properties
+          .map((property) => property.landlordId?.toString?.() ?? "")
+          .filter(Boolean)
+      )
+    );
+    if (!landlordIds.length) return [];
+
+    const validLandlords = await this.userModel
+      .find({ _id: { $in: landlordIds }, role: UserRole.Landlord })
+      .select("_id")
+      .lean();
+    const validSet = new Set(validLandlords.map((user) => user._id.toString()));
+
+    const keep: PropertyDocument[] = [];
+    const orphanIds: Types.ObjectId[] = [];
+    properties.forEach((property) => {
+      const ownerId = property.landlordId?.toString?.() ?? "";
+      if (ownerId && validSet.has(ownerId)) {
+        keep.push(property);
+      } else {
+        orphanIds.push(property._id);
+      }
+    });
+
+    if (orphanIds.length) {
+      await this.propertyModel.deleteMany({ _id: { $in: orphanIds } });
+      await this.matchModel.deleteMany({ propertyId: { $in: orphanIds } });
+    }
+
+    return keep;
   }
 }

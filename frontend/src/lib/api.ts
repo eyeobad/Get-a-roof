@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  getApiErrorMessage,
+  hasShownErrorToast,
+  markErrorToastShown,
+  showToast,
+} from "@/lib/alerts";
+
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -30,8 +37,14 @@ export async function apiFetch<T = unknown>(
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || response.statusText);
+    const rawMessage = await response.text();
+    const message = rawMessage || response.statusText || "Request failed";
+    const error = markErrorToastShown(new Error(message));
+    showToast({
+      title: getApiErrorMessage(error),
+      variant: "error",
+    });
+    throw error;
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -40,6 +53,16 @@ export async function apiFetch<T = unknown>(
   }
 
   return null as T;
+}
+
+export function toastUnhandledError(err: unknown, fallback = "Something went wrong.") {
+  if (hasShownErrorToast(err)) {
+    return;
+  }
+  showToast({
+    title: getApiErrorMessage(err) || fallback,
+    variant: "error",
+  });
 }
 
 export function buildQuery(params: Record<string, string | number | boolean | undefined>) {

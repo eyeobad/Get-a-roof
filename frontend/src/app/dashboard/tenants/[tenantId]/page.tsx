@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 type TenantProfile = {
   id: string;
@@ -50,6 +51,7 @@ export default function TenantProfilePage() {
   const userId = useAppStore((state) => state.userId);
   const [tenant, setTenant] = useState<TenantProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useToastError(error);
 
   useEffect(() => {
     if (!authToken || !userId || !tenantId) return;
@@ -125,8 +127,8 @@ export default function TenantProfilePage() {
             Loading profile...
           </div>
         ) : error ? (
-          <div className="rounded-2xl bg-white p-6 text-sm text-red-600">
-            {error}
+          <div className="rounded-2xl bg-white p-6 text-sm text-gray-500">
+            Tenant profile is currently unavailable.
           </div>
         ) : (
           <>

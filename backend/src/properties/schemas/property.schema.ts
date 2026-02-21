@@ -34,6 +34,9 @@ class BudgetRange {
 
 class IdealTenantPreferences {
   @Prop()
+  gender?: string;
+
+  @Prop()
   employmentStatus?: string;
 
   @Prop()
@@ -140,6 +143,22 @@ export class Property {
 
   @Prop({ type: String, enum: PropertyStatus, default: PropertyStatus.Draft })
   status: PropertyStatus;
+
+  @Prop({
+    type: String,
+    enum: ["Pending", "Approved", "Rejected", "Hidden"],
+    default: "Pending",
+  })
+  moderationStatus?: "Pending" | "Approved" | "Rejected" | "Hidden";
+
+  @Prop()
+  moderationReason?: string;
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  moderatedBy?: Types.ObjectId;
+
+  @Prop()
+  moderatedAt?: Date;
 
   @Prop({ type: LandlordRequirements })
   landlordRequirements?: LandlordRequirements;

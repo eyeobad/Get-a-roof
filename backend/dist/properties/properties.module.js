@@ -15,6 +15,7 @@ const property_schema_1 = require("./schemas/property.schema");
 const users_module_1 = require("../users/users.module");
 const appwrite_module_1 = require("../appwrite/appwrite.module");
 const match_schema_1 = require("../matches/schemas/match.schema");
+const user_schema_1 = require("../users/schemas/user.schema");
 let PropertiesModule = class PropertiesModule {
 };
 exports.PropertiesModule = PropertiesModule;
@@ -23,6 +24,7 @@ exports.PropertiesModule = PropertiesModule = __decorate([
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: user_schema_1.User.name, schema: user_schema_1.UserSchema }]),
             users_module_1.UsersModule,
             appwrite_module_1.AppwriteModule,
         ],

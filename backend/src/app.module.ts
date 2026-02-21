@@ -13,6 +13,7 @@ import { VerificationModule } from "./verification/verification.module";
 import { LandlordModule } from "./landlord/landlord.module";
 import { MailModule } from "./mail/mail.module";
 import { AppwriteModule } from "./appwrite/appwrite.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AppwriteModule } from "./appwrite/appwrite.module";
     LandlordModule,
     MailModule,
     AppwriteModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

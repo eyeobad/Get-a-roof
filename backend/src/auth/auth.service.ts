@@ -47,6 +47,14 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
 
+    if (user.isSuspended) {
+      throw new UnauthorizedException(
+        user.suspensionReason
+          ? `Account suspended: ${user.suspensionReason}`
+          : "Account suspended. Contact support."
+      );
+    }
+
     if (!user.emailVerified) {
       throw new UnauthorizedException(
         "Email not verified. Please verify your email before logging in."
@@ -60,6 +68,13 @@ export class AuthService {
     const email = dto.email.toLowerCase();
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
+      if (existing.isSuspended) {
+        throw new UnauthorizedException(
+          existing.suspensionReason
+            ? `Account suspended: ${existing.suspensionReason}`
+            : "Account suspended. Contact support."
+        );
+      }
       if (dto.googleId) {
         existing.loginCredentials = {
           ...(existing.loginCredentials || {}),

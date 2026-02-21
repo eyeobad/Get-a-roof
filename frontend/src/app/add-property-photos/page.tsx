@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -28,6 +29,7 @@ function AddPropertyPhotosContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  useToastError(error);
 
   const photos = useMemo<Photo[]>(
     () =>
@@ -229,10 +231,6 @@ function AddPropertyPhotosContent() {
               }}
             />
           </div>
-
-          {error ? (
-            <p className="text-sm text-red-600 font-medium mb-4">{error}</p>
-          ) : null}
 
           {/* Drag & drop */}
           <div

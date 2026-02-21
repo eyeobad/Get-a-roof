@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/alerts";
 
 const DIGITS = 6;
 
@@ -11,7 +12,6 @@ function PhoneVerificationContent() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const [values, setValues] = useState<string[]>(Array(DIGITS).fill(""));
   const [timer, setTimer] = useState(59);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,12 +63,14 @@ function PhoneVerificationContent() {
     if (!userId || !canSubmit) return;
     try {
       setIsSubmitting(true);
-      setError(null);
       await verifyPhoneOtp(userId, otp);
       const nextUrl = buildNextUrl(nextParam);
       router.push(nextUrl || "/tenant-onboarding");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed");
+      showToast({
+        title: err instanceof Error ? err.message : "Verification failed",
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -80,7 +82,10 @@ function PhoneVerificationContent() {
       await sendPhoneOtp(userId);
       setTimer(59);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Resend failed");
+      showToast({
+        title: err instanceof Error ? err.message : "Resend failed",
+        variant: "error",
+      });
     }
   };
 
@@ -156,11 +161,6 @@ function PhoneVerificationContent() {
           </div>
 
           <div className="mt-10">
-            {error && (
-              <p className="text-center text-sm font-medium text-red-600 mb-3">
-                {error}
-              </p>
-            )}
             <button
               onClick={handleVerify}
               disabled={!canSubmit}

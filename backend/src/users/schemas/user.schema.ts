@@ -150,6 +150,15 @@ export class User {
   @Prop({ default: false })
   phoneVerified: boolean;
 
+  @Prop({ default: false })
+  isSuspended: boolean;
+
+  @Prop()
+  suspendedAt?: Date;
+
+  @Prop()
+  suspensionReason?: string;
+
   @Prop()
   emailOtp?: string;
 

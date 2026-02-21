@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 // --- Types ---
 type Option = { label: string };
@@ -290,6 +291,9 @@ export default function ProfilePage() {
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  useToastError(saveError);
+  useToastError(photoUploadError);
+  useToastError(deleteError);
   const contactFields: ContactField[] = useMemo(
     () => [
       { key: "fullName", label: "Full Name", icon: "person", type: "text" },
@@ -796,15 +800,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 
-                {/* Error Message */}
-                {deleteError && (
-                  <div className="border-t border-red-100 bg-red-50 px-6 py-3">
-                    <p className="flex items-center gap-2 text-xs font-medium text-red-600">
-                      <span className="material-symbols-outlined text-sm">error</span>
-                      {deleteError}
-                    </p>
-                  </div>
-                )}
               </div>
             </section>
           </main>
@@ -812,11 +807,6 @@ export default function ProfilePage() {
 
         {/* Footer (mobile sticky) */}
         <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-background-light/95 px-4 py-4 backdrop-blur-sm lg:static lg:bg-transparent lg:border-0 lg:px-0 lg:py-0">
-          {saveError && (
-            <p className="text-center text-sm font-medium text-red-600 mb-3">
-              {saveError}
-            </p>
-          )}
           <button
             onClick={handleSaveProfile}
             disabled={isSaving || isLoading}
@@ -895,9 +885,6 @@ export default function ProfilePage() {
                 Files are uploaded securely and stored privately unless you update
                 permissions.
               </p>
-              {photoUploadError && (
-                <p className="text-xs font-medium text-red-600">{photoUploadError}</p>
-              )}
             </div>
             <input
               ref={fileInputRef}

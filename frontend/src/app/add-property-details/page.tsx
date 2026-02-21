@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -33,6 +34,7 @@ export default function AddPropertyDetailsPage() {
   const [proofName, setProofName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useToastError(error);
 
   const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
   const bathOptions = useMemo(() => [1, 2, 3, 4], []);
@@ -406,7 +408,6 @@ export default function AddPropertyDetailsPage() {
 
         {/* Footer CTA */}
         <footer className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/90 backdrop-blur-lg border-t border-gray-100 p-4 pb-10 z-30">
-          {error && <p className="text-center text-red-500 text-xs font-bold mb-3">{error}</p>}
           <button
             onClick={() => handleSave("/add-property-requirements")}
             disabled={isSaving}

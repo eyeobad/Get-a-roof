@@ -7,6 +7,7 @@ import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 type ListingCard = {
   id: string;
@@ -502,8 +503,10 @@ export default function MapView() {
     useState<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
   const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
   const [routingError, setRoutingError] = useState<string | null>(null);
+  useToastError(routingError);
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  useToastError(mapError);
 
   useEffect(() => {
     if (authToken) {
@@ -696,9 +699,14 @@ export default function MapView() {
 
   const requestRouteAccess = async () => {
     if (!activeListing) return;
+    const draftMessage = `Hi, please enable route directions for ${activeListing.displayAddress}.`;
     const threadId = await ensureThreadForListing(activeListing.id);
     if (threadId) {
-      router.push(`/messages?thread=${threadId}&from=/map-view`);
+      router.push(
+        `/messages?thread=${threadId}&from=/map-view&intent=route-access&draft=${encodeURIComponent(
+          draftMessage
+        )}`
+      );
     } else {
       router.push("/messages");
     }
@@ -773,14 +781,6 @@ export default function MapView() {
               onMapError={setMapError}
               onMapStatus={handleMapStatus}
             />
-            {mapError && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
-                <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
-                  <p className="font-semibold text-slate-900">Map failed to load</p>
-                  <p className="mt-1">{mapError}</p>
-                </div>
-              </div>
-            )}
 
             <div className="absolute right-4 top-4 z-30 flex flex-col gap-3">
               <div className="flex flex-col bg-white rounded-lg shadow-lg overflow-hidden border border-gray-100">
@@ -916,9 +916,6 @@ export default function MapView() {
                             {isRouting ? "Routing..." : "Get Route"}
                           </button>
                         </div>
-                        {routingError && (
-                          <p className="mt-2 text-xs text-red-600">{routingError}</p>
-                        )}
                       </div>
                     ) : (
                       <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
@@ -926,7 +923,7 @@ export default function MapView() {
                         <button
                           type="button"
                           onClick={requestRouteAccess}
-                          className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white"
+                          className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white cursor-pointer"
                         >
                           Message landlord to request directions
                         </button>
@@ -1012,15 +1009,6 @@ export default function MapView() {
                                 onMapError={setMapError}
                                 onMapStatus={handleMapStatus}
                               />
-                              {mapError && (
-                                <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
-                                  <div className="pointer-events-auto rounded-2xl bg-white/95 border border-slate-200 p-4 text-center text-sm text-slate-700 shadow-xl">
-                                    <p className="font-semibold text-slate-900">Map failed to load</p>
-                                    <p className="mt-1">{mapError}</p>
-                                  </div>
-                                </div>
-                              )}
-
                               <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
                                 <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
                                   <button
@@ -1099,13 +1087,10 @@ export default function MapView() {
                                     <button
                                       type="button"
                                       onClick={requestRouteAccess}
-                                      className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary"
+                                      className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary cursor-pointer"
                                     >
                                       Message landlord to request directions
                                     </button>
-                                  )}
-                                  {routingError && (
-                                    <p className="mt-2 text-xs text-red-600">{routingError}</p>
                                   )}
                                 </div>
                               )}

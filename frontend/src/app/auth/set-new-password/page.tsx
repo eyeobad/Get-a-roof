@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/alerts";
 
 function SetNewPasswordContent() {
   const router = useRouter();
@@ -16,7 +17,6 @@ function SetNewPasswordContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const passwordMeetsRules = useMemo(() => {
     const p = password.trim();
@@ -36,11 +36,13 @@ function SetNewPasswordContent() {
 
     try {
       setIsSubmitting(true);
-      setError(null);
       await resetPassword(token, password);
       router.push("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+      showToast({
+        title: err instanceof Error ? err.message : "Reset failed",
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -100,7 +102,7 @@ function SetNewPasswordContent() {
                 ) : passwordMeetsRules ? (
                   <span className="text-green-600">Looks good.</span>
                 ) : (
-                  <span className="text-red-600">Password must be 8+ characters and include a number.</span>
+                  <span className="text-text-main/60">Use at least 8 characters and include 1 number.</span>
                 )}
               </div>
             </label>
@@ -135,7 +137,7 @@ function SetNewPasswordContent() {
                 {!confirmPassword.length ? null : passwordsMatch ? (
                   <span className="text-green-600">Passwords match.</span>
                 ) : (
-                  <span className="text-red-600">Passwords do not match.</span>
+                  <span className="text-text-main/60">Passwords must match to continue.</span>
                 )}
               </div>
             </label>
@@ -144,11 +146,6 @@ function SetNewPasswordContent() {
           <div className="flex-1 min-h-[40px]" />
 
           <div className="mt-auto pt-4">
-            {error && (
-              <p className="text-center text-sm font-medium text-red-600 mb-3">
-                {error}
-              </p>
-            )}
             <button
               onClick={handleSubmit}
               disabled={!canSubmit}

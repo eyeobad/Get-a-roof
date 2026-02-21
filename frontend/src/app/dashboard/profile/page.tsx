@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
+import { useToastError } from "@/hooks/useToastError";
 
 // --- Components ---
 
@@ -76,6 +77,8 @@ export default function DashboardProfilePage() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isPhotoSaving, setIsPhotoSaving] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  useToastError(photoError);
+  useToastError(deleteError);
 
   // --- Effects ---
   useEffect(() => {
@@ -515,9 +518,6 @@ export default function DashboardProfilePage() {
               className="hidden"
               onChange={handlePhotoFileChange}
             />
-            {photoError && (
-              <p className="text-xs text-red-600 font-medium">{photoError}</p>
-            )}
           </div>
           <div className="pt-2 flex gap-3">
             <button
@@ -564,9 +564,6 @@ export default function DashboardProfilePage() {
             />
           </div>
 
-          {deleteError && (
-            <p className="text-sm text-red-600 font-medium">{deleteError}</p>
-          )}
 
           <div className="pt-2 flex gap-3">
             <button

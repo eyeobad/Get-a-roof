@@ -54,6 +54,10 @@ class IdealTenantPreferences {
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], IdealTenantPreferences.prototype, "gender", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], IdealTenantPreferences.prototype, "employmentStatus", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
@@ -192,6 +196,26 @@ __decorate([
     (0, mongoose_1.Prop)({ type: String, enum: enums_1.PropertyStatus, default: enums_1.PropertyStatus.Draft }),
     __metadata("design:type", String)
 ], Property.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: ["Pending", "Approved", "Rejected", "Hidden"],
+        default: "Pending",
+    }),
+    __metadata("design:type", String)
+], Property.prototype, "moderationStatus", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Property.prototype, "moderationReason", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: "User" }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Property.prototype, "moderatedBy", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Property.prototype, "moderatedAt", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: LandlordRequirements }),
     __metadata("design:type", LandlordRequirements)

@@ -113,6 +113,7 @@ function MessagesContent() {
   const pathname = usePathname();
   const threadParam = searchParams?.get("thread") ?? "";
   const fromParam = searchParams?.get("from") ?? "";
+  const draftParam = searchParams?.get("draft") ?? "";
   const isLandlordContext =
     fromParam.startsWith("/dashboard") || pathname?.startsWith("/dashboard");
   const storeConversations = useAppStore((state) => state.conversations);
@@ -146,6 +147,7 @@ function MessagesContent() {
     () => (threadParam ? "chat" : "list")
   );
   const [messageText, setMessageText] = useState("");
+  const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const activeConversationId =
     activeId || threadParam || conversations[0]?.id || "";
@@ -268,6 +270,12 @@ function MessagesContent() {
     markMatchRead,
     setSelectedThreadId,
   ]);
+
+  useEffect(() => {
+    if (didApplyDraft || !draftParam.trim() || !activeConversationId) return;
+    setMessageText(draftParam.trim());
+    setDidApplyDraft(true);
+  }, [didApplyDraft, draftParam, activeConversationId]);
 
   if (!authToken) {
     return (

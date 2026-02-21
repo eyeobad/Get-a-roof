@@ -6,6 +6,9 @@ const parseJson = (value: string) => {
   }
 };
 
+export const ERROR_TOASTED = Symbol("error_toasted");
+type ToastAnnotatedError = Error & { [ERROR_TOASTED]?: boolean };
+
 export const getApiErrorMessage = (err: unknown): string => {
   if (err instanceof Error) {
     const trimmed = err.message.trim();
@@ -16,6 +19,19 @@ export const getApiErrorMessage = (err: unknown): string => {
     return trimmed || "Something went wrong.";
   }
   return "Something went wrong.";
+};
+
+export const hasShownErrorToast = (err: unknown): boolean =>
+  Boolean(
+    err &&
+      typeof err === "object" &&
+      ERROR_TOASTED in (err as Record<PropertyKey, unknown>) &&
+      (err as Record<PropertyKey, unknown>)[ERROR_TOASTED] === true
+  );
+
+export const markErrorToastShown = <T extends Error>(error: T): T => {
+  (error as ToastAnnotatedError)[ERROR_TOASTED] = true;
+  return error;
 };
 
 import { toast } from "sonner";

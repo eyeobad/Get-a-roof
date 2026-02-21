@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -43,6 +44,7 @@ export default function AddPropertyRequirementsPage() {
   const [sharedCompound, setSharedCompound] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useToastError(error);
 
   const budgetLabel = useMemo(() => formatNaira(budget), [budget]);
 
@@ -334,9 +336,6 @@ export default function AddPropertyRequirementsPage() {
               arrow_forward
             </span>
           </button>
-          {error ? (
-            <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
-          ) : null}
         </div>
       </div>
     </div>

@@ -22,6 +22,7 @@ const verification_module_1 = require("./verification/verification.module");
 const landlord_module_1 = require("./landlord/landlord.module");
 const mail_module_1 = require("./mail/mail.module");
 const appwrite_module_1 = require("./appwrite/appwrite.module");
+const admin_module_1 = require("./admin/admin.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -55,6 +56,7 @@ exports.AppModule = AppModule = __decorate([
             landlord_module_1.LandlordModule,
             mail_module_1.MailModule,
             appwrite_module_1.AppwriteModule,
+            admin_module_1.AdminModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

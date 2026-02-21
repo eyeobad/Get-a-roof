@@ -28,7 +28,6 @@ function TenantAccountDetailsContent() {
   const [form, setForm] = useState<AccountForm>(initialForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const returnPath = useMemo(() => {
     const returnTo = searchParams?.get("returnTo") ?? "review";
@@ -50,7 +49,7 @@ function TenantAccountDetailsContent() {
       })
       .catch(() => {
         if (!mounted) return;
-        setError("Unable to load your account details.");
+        showToast({ title: "Unable to load your account details.", variant: "error" });
       })
       .finally(() => {
         if (mounted) setIsLoading(false);
@@ -68,7 +67,6 @@ function TenantAccountDetailsContent() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSaving) return;
-    setError(null);
 
     const firstName = form.firstName.trim();
     const lastName = form.lastName.trim();
@@ -76,7 +74,10 @@ function TenantAccountDetailsContent() {
     const phoneNumber = form.phoneNumber.trim();
 
     if (!firstName || !lastName || !email) {
-      setError("First name, last name, and email are required.");
+      showToast({
+        title: "First name, last name, and email are required.",
+        variant: "error",
+      });
       return;
     }
 
@@ -95,7 +96,6 @@ function TenantAccountDetailsContent() {
       router.push(returnPath);
     } catch (err) {
       const message = getApiErrorMessage(err);
-      setError(message);
       showToast({ title: message, variant: "error" });
     } finally {
       setIsSaving(false);
@@ -142,12 +142,6 @@ function TenantAccountDetailsContent() {
               />
             </label>
           ))}
-
-          {error ? (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-              {error}
-            </p>
-          ) : null}
 
           <button
             type="submit"

@@ -1,6 +1,7 @@
 export enum UserRole {
   Tenant = "Tenant",
   Landlord = "Landlord",
+  Admin = "Admin",
   Unassigned = "Unassigned",
 }
 

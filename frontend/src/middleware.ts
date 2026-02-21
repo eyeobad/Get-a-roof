@@ -4,6 +4,7 @@ import { jwtVerify, decodeJwt } from "jose";
 const PUBLIC_FILE = /\.(.*)$/;
 const PUBLIC_ROUTES = [
   "/login",
+  "/admin/login",
   "/tenant-signup",
   "/landlord-signup",
   "/create-account",
@@ -36,6 +37,8 @@ const TENANT_ONLY = [
   "/tenant-onboarding",
   
 ];
+
+const ADMIN_ONLY = ["/admin"];
 
 const isPublicRoute = (pathname: string) =>
   PUBLIC_ROUTES.some(
@@ -88,12 +91,28 @@ async function handleRoleRouting(request: NextRequest, token: string) {
 
   const isLandlord = role === "landlord";
   const isTenant = role === "tenant";
+  const isAdmin = role === "admin";
   const isLandlordRoute = LANDLORD_ONLY.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
   const isTenantRoute = TENANT_ONLY.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
+  const isAdminRoute = ADMIN_ONLY.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+
+  if (isAdmin && (isLandlordRoute || isTenantRoute)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/admin";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (isAdminRoute && !isAdmin) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = isLandlord ? "/dashboard/properties" : "/explore";
+    return NextResponse.redirect(redirectUrl);
+  }
 
   if (isLandlord && isTenantRoute) {
     const redirectUrl = request.nextUrl.clone();
@@ -139,6 +158,7 @@ function extractRole(rawRole: unknown) {
   const normalized = roles
     .map((role) => role?.toString().toLowerCase())
     .filter(Boolean);
+  if (normalized.includes("admin")) return "admin";
   if (normalized.includes("landlord")) return "landlord";
   if (normalized.includes("tenant")) return "tenant";
   return null;

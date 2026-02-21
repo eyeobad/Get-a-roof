@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -80,6 +81,7 @@ export default function ReviewPublishPage() {
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useToastError(error);
 
   const address = useMemo(() => {
     const parts = [
@@ -463,9 +465,6 @@ export default function ReviewPublishPage() {
                 arrow_forward
               </span>
             </button>
-            {error ? (
-              <p className="text-sm text-red-600 font-medium mt-3">{error}</p>
-            ) : null}
           </div>
         </div>
       </div>

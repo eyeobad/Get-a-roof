@@ -35,6 +35,9 @@ export default function LoginPage() {
       const isLandlord = roles.some(
         (value) => value?.toString().toLowerCase() === "landlord"
       );
+      const isAdmin = roles.some(
+        (value) => value?.toString().toLowerCase() === "admin"
+      );
       const tenantPreferences = (
         result.user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
       )?.tenant;
@@ -43,7 +46,9 @@ export default function LoginPage() {
         (!tenantPreferences ||
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
-      if (isLandlord) {
+      if (isAdmin) {
+        router.push("/admin");
+      } else if (isLandlord) {
         router.push("/dashboard/properties");
       } else if (needsTenantOnboarding) {
         router.push("/tenant-onboarding");

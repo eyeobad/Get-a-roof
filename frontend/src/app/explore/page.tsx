@@ -112,7 +112,13 @@ export default function ExploreCards() {
   };
 
   const applyFilters = () => {
-    setFilters(draftFilters);
+    const nextFilters = {
+      ...draftFilters,
+      toggles: { ...draftFilters.toggles },
+    };
+    setFilters(nextFilters);
+    resetExploreQueue();
+    void loadExploreListings(nextFilters);
     setFiltersOpen(false);
   };
 
@@ -244,10 +250,10 @@ export default function ExploreCards() {
       </header>
 
       {/* Card Stack */}
-      <main className="flex-1 flex flex-col justify-center items-center relative w-full max-w-md mx-auto px-4 pb-2">
+      <main className="flex-1 min-h-0 flex flex-col justify-center items-center relative w-full max-w-md mx-auto px-4 pb-2">
         <div className="absolute w-[90%] h-[80%] bg-white/50 rounded-[2.5rem] -z-10 translate-y-4 scale-95 shadow-sm border border-slate-200" />
 
-        <div className="relative w-full h-[650px]">
+        <div className="relative w-full h-[min(62dvh,650px)] min-h-[420px] md:h-[650px]">
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence>
               {visibleCards.map((card, index) => (
@@ -281,11 +287,11 @@ export default function ExploreCards() {
       </main>
 
       {/* Action Buttons */}
-      <div className="flex-none w-full max-w-md mx-auto px-6 pt-4 pb-8 grid grid-cols-2 gap-6 z-30">
+      <div className="flex-none w-full max-w-md mx-auto px-6 pt-3 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
           disabled={isSwipeAnimating || visibleCards.length === 0}
-          className="flex items-center justify-center gap-2 h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
           <span className="text-lg font-bold tracking-wide">PASS</span>
@@ -294,7 +300,7 @@ export default function ExploreCards() {
         <button
           onClick={() => handleSwipe("right")}
           disabled={isSwipeAnimating || visibleCards.length === 0}
-          className="flex items-center justify-center h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-70"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
         </button>
@@ -419,8 +425,8 @@ function FilterModal({
     <div className="fixed inset-0 z-70 flex">
       <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-[2px]" onClick={close} />
 
-      <div className="relative ml-auto w-full max-w-[80vw] md:max-w-xs">
-        <div className="h-full bg-white shadow-2xl rounded-l-3xl p-6 overflow-y-auto">
+      <div className="relative ml-auto h-[100dvh] w-full max-w-none sm:max-w-[80vw] md:max-w-xs">
+        <div className="h-full bg-white shadow-2xl rounded-none sm:rounded-l-3xl p-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-gray-900">Filters</h2>
             <button
