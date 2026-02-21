@@ -7,6 +7,7 @@ import { apiFetch, buildQuery } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 
 type MatchStatus = "TenantLiked" | "LandlordQualified" | "ChatInitiated" | "Dismissed";
+type RouteAccessStatus = "None" | "Pending" | "Approved" | "Denied";
 
 export type MatchSummary = {
   id: string;
@@ -17,6 +18,7 @@ export type MatchSummary = {
   lastMessageAt?: string;
   unreadCount?: number;
   landlordReplied?: boolean;
+  routeAccessStatus?: RouteAccessStatus;
 };
 
 export type ConversationSummary = {
@@ -181,6 +183,10 @@ type ApiProperty = {
   newCount?: number;
   coverUrl?: string;
   area?: string;
+  routeAccessStatus?: RouteAccessStatus;
+  routeOriginLat?: number;
+  routeOriginLng?: number;
+  routeAccessExpiresAt?: string;
 };
 
 type ApiMatch = {
@@ -199,6 +205,7 @@ type ApiMatch = {
   landlordReplied?: number | boolean;
   tenant?: ApiUser;
   isNewForLandlord?: boolean;
+  routeAccessStatus?: RouteAccessStatus;
 };
 
 type ApiConversation = {
@@ -446,6 +453,27 @@ const formatTime = (value?: string) => {
   });
 };
 
+const ROUTE_REQUEST_PREFIX = "__route_request__:";
+
+const formatMessagePreview = (content?: string) => {
+  if (!content) return "Start a conversation";
+  if (!content.startsWith(ROUTE_REQUEST_PREFIX)) return content;
+  try {
+    const parsed = JSON.parse(content.slice(ROUTE_REQUEST_PREFIX.length)) as {
+      kind?: string;
+      status?: string;
+    };
+    if (parsed?.kind === "route-access") {
+      if (parsed.status === "approved") return "Route access approved";
+      if (parsed.status === "denied") return "Route access denied";
+      return "Route access requested";
+    }
+  } catch {
+    return content;
+  }
+  return content;
+};
+
 const buildConversationSummary = (item: ApiConversation, currentUserId?: string) => {
   const matchId = toIdString(item.matchId);
   const listing = item.property ? mapPropertyToListing(item.property) : null;
@@ -478,7 +506,7 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
     id: matchId,
     listingId: listing?.id,
     title,
-    preview: item.lastMessage?.content ?? "Start a conversation",
+    preview: formatMessagePreview(item.lastMessage?.content),
     time: formatTime(item.lastMessage?.timestamp),
     image: otherPhoto || listing?.image,
     unread: (item.unreadCount ?? 0) > 0,
@@ -533,6 +561,10 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
     lat: property?.address?.lat ?? 0,
     lng: property?.address?.lng ?? 0,
     description: property?.description ?? "",
+    routeAccessStatus: property?.routeAccessStatus,
+    routeOriginLat: property?.routeOriginLat,
+    routeOriginLng: property?.routeOriginLng,
+    routeAccessExpiresAt: property?.routeAccessExpiresAt,
   };
 };
 
@@ -1154,10 +1186,11 @@ export const useAppStore = create<AppState>()(
             listingId,
             status: match.status,
             matchScore: match.matchScore,
-            lastMessage: match.lastMessage?.content,
+            lastMessage: formatMessagePreview(match.lastMessage?.content),
             lastMessageAt: match.lastMessage?.timestamp,
             unreadCount: match.unreadCount ?? 0,
             landlordReplied: Boolean(match.landlordReplied),
+            routeAccessStatus: match.routeAccessStatus ?? "None",
           } as MatchSummary;
         });
 
@@ -1265,7 +1298,7 @@ export const useAppStore = create<AppState>()(
             conversation.id === matchId
               ? {
                   ...conversation,
-                  preview: nextMessage.content,
+                  preview: formatMessagePreview(nextMessage.content),
                   time: nextTime,
                   unread: false,
                   unreadCount: 0,
@@ -1315,7 +1348,7 @@ export const useAppStore = create<AppState>()(
               : 0;
             return {
               ...conv,
-              preview: nextMessage.content || conv.preview,
+              preview: formatMessagePreview(nextMessage.content) || conv.preview,
               time: formatTime(nextMessage.timestamp),
               unread: nextUnreadCount > 0,
               unreadCount: nextUnreadCount,
@@ -1326,7 +1359,8 @@ export const useAppStore = create<AppState>()(
             const placeholder: ConversationSummary = {
               id: matchId,
               title: senderId === state.userId ? "Conversation" : "New message",
-              preview: nextMessage.content || "Start a conversation",
+              preview:
+                formatMessagePreview(nextMessage.content) || "Start a conversation",
               time: formatTime(nextMessage.timestamp),
               image: "/hero.png",
               unread: shouldCountUnread,

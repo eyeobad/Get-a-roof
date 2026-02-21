@@ -278,7 +278,7 @@ export default function ProfilePage() {
   
   const [confirmInput, setConfirmInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<unknown>(null);
   const [isLoading, setIsLoading] = useState(false);
   
   const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile }));
@@ -288,9 +288,9 @@ export default function ProfilePage() {
   const [draft, setDraft] = useState<ProfileState>(profile);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [photoUploadError, setPhotoUploadError] = useState<unknown>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
   useToastError(saveError);
   useToastError(photoUploadError);
   useToastError(deleteError);
@@ -405,13 +405,12 @@ export default function ProfilePage() {
       await updateUser({
         firstName,
         lastName,
-        email: profile.email,
         phoneNumber: profile.phone,
         photoUrl: profile.photoUrl,
       });
       await updatePreferences({ tenant: tenantPayload });
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed");
+      setSaveError(err);
     } finally {
       setIsSaving(false);
     }
@@ -433,7 +432,7 @@ export default function ProfilePage() {
         setDraft((prev) => ({ ...prev, photoUrl }));
       }
     } catch (err) {
-      setPhotoUploadError(err instanceof Error ? err.message : "Upload failed");
+      setPhotoUploadError(err);
     } finally {
       setIsUploadingPhoto(false);
       event.target.value = "";
@@ -456,7 +455,7 @@ export default function ProfilePage() {
         setDeleteError("Unable to delete account");
       }
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+      setDeleteError(err);
     } finally {
       setIsDeleting(false);
     }

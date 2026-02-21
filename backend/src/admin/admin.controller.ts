@@ -105,6 +105,17 @@ export class AdminController {
     });
   }
 
+  @Delete("listings/:id")
+  deleteListing(
+    @Param("id") id: string,
+    @Req() req: Request & { user?: { sub?: string } }
+  ) {
+    return this.adminService.deleteListing(req.user?.sub ?? "", id, {
+      ip: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+  }
+
   @Get("audit-logs")
   getAuditLogs(
     @Query("action") action?: string,

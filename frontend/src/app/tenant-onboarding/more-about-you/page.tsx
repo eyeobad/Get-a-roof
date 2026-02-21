@@ -152,11 +152,6 @@ function TenantMoreAboutYouContent() {
         if (!mounted) return;
         const tenant = (user?.preferences as { tenant?: Record<string, unknown> } | undefined)
           ?.tenant;
-        const lookingFor = tenant?.lookingFor;
-        if (Array.isArray(lookingFor) && lookingFor.length > 0 && returnTo !== "review") {
-          router.replace("/explore");
-          return;
-        }
         if (!tenant) {
           setHydrated(true);
           return;

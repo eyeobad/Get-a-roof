@@ -52,6 +52,34 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], Match.prototype, "landlordSeenAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: String,
+        enum: enums_1.RouteAccessStatus,
+        default: enums_1.RouteAccessStatus.None,
+    }),
+    __metadata("design:type", String)
+], Match.prototype, "routeAccessStatus", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Match.prototype, "routeAccessRequestedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Match.prototype, "routeAccessRespondedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Match.prototype, "routeOriginLat", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Match.prototype, "routeOriginLng", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Match.prototype, "routeAccessExpiresAt", void 0);
 exports.Match = Match = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Match);

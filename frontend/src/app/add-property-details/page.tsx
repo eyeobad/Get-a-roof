@@ -35,6 +35,16 @@ export default function AddPropertyDetailsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useToastError(error);
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  const hasValidCoordinates = Number.isFinite(latNum) && Number.isFinite(lngNum);
+  const googleMapsLink = hasValidCoordinates
+    ? `https://www.google.com/maps?q=${latNum},${lngNum}`
+    : location.trim()
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          location.trim()
+        )}`
+      : "";
 
   const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
   const bathOptions = useMemo(() => [1, 2, 3, 4], []);
@@ -267,6 +277,17 @@ export default function AddPropertyDetailsPage() {
               <button type="button" onClick={handleUseLocation} className="text-sm font-bold text-[#0a44b8] hover:underline flex items-center gap-1 ml-1">
                 <span className="material-symbols-outlined text-sm">my_location</span> Use current location
               </button>
+              {googleMapsLink && (
+                <a
+                  href={googleMapsLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-semibold text-[#0a44b8] hover:underline flex items-center gap-1 ml-1"
+                >
+                  <span className="material-symbols-outlined text-sm">map</span>
+                  Open in Google Maps
+                </a>
+              )}
             </div>
 
             {/* Rent Section */}

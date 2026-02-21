@@ -26,7 +26,6 @@ type ListingCard = {
 type MapPoint = {
   id: string;
   index: number;
-  price: string;
   lat: number;
   lng: number;
   displayLat: number;
@@ -282,19 +281,42 @@ function MapCanvas({
           source: "approx-areas",
           paint: {
             "circle-color": "#0a44b8",
-            "circle-opacity": 0.22,
+            "circle-opacity": [
+              "case",
+              ["get", "isExact"],
+              0.14,
+              0.24,
+            ],
             "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              10,
-              24,
-              14,
-              48,
+              "case",
+              ["get", "isExact"],
+              [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                10,
+                30,
+                14,
+                60,
+              ],
+              [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                10,
+                45,
+                14,
+                90,
+              ],
             ],
             "circle-stroke-color": "#0a44b8",
-            "circle-stroke-width": 2,
-            "circle-stroke-opacity": 0.6,
+            "circle-stroke-width": [
+              "case",
+              ["get", "isExact"],
+              1.5,
+              2,
+            ],
+            "circle-stroke-opacity": 0.55,
           },
         });
       }
@@ -408,17 +430,21 @@ function MapCanvas({
 
     points.forEach((point) => {
       const markerEl = document.createElement("div");
-      markerEl.className = [
-        "map-price-marker",
-        point.index === activeIndex ? "is-active" : "",
-        point.isExact ? "is-exact" : "is-approx",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      markerEl.innerHTML = point.isExact ? `<span>${point.price}</span>` : "";
-      if (!point.isExact) {
-        markerEl.setAttribute("aria-label", point.price);
-      }
+      markerEl.className = "map-price-marker";
+      markerEl.textContent = "";
+      markerEl.setAttribute("aria-label", "Property marker");
+      markerEl.style.width = point.isExact ? "18px" : "14px";
+      markerEl.style.height = point.isExact ? "18px" : "14px";
+      markerEl.style.borderRadius = "999px";
+      markerEl.style.background = point.isExact ? "#0a44b8" : "rgba(10,68,184,0.78)";
+      markerEl.style.border = point.isExact ? "3px solid #fff" : "2px solid #0a44b8";
+      markerEl.style.boxShadow = point.index === activeIndex
+        ? "0 12px 28px rgba(10,68,184,0.45)"
+        : "0 8px 18px rgba(10,68,184,0.35)";
+      markerEl.style.transform = point.index === activeIndex
+        ? "translate(-50%, -50%) scale(1.15)"
+        : "translate(-50%, -50%)";
+      markerEl.style.transition = "transform 0.2s ease, box-shadow 0.2s ease";
       markerEl.addEventListener("click", () => onSelect(point.index));
       const marker = new mapboxgl.Marker({ element: markerEl })
         .setLngLat([point.displayLng, point.displayLat])
@@ -426,15 +452,15 @@ function MapCanvas({
       markersRef.current.push(marker);
     });
 
-    const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points
-      .filter((point) => !point.isExact)
-      .map((point) => ({
+    const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points.map((point) => ({
         type: "Feature",
         geometry: {
           type: "Point",
           coordinates: [point.displayLng, point.displayLat],
         },
-        properties: {},
+        properties: {
+          isExact: point.isExact,
+        },
       }));
 
     const areaSource = map.getSource("approx-areas") as mapboxgl.GeoJSONSource | undefined;
@@ -489,8 +515,6 @@ export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const mapMatches = useAppStore((state) => state.mapMatches);
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
-  const matchSummaries = useAppStore((state) => state.matchSummaries);
-  const loadMatches = useAppStore((state) => state.loadMatches);
   const likedIds = useAppStore((state) => state.likedIds);
   const toggleLikeListing = useAppStore((state) => state.toggleLikeListing);
   const ensureThreadForListing = useAppStore(
@@ -511,31 +535,22 @@ export default function MapView() {
   useEffect(() => {
     if (authToken) {
       void loadMapMatches();
-      void loadMatches();
     }
-  }, [authToken, loadMapMatches, loadMatches]);
+  }, [authToken, loadMapMatches]);
 
   const sourceListings = mapMatches;
   const showEmptyState = mapMatches.length === 0;
 
-  const acceptedIds = useMemo(() => {
-    return new Set(
-      matchSummaries
-        .filter((match) => match.landlordReplied)
-        .map((match) => match.listingId)
-    );
-  }, [matchSummaries]);
-
   const listItems = useMemo<ListingCard[]>(() => {
     return sourceListings.map((listing) => {
-      const isExact = !authToken || acceptedIds.has(listing.id);
+      const isExact =
+        !authToken ||
+        listing.routeAccessStatus === "Approved";
       return {
         id: listing.id,
         price: listing.price,
         address: listing.address,
-        displayAddress: isExact
-          ? listing.address
-          : buildDisplayAddress(listing.address, listing.neighborhood),
+        displayAddress: buildDisplayAddress(listing.address, listing.neighborhood),
         beds: listing.bedrooms,
         baths: listing.bathrooms,
         sqft: listing.sqft,
@@ -545,22 +560,23 @@ export default function MapView() {
         isSaved: likedIds.includes(listing.id),
       };
     });
-  }, [sourceListings, acceptedIds, authToken, likedIds]);
+  }, [sourceListings, authToken, likedIds]);
 
   const mapPoints = useMemo<MapPoint[]>(() => {
     return sourceListings
       .map((listing, index) => {
-        const isExact = !authToken || acceptedIds.has(listing.id);
+        const isExact =
+          !authToken ||
+          listing.routeAccessStatus === "Approved";
         const lat = listing.lat;
         const lng = listing.lng;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
           return null;
         }
-        const display = isExact ? { lat, lng } : jitterPoint(lat, lng, listing.id);
+        const display = jitterPoint(lat, lng, `${listing.id}-${isExact ? "exact" : "approx"}`);
         return {
           id: listing.id,
           index,
-          price: listing.price,
           lat,
           lng,
           displayLat: display.lat,
@@ -569,7 +585,7 @@ export default function MapView() {
         };
       })
       .filter((point): point is MapPoint => Boolean(point));
-  }, [sourceListings, acceptedIds, authToken]);
+  }, [sourceListings, authToken]);
 
   const activeIndex =
     listItems.length > 0
@@ -647,26 +663,31 @@ export default function MapView() {
       setRoutingError("Directions unavailable: missing valid Mapbox token.");
       return;
     }
-    if (!navigator.geolocation) {
-      setRoutingError("Geolocation is not supported in this browser.");
-      return;
-    }
     setRoutingError(null);
     setIsRouting(true);
     setRouteGeojson(null);
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 8000,
-        });
-      });
-      const originLng = position.coords.longitude;
-      const originLat = position.coords.latitude;
       const target = mapPoints.find((point) => point.index === activeIndex);
       if (!target) {
         setRoutingError("Unable to find destination.");
         return;
+      }
+      const sourceListing = sourceListings.find((listing) => listing.id === activeListing.id);
+      let originLng = sourceListing?.routeOriginLng;
+      let originLat = sourceListing?.routeOriginLat;
+      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
+        if (!navigator.geolocation) {
+          setRoutingError("Geolocation is not supported in this browser.");
+          return;
+        }
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 8000,
+          });
+        });
+        originLng = position.coords.longitude;
+        originLat = position.coords.latitude;
       }
       const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${originLng},${originLat};${target.lng},${target.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
       const response = await fetch(url);
@@ -699,14 +720,9 @@ export default function MapView() {
 
   const requestRouteAccess = async () => {
     if (!activeListing) return;
-    const draftMessage = `Hi, please enable route directions for ${activeListing.displayAddress}.`;
     const threadId = await ensureThreadForListing(activeListing.id);
     if (threadId) {
-      router.push(
-        `/messages?thread=${threadId}&from=/map-view&intent=route-access&draft=${encodeURIComponent(
-          draftMessage
-        )}`
-      );
+      router.push(`/messages?thread=${threadId}&from=/map-view&intent=route-access`);
     } else {
       router.push("/messages");
     }

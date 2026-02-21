@@ -151,19 +151,15 @@ let UsersService = class UsersService {
             throw new common_1.NotFoundException("User not found");
         }
         const userObjectId = new mongoose_2.Types.ObjectId(user.id);
-        const isLandlord = user.role === "Landlord";
-        let landlordPropertyIds = [];
-        if (isLandlord) {
-            const propertyIds = await this.propertyModel
-                .find({ landlordId: userObjectId })
-                .distinct("_id")
-                .exec();
-            landlordPropertyIds = propertyIds.map((pid) => new mongoose_2.Types.ObjectId(pid));
-            if (landlordPropertyIds.length) {
-                await this.propertyModel.deleteMany({
-                    _id: { $in: landlordPropertyIds },
-                });
-            }
+        const propertyIds = await this.propertyModel
+            .find({ landlordId: userObjectId })
+            .distinct("_id")
+            .exec();
+        const landlordPropertyIds = propertyIds.map((pid) => new mongoose_2.Types.ObjectId(pid));
+        if (landlordPropertyIds.length) {
+            await this.propertyModel.deleteMany({
+                _id: { $in: landlordPropertyIds },
+            });
         }
         const matchFilter = {
             $or: [{ tenantId: userObjectId }],

@@ -123,7 +123,11 @@ let PropertiesService = class PropertiesService {
             .exec();
         const validProperties = await this.removeOrphanedProperties(properties);
         const results = await this.applyScoringAndFilters(validProperties, options);
+        const routeAccessMap = await this.getTenantRouteAccessMap(options?.userId, results.map((property) => property._id));
         return results.map((property) => ({
+            ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
+                routeAccessStatus: enums_1.RouteAccessStatus.None,
+            }),
             _id: property._id,
             address: property.address,
             monthlyPrice: property.monthlyPrice,
@@ -282,6 +286,63 @@ let PropertiesService = class PropertiesService {
             filter.status = { $ne: enums_1.MatchStatus.Dismissed };
         }
         return this.matchModel.find(filter).distinct("propertyId").exec();
+    }
+    async getTenantRouteAccessMap(tenantId, propertyIds) {
+        const map = new Map();
+        if (!tenantId || !propertyIds.length)
+            return map;
+        const normalizedPropertyIds = propertyIds
+            .map((id) => id?.toString?.() ?? String(id))
+            .filter(Boolean);
+        if (!normalizedPropertyIds.length)
+            return map;
+        const filter = {
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+            $expr: {
+                $in: [{ $toString: "$propertyId" }, normalizedPropertyIds],
+            },
+        };
+        if (mongoose_2.Types.ObjectId.isValid(tenantId)) {
+            const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
+            filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
+        }
+        else {
+            filter.tenantId = tenantId;
+        }
+        const matches = await this.matchModel
+            .find(filter)
+            .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
+            .lean()
+            .exec();
+        matches.forEach((match) => {
+            const propertyId = match.propertyId?.toString?.();
+            if (!propertyId)
+                return;
+            const expiresAt = match.routeAccessExpiresAt
+                ? new Date(match.routeAccessExpiresAt)
+                : undefined;
+            const isActiveApproval = match.routeAccessStatus === enums_1.RouteAccessStatus.Approved &&
+                !!expiresAt &&
+                Number.isFinite(expiresAt.getTime()) &&
+                expiresAt.getTime() > Date.now();
+            map.set(propertyId, {
+                routeAccessStatus: isActiveApproval
+                    ? enums_1.RouteAccessStatus.Approved
+                    : (match.routeAccessStatus === enums_1.RouteAccessStatus.Approved
+                        ? enums_1.RouteAccessStatus.None
+                        : match.routeAccessStatus ?? enums_1.RouteAccessStatus.None),
+                routeOriginLat: isActiveApproval &&
+                    typeof match.routeOriginLat === "number" && Number.isFinite(match.routeOriginLat)
+                    ? match.routeOriginLat
+                    : undefined,
+                routeOriginLng: isActiveApproval &&
+                    typeof match.routeOriginLng === "number" && Number.isFinite(match.routeOriginLng)
+                    ? match.routeOriginLng
+                    : undefined,
+                routeAccessExpiresAt: isActiveApproval ? expiresAt : undefined,
+            });
+        });
+        return map;
     }
     async removeOrphanedProperties(properties) {
         if (!properties.length)

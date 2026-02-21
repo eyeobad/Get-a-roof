@@ -43,6 +43,13 @@ export enum MatchStatus {
   Dismissed = "Dismissed",
 }
 
+export enum RouteAccessStatus {
+  None = "None",
+  Pending = "Pending",
+  Approved = "Approved",
+  Denied = "Denied",
+}
+
 export enum VehiclePreference {
   Yes = "Yes",
   No = "No",

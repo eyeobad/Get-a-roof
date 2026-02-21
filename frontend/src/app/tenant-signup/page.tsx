@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
-import { getApiErrorMessage, showToast } from "@/lib/alerts";
+import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showVerifyPassword, setShowVerifyPassword] = useState(false);
@@ -98,16 +98,18 @@ export default function TenantSignupPage() {
 
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
-      const message = getApiErrorMessage(err);
-      const isConflict = message.toLowerCase().includes("already in use");
-      const friendly = isConflict
-        ? "Account already exists. Log in instead."
-        : message;
-      showToast({
-        title: "Sign up failed",
-        text: friendly,
-        variant: "error",
-      });
+      if (!hasShownErrorToast(err)) {
+        const message = getApiErrorMessage(err);
+        const isConflict = message.toLowerCase().includes("already in use");
+        const friendly = isConflict
+          ? "Account already exists. Log in instead."
+          : message;
+        showToast({
+          title: "Sign up failed",
+          text: friendly,
+          variant: "error",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

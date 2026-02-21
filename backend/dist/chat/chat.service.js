@@ -21,12 +21,42 @@ const match_schema_1 = require("../matches/schemas/match.schema");
 const property_schema_1 = require("../properties/schemas/property.schema");
 const enums_1 = require("../common/enums");
 const user_schema_1 = require("../users/schemas/user.schema");
+const ROUTE_REQUEST_PREFIX = "__route_request__:";
 let ChatService = class ChatService {
     constructor(messageModel, matchModel, propertyModel, userModel) {
         this.messageModel = messageModel;
         this.matchModel = matchModel;
         this.propertyModel = propertyModel;
         this.userModel = userModel;
+    }
+    parseRouteRequestPayload(content) {
+        if (!content?.startsWith(ROUTE_REQUEST_PREFIX)) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(content.slice(ROUTE_REQUEST_PREFIX.length));
+            if (parsed &&
+                parsed.kind === "route-access" &&
+                typeof parsed.id === "string" &&
+                (parsed.status === "pending" ||
+                    parsed.status === "approved" ||
+                    parsed.status === "denied")) {
+                if (parsed.tenantLocation) {
+                    const { lat, lng } = parsed.tenantLocation;
+                    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                        return null;
+                    }
+                }
+                if (parsed.ttlMinutes !== undefined && ![5, 30, 1440].includes(parsed.ttlMinutes)) {
+                    return null;
+                }
+                return parsed;
+            }
+        }
+        catch {
+            return null;
+        }
+        return null;
     }
     buildConversationResponse(match, property, lastMessage, participants) {
         const propertyObject = property.toObject ? property.toObject() : property;
@@ -62,7 +92,47 @@ let ChatService = class ChatService {
         if (!dto.senderId) {
             throw new common_1.BadRequestException("senderId is required");
         }
-        const { match } = await this.assertChatParticipant(dto.matchId, dto.senderId, dto.receiverId);
+        const { match, property } = await this.assertChatParticipant(dto.matchId, dto.senderId, dto.receiverId);
+        const routePayload = this.parseRouteRequestPayload(dto.content);
+        const tenantId = match.tenantId.toString();
+        const landlordId = property.landlordId.toString();
+        const matchPatch = {};
+        if (routePayload) {
+            if (routePayload.status === "pending") {
+                if (dto.senderId !== tenantId) {
+                    throw new common_1.ForbiddenException("Only tenant can request route access");
+                }
+                if (!routePayload.tenantLocation) {
+                    throw new common_1.BadRequestException("Tenant location is required for route request");
+                }
+                matchPatch.routeAccessStatus = enums_1.RouteAccessStatus.Pending;
+                matchPatch.routeAccessRequestedAt = new Date();
+                matchPatch.routeAccessRespondedAt = null;
+                matchPatch.routeAccessExpiresAt = null;
+                matchPatch.routeOriginLat = routePayload.tenantLocation.lat;
+                matchPatch.routeOriginLng = routePayload.tenantLocation.lng;
+            }
+            if (routePayload.status === "approved" || routePayload.status === "denied") {
+                if (dto.senderId !== landlordId) {
+                    throw new common_1.ForbiddenException("Only landlord can approve or deny route access");
+                }
+                matchPatch.routeAccessStatus =
+                    routePayload.status === "approved"
+                        ? enums_1.RouteAccessStatus.Approved
+                        : enums_1.RouteAccessStatus.Denied;
+                matchPatch.routeAccessRespondedAt = new Date();
+                if (routePayload.status === "approved") {
+                    const ttl = routePayload.ttlMinutes ?? 30;
+                    if (![5, 30, 1440].includes(ttl)) {
+                        throw new common_1.BadRequestException("Invalid route access duration");
+                    }
+                    matchPatch.routeAccessExpiresAt = new Date(Date.now() + ttl * 60 * 1000);
+                }
+                else {
+                    matchPatch.routeAccessExpiresAt = null;
+                }
+            }
+        }
         const created = new this.messageModel({
             matchId: dto.matchId,
             senderId: dto.senderId,
@@ -77,6 +147,7 @@ let ChatService = class ChatService {
                 ? enums_1.MatchStatus.ChatInitiated
                 : match.status,
             updatedAt: new Date(),
+            ...matchPatch,
         });
         return saved;
     }

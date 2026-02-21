@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
-import { getApiErrorMessage, showToast } from "@/lib/alerts";
+import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -56,8 +56,10 @@ export default function LoginPage() {
         router.push("/explore");
       }
     } catch (err) {
-      const message = getApiErrorMessage(err);
-      showToast({ title: message, variant: "error" });
+      if (!hasShownErrorToast(err)) {
+        const message = getApiErrorMessage(err);
+        showToast({ title: message, variant: "error" });
+      }
     } finally {
       setIsSubmitting(false);
     }

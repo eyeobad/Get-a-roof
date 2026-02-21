@@ -8,6 +8,43 @@ import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import { getSocket } from "@/lib/socket";
+import { showToast } from "@/lib/alerts";
+
+type RouteRequestStatus = "pending" | "approved" | "denied";
+
+type RouteRequestPayload = {
+  id: string;
+  status: RouteRequestStatus;
+  kind: "route-access";
+  tenantLocation?: {
+    lat: number;
+    lng: number;
+  };
+  ttlMinutes?: number;
+};
+
+const ROUTE_REQUEST_PREFIX = "__route_request__:";
+
+const encodeRouteRequest = (payload: RouteRequestPayload) =>
+  `${ROUTE_REQUEST_PREFIX}${JSON.stringify(payload)}`;
+
+const parseRouteRequest = (value: string): RouteRequestPayload | null => {
+  if (!value.startsWith(ROUTE_REQUEST_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(value.slice(ROUTE_REQUEST_PREFIX.length)) as RouteRequestPayload;
+    if (
+      parsed &&
+      parsed.kind === "route-access" &&
+      typeof parsed.id === "string" &&
+      (parsed.status === "pending" || parsed.status === "approved" || parsed.status === "denied")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
 
 type Conversation = {
   id: string;
@@ -149,6 +186,8 @@ function MessagesContent() {
   const [messageText, setMessageText] = useState("");
   const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [routeAccessDurationByRequestId, setRouteAccessDurationByRequestId] =
+    useState<Record<string, 5 | 30 | 1440>>({});
   const activeConversationId =
     activeId || threadParam || conversations[0]?.id || "";
 
@@ -167,6 +206,7 @@ function MessagesContent() {
         convoId: activeConversationId,
         from: message.senderId === userId ? "me" : "them",
         text: message.content,
+        routeRequest: parseRouteRequest(message.content),
         time: new Date(message.timestamp).toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
@@ -218,6 +258,99 @@ function MessagesContent() {
       });
     });
   };
+
+  const sendRouteRequest = async () => {
+    if (!activeConversation || !activeConversationId) return;
+    if (!userId || userId !== activeConversation.tenantId) {
+      showToast({
+        title: "Only tenants can request route access.",
+        variant: "error",
+      });
+      return;
+    }
+    if (!navigator.geolocation) {
+      showToast({
+        title: "Location is not supported on this browser.",
+        variant: "error",
+      });
+      return;
+    }
+    const receiverId =
+      userId === activeConversation.tenantId
+        ? activeConversation.landlordId
+        : activeConversation.tenantId;
+    if (!receiverId || isSending) return;
+    let tenantLocation: RouteRequestPayload["tenantLocation"];
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 8000,
+        });
+      });
+      tenantLocation = {
+        lat: Number(position.coords.latitude.toFixed(6)),
+        lng: Number(position.coords.longitude.toFixed(6)),
+      };
+    } catch {
+      showToast({
+        title: "Allow location access first to request route directions.",
+        variant: "error",
+      });
+      return;
+    }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setIsSending(true);
+    try {
+      await sendMessageToApi(
+        activeConversationId,
+        receiverId,
+        encodeRouteRequest({
+          id,
+          kind: "route-access",
+          status: "pending",
+          tenantLocation,
+        })
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const sendRouteDecision = async (
+    id: string,
+    status: "approved" | "denied",
+    ttlMinutes?: 5 | 30 | 1440
+  ) => {
+    if (!activeConversation || !activeConversationId) return;
+    const receiverId =
+      userId === activeConversation.tenantId
+        ? activeConversation.landlordId
+        : activeConversation.tenantId;
+    if (!receiverId || isSending) return;
+    setIsSending(true);
+    try {
+      await sendMessageToApi(
+        activeConversationId,
+        receiverId,
+        encodeRouteRequest({ id, kind: "route-access", status, ttlMinutes })
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const getDurationForRequest = (requestId: string): 5 | 30 | 1440 =>
+    routeAccessDurationByRequestId[requestId] ?? 30;
+
+  const routeRequestStatusById = useMemo(() => {
+    const statuses: Record<string, RouteRequestStatus> = {};
+    activeMessages.forEach((message) => {
+      if (!message.routeRequest) return;
+      statuses[message.routeRequest.id] = message.routeRequest.status;
+    });
+    return statuses;
+  }, [activeMessages]);
 
   useEffect(() => {
     if (authToken) {
@@ -445,9 +578,70 @@ function MessagesContent() {
                           : "bg-white text-slate-900 border border-slate-200"
                       }`}
                     >
-                      <p className="text-sm font-medium leading-relaxed">
-                        {m.text}
-                      </p>
+                      {m.routeRequest ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[18px]">route</span>
+                            <p className="text-sm font-semibold">Route Access Request</p>
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "denied"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status}
+                          </span>
+                          {isLandlordContext &&
+                            m.from === "them" &&
+                            (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "pending" && (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={getDurationForRequest(m.routeRequest.id)}
+                                  onChange={(event) =>
+                                    setRouteAccessDurationByRequestId((prev) => ({
+                                      ...prev,
+                                      [m.routeRequest!.id]: Number(event.target.value) as
+                                        | 5
+                                        | 30
+                                        | 1440,
+                                    }))
+                                  }
+                                  className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                                >
+                                  <option value={5}>5 min</option>
+                                  <option value={30}>30 min</option>
+                                  <option value={1440}>1 day</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void sendRouteDecision(
+                                      m.routeRequest!.id,
+                                      "approved",
+                                      getDurationForRequest(m.routeRequest!.id)
+                                    )
+                                  }
+                                  className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
+                                  className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                >
+                                  Deny
+                                </button>
+                              </div>
+                            )}
+                        </div>
+                      ) : (
+                        <p className="text-sm font-medium leading-relaxed">{m.text}</p>
+                      )}
                       <p
                         className={`mt-1 text-[10px] ${
                           m.from === "me"
@@ -490,6 +684,16 @@ function MessagesContent() {
                     />
                     <SendingIndicator visible={isSending} />
                   </div>
+
+                  <button
+                    aria-label="Request route access"
+                    onClick={() => void sendRouteRequest()}
+                    disabled={isSending || isLandlordContext}
+                    className="mb-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    title="Request route access"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">route</span>
+                  </button>
 
                   <button
                     aria-label="Send"
@@ -707,9 +911,70 @@ function MessagesContent() {
                                   : "bg-white text-slate-900 border border-slate-200"
                               }`}
                             >
-                              <p className="text-sm font-medium leading-relaxed">
-                                {m.text}
-                              </p>
+                              {m.routeRequest ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-[18px]">route</span>
+                                    <p className="text-sm font-semibold">Route Access Request</p>
+                                  </div>
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                      (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "approved"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "denied"
+                                          ? "bg-rose-100 text-rose-700"
+                                          : "bg-amber-100 text-amber-700"
+                                    }`}
+                                  >
+                                    {routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status}
+                                  </span>
+                                  {isLandlordContext &&
+                                    m.from === "them" &&
+                                    (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "pending" && (
+                                      <div className="flex items-center gap-2">
+                                        <select
+                                          value={getDurationForRequest(m.routeRequest.id)}
+                                          onChange={(event) =>
+                                            setRouteAccessDurationByRequestId((prev) => ({
+                                              ...prev,
+                                              [m.routeRequest!.id]: Number(event.target.value) as
+                                                | 5
+                                                | 30
+                                                | 1440,
+                                            }))
+                                          }
+                                          className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                                        >
+                                          <option value={5}>5 min</option>
+                                          <option value={30}>30 min</option>
+                                          <option value={1440}>1 day</option>
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void sendRouteDecision(
+                                              m.routeRequest!.id,
+                                              "approved",
+                                              getDurationForRequest(m.routeRequest!.id)
+                                            )
+                                          }
+                                          className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                        >
+                                          Approve
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
+                                          className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                        >
+                                          Deny
+                                        </button>
+                                      </div>
+                                    )}
+                                </div>
+                              ) : (
+                                <p className="text-sm font-medium leading-relaxed">{m.text}</p>
+                              )}
                               <p
                                 className={`mt-1 text-[10px] ${
                                   m.from === "me"
@@ -753,6 +1018,16 @@ function MessagesContent() {
                         />
                         <SendingIndicator visible={isSending} />
                       </div>
+
+                      <button
+                        aria-label="Request route access"
+                        onClick={() => void sendRouteRequest()}
+                        disabled={isSending || isLandlordContext}
+                        className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        title="Request route access"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">route</span>
+                      </button>
 
                       <button
                         aria-label="Send"

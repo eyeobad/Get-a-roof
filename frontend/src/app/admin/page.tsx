@@ -2,7 +2,7 @@
 
 import Script from "next/script";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
@@ -54,7 +54,14 @@ type AdminListing = {
 
 declare global {
   interface Window {
-    Chart?: any;
+    Chart?: new (
+      item: HTMLCanvasElement,
+      config: {
+        type: string;
+        data: unknown;
+        options?: unknown;
+      }
+    ) => { destroy?: () => void };
   }
 }
 
@@ -72,7 +79,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   useToastError(error);
   const [isLoading, setIsLoading] = useState(true);
-  const chartsRef = useRef<any[]>([]);
+  const chartsRef = useRef<Array<{ destroy?: () => void }>>([]);
   const lineChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const donutChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const barChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -109,7 +116,7 @@ export default function AdminPage() {
     return (await response.json()) as T;
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!authToken) return;
     setError("");
     setIsLoading(true);
@@ -129,13 +136,13 @@ export default function AdminPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [authToken]);
 
   useEffect(() => {
     void load();
-  }, [authToken]);
+  }, [authToken, load]);
 
-  const mountCharts = () => {
+  const mountCharts = useCallback(() => {
     if (!window.Chart || !metrics) return;
 
     chartsRef.current.forEach((chart) => chart?.destroy?.());
@@ -204,14 +211,14 @@ export default function AdminPage() {
         })
       );
     }
-  };
+  }, [metrics]);
 
   useEffect(() => {
     mountCharts();
     return () => {
       chartsRef.current.forEach((chart) => chart?.destroy?.());
     };
-  }, [metrics]);
+  }, [metrics, mountCharts]);
 
   const updateUserStatus = async (userId: string, isSuspended: boolean) => {
     try {
@@ -257,6 +264,21 @@ export default function AdminPage() {
       await load();
     } catch (err) {
       setError((err as Error)?.message || "Unable to moderate listing");
+    }
+  };
+
+  const deleteListing = async (listingId: string) => {
+    const proceed = window.confirm(
+      "Delete this listing and all related matches/messages? This cannot be undone."
+    );
+    if (!proceed) return;
+    try {
+      await authFetch(`/api/admin/listings/${listingId}`, {
+        method: "DELETE",
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Unable to delete listing");
     }
   };
 
@@ -416,21 +438,27 @@ export default function AdminPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => moderateListing(item._id, "approve")}
-                      className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold"
+                      className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white"
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => moderateListing(item._id, "reject")}
-                      className="rounded-md bg-amber-600 px-2 py-1 text-xs font-semibold"
+                      className="rounded-md bg-amber-600 px-2 py-1 text-xs font-semibold text-white"
                     >
                       Reject
                     </button>
                     <button
                       onClick={() => moderateListing(item._id, "hide")}
-                      className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold"
+                      className="rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white"
                     >
                       Hide
+                    </button>
+                    <button
+                      onClick={() => deleteListing(item._id)}
+                      className="rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-white"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>

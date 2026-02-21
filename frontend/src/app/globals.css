@@ -68,3 +68,46 @@ body {
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 20px);
 }
+
+.map-price-marker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.map-price-marker span {
+  display: none !important;
+}
+
+.map-price-marker::after {
+  display: none;
+}
+
+.map-price-marker.is-exact {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #0a44b8;
+  border: 3px solid #ffffff;
+  box-shadow: 0 10px 24px rgba(10, 68, 184, 0.35);
+}
+
+.map-price-marker.is-approx {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(10, 68, 184, 0.78);
+  border: 2px solid #0a44b8;
+  box-shadow: 0 8px 18px rgba(10, 68, 184, 0.35);
+}
+
+.map-price-marker.is-active {
+  transform: translate(-50%, -50%) scale(1.15);
+  box-shadow: 0 12px 28px rgba(10, 68, 184, 0.45);
+}

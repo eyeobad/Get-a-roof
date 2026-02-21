@@ -29,14 +29,33 @@ export class AdminService {
     toDate.setHours(23, 59, 59, 999);
 
     const windowMatch = { createdAt: { $gte: fromDate, $lte: toDate } };
+    const [landlordIds, tenantIds] = await Promise.all([
+      this.userModel.distinct("_id", { role: UserRole.Landlord }),
+      this.userModel.distinct("_id", { role: UserRole.Tenant }),
+    ]);
 
-    const [totalUsers, totalListings, totalMatches, totalMessages, verifiedUsers] =
+    const validPropertyIds = landlordIds.length
+      ? await this.propertyModel.distinct("_id", { landlordId: { $in: landlordIds } })
+      : [];
+
+    const validMatchFilter: FilterQuery<MatchDocument> = {
+      propertyId: { $in: validPropertyIds },
+      tenantId: { $in: tenantIds },
+    };
+
+    const validMatchIds = validPropertyIds.length
+      ? await this.matchModel.distinct("_id", validMatchFilter)
+      : [];
+
+    const [totalUsers, verifiedUsers, totalListings, totalMatches, totalMessages] =
       await Promise.all([
         this.userModel.countDocuments({}),
-        this.propertyModel.countDocuments({}),
-        this.matchModel.countDocuments({}),
-        this.messageModel.countDocuments({}),
         this.userModel.countDocuments({ emailVerified: true }),
+        Promise.resolve(validPropertyIds.length),
+        Promise.resolve(validMatchIds.length),
+        validMatchIds.length
+          ? this.messageModel.countDocuments({ matchId: { $in: validMatchIds } })
+          : Promise.resolve(0),
       ]);
 
     const [roleDistribution, listingStatus, signupsByDay, messagesByDay, matchesByDay] =
@@ -45,13 +64,26 @@ export class AdminService {
           { $group: { _id: "$role", count: { $sum: 1 } } },
           { $project: { _id: 0, role: "$_id", count: 1 } },
         ]),
-        this.propertyModel.aggregate([
-          { $group: { _id: "$status", count: { $sum: 1 } } },
-          { $project: { _id: 0, status: "$_id", count: 1 } },
-        ]),
+        validPropertyIds.length
+          ? this.propertyModel.aggregate([
+              { $match: { _id: { $in: validPropertyIds } } },
+              { $group: { _id: "$status", count: { $sum: 1 } } },
+              { $project: { _id: 0, status: "$_id", count: 1 } },
+            ])
+          : Promise.resolve([]),
         this.aggregateDaily(this.userModel, windowMatch),
-        this.aggregateDaily(this.messageModel, windowMatch),
-        this.aggregateDaily(this.matchModel, windowMatch),
+        validMatchIds.length
+          ? this.aggregateDaily(this.messageModel, {
+              ...windowMatch,
+              matchId: { $in: validMatchIds },
+            })
+          : Promise.resolve([]),
+        validPropertyIds.length
+          ? this.aggregateDaily(this.matchModel, {
+              ...windowMatch,
+              ...validMatchFilter,
+            })
+          : Promise.resolve([]),
       ]);
 
     return {
@@ -293,6 +325,38 @@ export class AdminService {
 
     await this.logAudit(adminId, "LISTING_MODERATED", "Property", listingId, update, meta);
     return item;
+  }
+
+  async deleteListing(
+    adminId: string,
+    listingId: string,
+    meta: { ip?: string; userAgent?: string }
+  ) {
+    if (!Types.ObjectId.isValid(listingId)) {
+      throw new NotFoundException("Listing not found");
+    }
+
+    const listingObjectId = new Types.ObjectId(listingId);
+    const existing = await this.propertyModel.findById(listingObjectId).lean();
+    if (!existing) {
+      throw new NotFoundException("Listing not found");
+    }
+
+    const matchIds = await this.matchModel
+      .find({ propertyId: listingObjectId })
+      .distinct("_id")
+      .exec();
+
+    if (matchIds.length) {
+      await this.messageModel.deleteMany({
+        matchId: { $in: matchIds.map((id) => new Types.ObjectId(id)) },
+      });
+      await this.matchModel.deleteMany({ _id: { $in: matchIds } });
+    }
+
+    await this.propertyModel.deleteOne({ _id: listingObjectId });
+    await this.logAudit(adminId, "LISTING_DELETED", "Property", listingId, {}, meta);
+    return { deleted: true };
   }
 
   async getAuditLogs(params: { page?: string; limit?: string; action?: string }) {

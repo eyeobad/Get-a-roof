@@ -9,7 +9,7 @@ import { computeMatchScore, PropertyMatchInput } from "../common/utils/match.uti
 import { haversineDistanceKm } from "../common/utils/geo.utils";
 import { toNumber } from "../common/utils/match.helpers";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
-import { MatchStatus, UserRole } from "../common/enums";
+import { MatchStatus, RouteAccessStatus, UserRole } from "../common/enums";
 import { normalizePropertyType } from "../common/utils/property.utils";
 import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
@@ -138,7 +138,14 @@ export class PropertiesService {
       .exec();
     const validProperties = await this.removeOrphanedProperties(properties);
     const results = await this.applyScoringAndFilters(validProperties, options);
+    const routeAccessMap = await this.getTenantRouteAccessMap(
+      options?.userId,
+      results.map((property) => property._id)
+    );
     return results.map((property) => ({
+      ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
+        routeAccessStatus: RouteAccessStatus.None,
+      }),
       _id: property._id,
       address: property.address,
       monthlyPrice: property.monthlyPrice,
@@ -346,6 +353,79 @@ export class PropertiesService {
       filter.status = { $ne: MatchStatus.Dismissed };
     }
     return this.matchModel.find(filter).distinct("propertyId").exec();
+  }
+
+  private async getTenantRouteAccessMap(
+    tenantId: string | undefined,
+    propertyIds: Array<unknown>
+  ) {
+    const map = new Map<
+      string,
+      {
+        routeAccessStatus: RouteAccessStatus;
+        routeOriginLat?: number;
+        routeOriginLng?: number;
+        routeAccessExpiresAt?: Date;
+      }
+    >();
+    if (!tenantId || !propertyIds.length) return map;
+
+    const normalizedPropertyIds = propertyIds
+      .map((id) => id?.toString?.() ?? String(id))
+      .filter(Boolean);
+    if (!normalizedPropertyIds.length) return map;
+
+    const filter: Record<string, unknown> = {
+      status: { $ne: MatchStatus.Dismissed },
+      $expr: {
+        $in: [{ $toString: "$propertyId" }, normalizedPropertyIds],
+      },
+    };
+    if (Types.ObjectId.isValid(tenantId)) {
+      const tenantObjectId = new Types.ObjectId(tenantId);
+      filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
+    } else {
+      filter.tenantId = tenantId;
+    }
+
+    const matches = await this.matchModel
+      .find(filter)
+      .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
+      .lean()
+      .exec();
+
+    matches.forEach((match) => {
+      const propertyId = match.propertyId?.toString?.();
+      if (!propertyId) return;
+      const expiresAt = match.routeAccessExpiresAt
+        ? new Date(match.routeAccessExpiresAt)
+        : undefined;
+      const isActiveApproval =
+        match.routeAccessStatus === RouteAccessStatus.Approved &&
+        !!expiresAt &&
+        Number.isFinite(expiresAt.getTime()) &&
+        expiresAt.getTime() > Date.now();
+      map.set(
+        propertyId,
+        {
+          routeAccessStatus: isActiveApproval
+            ? RouteAccessStatus.Approved
+            : ((match.routeAccessStatus as RouteAccessStatus) === RouteAccessStatus.Approved
+              ? RouteAccessStatus.None
+              : (match.routeAccessStatus as RouteAccessStatus) ?? RouteAccessStatus.None),
+          routeOriginLat: isActiveApproval &&
+            typeof match.routeOriginLat === "number" && Number.isFinite(match.routeOriginLat)
+            ? match.routeOriginLat
+            : undefined,
+          routeOriginLng: isActiveApproval &&
+            typeof match.routeOriginLng === "number" && Number.isFinite(match.routeOriginLng)
+            ? match.routeOriginLng
+            : undefined,
+          routeAccessExpiresAt: isActiveApproval ? expiresAt : undefined,
+        }
+      );
+    });
+    return map;
   }
 
   private async removeOrphanedProperties(properties: PropertyDocument[]) {

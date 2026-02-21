@@ -36,11 +36,6 @@ function TenantOnboardingContent() {
         const lookingFor = (
           user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
         )?.tenant?.lookingFor;
-        const alreadyCompleted = Array.isArray(lookingFor) && lookingFor.length > 0;
-        if (alreadyCompleted && returnTo !== "review") {
-          router.replace("/explore");
-          return;
-        }
         const selectedValue = lookingFor?.[0];
         const valueToIndex: Record<string, number> = {
           NonOwnerOccupied: 0,
@@ -60,7 +55,7 @@ function TenantOnboardingContent() {
     return () => {
       mounted = false;
     };
-  }, [authToken, userId, fetchUserProfile, returnTo, router]);
+  }, [authToken, userId, fetchUserProfile]);
 
   const handleNext = async () => {
     if (selectedIndex === null) {

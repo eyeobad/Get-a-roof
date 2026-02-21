@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
-import { getApiErrorMessage, showToast } from "@/lib/alerts";
+import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -105,16 +105,18 @@ export default function SignUpPage() {
 
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
-      const message = getApiErrorMessage(err);
-      const isConflict = message.toLowerCase().includes("already in use");
-      const friendly = isConflict
-        ? "Account already exists. Log in instead."
-        : message;
-      showToast({
-        title: "Sign up failed",
-        text: friendly,
-        variant: "error",
-      });
+      if (!hasShownErrorToast(err)) {
+        const message = getApiErrorMessage(err);
+        const isConflict = message.toLowerCase().includes("already in use");
+        const friendly = isConflict
+          ? "Account already exists. Log in instead."
+          : message;
+        showToast({
+          title: "Sign up failed",
+          text: friendly,
+          variant: "error",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

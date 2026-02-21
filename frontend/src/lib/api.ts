@@ -12,6 +12,25 @@ export const API_BASE_URL =
 
 type ApiOptions = RequestInit & { token?: string };
 
+const forceRelogin = async () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem("get-a-roof-store");
+  } catch {
+    // ignore
+  }
+  try {
+    await fetch("/api/auth/session", { method: "DELETE" });
+  } catch {
+    // ignore
+  }
+  const next = `${window.location.pathname}${window.location.search}`;
+  const target = `/login?next=${encodeURIComponent(next)}`;
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.replace(target);
+  }
+};
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: ApiOptions = {}
@@ -39,6 +58,18 @@ export async function apiFetch<T = unknown>(
   if (!response.ok) {
     const rawMessage = await response.text();
     const message = rawMessage || response.statusText || "Request failed";
+    const normalized = message.toLowerCase();
+    const shouldForceRelogin =
+      Boolean(options.token) &&
+      (response.status === 401 ||
+        response.status === 403 ||
+        (response.status === 404 &&
+          (normalized.includes("user not found") ||
+            normalized.includes("account not found") ||
+            normalized.includes("invalid user"))));
+    if (shouldForceRelogin) {
+      void forceRelogin();
+    }
     const error = markErrorToastShown(new Error(message));
     showToast({
       title: getApiErrorMessage(error),

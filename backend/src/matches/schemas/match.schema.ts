@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument, Types } from "mongoose";
-import { MatchStatus } from "../../common/enums";
+import { MatchStatus, RouteAccessStatus } from "../../common/enums";
 
 export type MatchDocument = HydratedDocument<Match>;
 
@@ -32,6 +32,28 @@ export class Match {
 
   @Prop()
   landlordSeenAt?: Date;
+
+  @Prop({
+    type: String,
+    enum: RouteAccessStatus,
+    default: RouteAccessStatus.None,
+  })
+  routeAccessStatus?: RouteAccessStatus;
+
+  @Prop()
+  routeAccessRequestedAt?: Date;
+
+  @Prop()
+  routeAccessRespondedAt?: Date;
+
+  @Prop()
+  routeOriginLat?: number;
+
+  @Prop()
+  routeOriginLng?: number;
+
+  @Prop()
+  routeAccessExpiresAt?: Date;
 }
 
 export const MatchSchema = SchemaFactory.createForClass(Match);

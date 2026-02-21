@@ -21,6 +21,10 @@ export type Listing = {
   lat: number;
   lng: number;
   description: string;
+  routeAccessStatus?: "None" | "Pending" | "Approved" | "Denied";
+  routeOriginLat?: number;
+  routeOriginLng?: number;
+  routeAccessExpiresAt?: string;
 };
 
 export const listingSeed: Listing[] = [];
