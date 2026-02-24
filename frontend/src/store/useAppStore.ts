@@ -263,12 +263,14 @@ type AppState = {
   authToken: string | null;
   userId: string | null;
   user: ApiUser | null;
+  userLocation: { lat: number; lng: number } | null;
   landlordDraft: LandlordDraft;
   landlordProperties: LandlordPropertySummary[];
   landlordPropertiesWithMatches: LandlordPropertySummary[];
   landlordMatchesByProperty: Record<string, LandlordMatch[]>;
   setSelectedListingId: (id: string | null) => void;
   setSelectedThreadId: (id: string | null) => void;
+  captureUserLocation: () => Promise<{ lat: number; lng: number } | null>;
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
   login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
@@ -386,6 +388,23 @@ const decodeJwtSub = (token?: string) => {
     return "";
   }
 };
+
+const getBrowserGeolocation = () =>
+  new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("Geolocation not available"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          lat: Number(position.coords.latitude.toFixed(6)),
+          lng: Number(position.coords.longitude.toFixed(6)),
+        }),
+      (error) => reject(error),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
 
 const toTimestamp = (value?: unknown) => {
   if (!value) return new Date().toISOString();
@@ -705,6 +724,7 @@ const buildSessionReset = (overrides: Partial<AppState> = {}) => ({
   landlordProperties: [],
   landlordPropertiesWithMatches: [],
   landlordMatchesByProperty: {},
+  userLocation: null,
   ...overrides,
 });
 
@@ -723,6 +743,7 @@ export const useAppStore = create<AppState>()(
       conversations: [],
       messagesByMatch: {},
       typingByMatch: {},
+      userLocation: null,
       authToken: null,
       userId: null,
       user: null,
@@ -740,6 +761,17 @@ export const useAppStore = create<AppState>()(
         }
         if (id && state.conversations.some((conversation) => conversation.id === id)) {
           void get().markMatchRead(id);
+        }
+      },
+      captureUserLocation: async () => {
+        const state = get();
+        if (state.userLocation) return state.userLocation;
+        try {
+          const position = await getBrowserGeolocation();
+          set({ userLocation: position });
+          return position;
+        } catch {
+          return null;
         }
       },
       setAuth: (token, userId) => set({ authToken: token, userId }),
@@ -1095,8 +1127,8 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance,
           propertyType: filters?.propertyType,
-          lat: filters?.lat,
-          lng: filters?.lng,
+          lat: filters?.lat ?? state.userLocation?.lat,
+          lng: filters?.lng ?? state.userLocation?.lng,
           selfCompound: filters?.toggles?.selfCompound,
           shortlets: filters?.toggles?.shortlets,
           sharedCompound: filters?.toggles?.sharedCompound,
@@ -1133,8 +1165,8 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance,
           propertyType: filters?.propertyType,
-          lat: filters?.lat,
-          lng: filters?.lng,
+          lat: filters?.lat ?? state.userLocation?.lat,
+          lng: filters?.lng ?? state.userLocation?.lng,
           selfCompound: filters?.toggles?.selfCompound,
           shortlets: filters?.toggles?.shortlets,
           sharedCompound: filters?.toggles?.sharedCompound,
@@ -1670,6 +1702,7 @@ export const useAppStore = create<AppState>()(
         authToken: state.authToken,
         userId: state.userId,
         user: state.user,
+        userLocation: state.userLocation,
         landlordDraft: state.landlordDraft,
         landlordProperties: state.landlordProperties,
         landlordPropertiesWithMatches: state.landlordPropertiesWithMatches,

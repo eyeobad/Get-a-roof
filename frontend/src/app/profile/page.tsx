@@ -98,7 +98,7 @@ type ProfileState = {
   apartmentPrefs: Record<string, boolean>; // check label -> bool
 };
 
-type ModalType = "none" | "photo" | "contact" | "preferences";
+type ModalType = "none" | "photo" | "preferences";
 
 type ApiTenantPreferences = {
   lookingFor?: string[];
@@ -123,14 +123,6 @@ type ApiUser = {
   phoneNumber?: string;
   photoUrl?: string;
   preferences?: { tenant?: ApiTenantPreferences };
-};
-
-type ContactFieldKey = keyof Pick<ProfileState, "fullName" | "email" | "phone">;
-type ContactField = {
-  key: ContactFieldKey;
-  label: string;
-  icon: string;
-  type: "text" | "email" | "tel";
 };
 
 const defaultProfile: ProfileState = {
@@ -196,10 +188,10 @@ function ToggleRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between bg-white px-6 py-5 rounded-3xl shadow-sm border border-slate-200">
+    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
       <div className="flex flex-col">
-        <span className="text-lg font-bold text-slate-900">{title}</span>
-        <span className="text-sm text-slate-500 font-medium">{subtitle}</span>
+        <span className="text-base font-bold text-slate-900">{title}</span>
+        <span className="text-xs font-medium text-slate-500">{subtitle}</span>
       </div>
 
       <button
@@ -272,6 +264,7 @@ export default function ProfilePage() {
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updateUser = useAppStore((state) => state.updateUser);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const uploadProfilePhoto = useAppStore((state) => state.uploadProfilePhoto);
   const deleteAccount = useAppStore((state) => state.deleteAccount);
@@ -294,14 +287,6 @@ export default function ProfilePage() {
   useToastError(saveError);
   useToastError(photoUploadError);
   useToastError(deleteError);
-  const contactFields: ContactField[] = useMemo(
-    () => [
-      { key: "fullName", label: "Full Name", icon: "person", type: "text" },
-      { key: "email", label: "Email", icon: "mail", type: "email" },
-      { key: "phone", label: "Phone Number", icon: "phone", type: "tel" },
-    ],
-    []
-  );
 
   const openModal = (type: ModalType) => {
     setDraft(profile); // snapshot current data into draft
@@ -313,6 +298,22 @@ export default function ProfilePage() {
   const saveDraft = () => {
     setProfile(draft);
     setActiveModal("none");
+  };
+
+  const handleSavePhoto = async () => {
+    if (!authToken || !userId) {
+      router.push("/login");
+      return;
+    }
+    setSaveError(null);
+    try {
+      await updateUser({ photoUrl: draft.photoUrl });
+      setProfile((prev) => ({ ...prev, photoUrl: draft.photoUrl }));
+      setDraft((prev) => ({ ...prev, photoUrl: draft.photoUrl }));
+      setActiveModal("none");
+    } catch (err) {
+      setSaveError(err);
+    }
   };
 
   const singleSelectSummary = useMemo(() => {
@@ -328,6 +329,11 @@ export default function ProfilePage() {
       router.replace("/login");
     }
   }, [authToken, userId, router]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    void captureUserLocation();
+  }, [authToken, captureUserLocation]);
 
   useEffect(() => {
     if (!authToken || !userId) return;
@@ -358,10 +364,6 @@ export default function ProfilePage() {
     }
     setIsSaving(true);
     setSaveError(null);
-
-    const nameParts = profile.fullName.trim().split(/\s+/).filter(Boolean);
-    const firstName = nameParts.shift() || "";
-    const lastName = nameParts.join(" ");
 
     const lookingForMap: Record<string, string> = {
       "Non-owner-occupied": "NonOwnerOccupied",
@@ -402,12 +404,6 @@ export default function ProfilePage() {
     });
 
     try {
-      await updateUser({
-        firstName,
-        lastName,
-        phoneNumber: profile.phone,
-        photoUrl: profile.photoUrl,
-      });
       await updatePreferences({ tenant: tenantPayload });
     } catch (err) {
       setSaveError(err);
@@ -427,8 +423,6 @@ export default function ProfilePage() {
     try {
       const photoUrl = await uploadProfilePhoto(file);
       if (photoUrl) {
-        const nextProfile = { ...profile, photoUrl };
-        setProfile(nextProfile);
         setDraft((prev) => ({ ...prev, photoUrl }));
       }
     } catch (err) {
@@ -438,6 +432,7 @@ export default function ProfilePage() {
       event.target.value = "";
     }
   };
+
 
   const handleDeleteAccount = async () => {
     if (!deleteAccount || !authToken || !userId) {
@@ -462,11 +457,11 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background-light text-slate-900">
+    <div className="min-h-screen w-full bg-slate-50 text-slate-900">
       {/* Responsive container */}
-      <div className="mx-auto w-full max-w-md lg:max-w-6xl lg:px-6">
+      <div className="mx-auto w-full max-w-md px-4 lg:max-w-7xl lg:px-6">
         {/* Header */}
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-background-light px-4 py-3 lg:px-0">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/80 bg-slate-50/95 py-3 backdrop-blur-sm">
           <button
             onClick={() => router.back()}
             aria-label="Go back"
@@ -489,18 +484,18 @@ export default function ProfilePage() {
         </header>
 
         {/* Layout: mobile = single column, desktop = two columns */}
-        <div className="lg:grid lg:grid-cols-[360px_1fr] lg:gap-6 lg:py-6">
+        <div className="lg:grid lg:grid-cols-[380px_1fr] lg:gap-8 lg:py-6">
           {/* LEFT rail (desktop) */}
           <aside className="hidden lg:block">
             <div className="sticky top-[76px] space-y-6">
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Profile</p>
                   <button
                     onClick={() => openModal("photo")}
                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
                     Edit Photo
                   </button>
                 </div>
@@ -516,7 +511,7 @@ export default function ProfilePage() {
                       className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
                       aria-label="Edit photo"
                     >
-                      <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
                     </button>
                   </div>
 
@@ -524,16 +519,13 @@ export default function ProfilePage() {
                   <p className="mt-1 text-sm text-slate-500">{profile.email}</p>
                   <p className="text-sm text-slate-500">{profile.phone}</p>
 
-                  <button
-                    onClick={() => openModal("contact")}
-                    className="mt-5 w-full rounded-2xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-                  >
-                    Edit Contact Details
-                  </button>
+                  <p className="mt-4 text-xs font-medium text-slate-500">
+                    Name, email and phone are read-only here.
+                  </p>
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">My Profile</p>
                   <button
@@ -558,7 +550,7 @@ export default function ProfilePage() {
           </aside>
 
           {/* MAIN content */}
-          <main className="flex-1 overflow-visible px-4 pb-28 pt-6 lg:px-0 lg:pb-10 lg:pt-0">
+          <main className="flex-1 overflow-visible pb-28 pt-6 lg:pb-10 lg:pt-0">
             {/* Mobile photo section */}
             <section className="flex flex-col items-center gap-4 lg:hidden">
               <div className="relative">
@@ -576,9 +568,9 @@ export default function ProfilePage() {
               </div>
               <button
                 onClick={() => openModal("photo")}
-                className="text-xl font-bold text-primary hover:underline"
+                className="text-sm font-semibold text-primary hover:underline"
               >
-                Edit Photo
+                Update photo
               </button>
             </section>
 
@@ -586,34 +578,33 @@ export default function ProfilePage() {
             <section className="mt-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-primary">Contact Details</h3>
-                <button
-                  onClick={() => openModal("contact")}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
-                  Edit
-                </button>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                  Read-only
+                </span>
               </div>
-
-              {[
-                { label: "Full Name", icon: "person", value: profile.fullName },
-                { label: "Email", icon: "mail", value: profile.email },
-                { label: "Phone Number", icon: "phone", value: profile.phone },
-              ].map((field) => (
-                <div key={field.label} className="space-y-2">
-                  <label className="text-lg font-bold text-primary">{field.label}</label>
-                  <div className="flex items-center gap-3 rounded-full border-2 border-slate-200 bg-white px-4 py-3">
-                    <span className="material-symbols-outlined text-slate-400 text-[24px]">
-                      {field.icon}
-                    </span>
-                    <input
-                      className="w-full bg-transparent text-lg outline-none placeholder:text-slate-400"
-                      value={field.value}
-                      readOnly
-                    />
-                  </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="space-y-4">
+                  {[
+                    { label: "Full Name", icon: "person", value: profile.fullName },
+                    { label: "Email", icon: "mail", value: profile.email },
+                    { label: "Phone Number", icon: "phone", value: profile.phone },
+                  ].map((field) => (
+                    <div key={field.label} className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-500">{field.label}</label>
+                      <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <span className="material-symbols-outlined text-slate-400 text-[20px]">
+                          {field.icon}
+                        </span>
+                        <input
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                          value={field.value}
+                          readOnly
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </section>
 
             {/* My Profile section (read view) - UPDATED: Hidden on Desktop */}
@@ -664,7 +655,7 @@ export default function ProfilePage() {
             {/* Annual earnings */}
             <section className="mt-8 space-y-5">
               <h3 className="text-2xl font-bold text-primary">Annual Earnings</h3>
-              <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
                       <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
@@ -697,7 +688,7 @@ export default function ProfilePage() {
             <section className="mt-8 space-y-3">
               <h3 className="text-2xl font-bold text-primary">Apartment Preference</h3>
               
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 {apartmentChecks.map((check) => (
                   <ToggleRow
                     key={check.label}
@@ -720,7 +711,7 @@ export default function ProfilePage() {
 
             {/* Commute radius */}
             <section className="mt-8 space-y-5">
-              <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold text-slate-900">Max Commute Radius</span>
                   <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
@@ -819,21 +810,21 @@ export default function ProfilePage() {
 
       {/* ---------------- MODALS ---------------- */}
 
-      {/* Edit Photo (state-based) */}
+      {/* Edit Photo */}
       <Modal
         open={activeModal === "photo"}
-        title="Edit Photo"
+        title="Update Profile Photo"
         onClose={closeModal}
         footer={
           <div className="flex gap-3">
             <button
               onClick={closeModal}
-              className="flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
             >
               Cancel
             </button>
             <button
-              onClick={saveDraft}
+              onClick={handleSavePhoto}
               className="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white hover:brightness-110 active:scale-[0.98] transition"
             >
               Save Photo
@@ -841,50 +832,46 @@ export default function ProfilePage() {
           </div>
         }
       >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
             <div
               className="h-16 w-16 rounded-full border-2 border-white bg-cover bg-center shadow-sm"
               style={{ backgroundImage: `url('${draft.photoUrl}')` }}
             />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-slate-900">Preview</p>
-              <p className="text-xs text-slate-500 truncate">{draft.photoUrl}</p>
+              <p className="truncate text-xs text-slate-500">{draft.photoUrl}</p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-900">Photo URL</label>
+            <label className="text-sm font-bold text-slate-900">Image URL</label>
             <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
               <span className="material-symbols-outlined text-slate-400">link</span>
               <input
                 value={draft.photoUrl}
-                onChange={(e) => setDraft((d) => ({ ...d, photoUrl: e.target.value }))}
-                className="w-full bg-transparent outline-none text-sm"
-                placeholder="Paste image URL…"
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, photoUrl: event.target.value }))
+                }
+                className="w-full bg-transparent text-sm outline-none"
+                placeholder="Paste image URL"
               />
             </div>
-            <p className="text-xs text-slate-500">
-              Tip: use a direct image URL (ends with .jpg/.png) for best results.
-            </p>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-900">Upload from device</label>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploadingPhoto}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span className="material-symbols-outlined text-[18px]">upload</span>
-                {isUploadingPhoto ? "Uploading…" : "Choose a file"}
-              </button>
-              <p className="text-xs text-slate-500">
-                Files are uploaded securely and stored privately unless you update
-                permissions.
-              </p>
-            </div>
+
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPhoto}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-[18px]">upload</span>
+              {isUploadingPhoto ? "Uploading..." : "Upload from device"}
+            </button>
+            <p className="mt-2 text-center text-xs text-slate-500">
+              JPG, PNG, WEBP recommended
+            </p>
             <input
               ref={fileInputRef}
               type="file"
@@ -893,48 +880,6 @@ export default function ProfilePage() {
               onChange={handlePhotoFileChange}
             />
           </div>
-        </div>
-      </Modal>
-
-      {/* Edit Contact (state-based) */}
-      <Modal
-        open={activeModal === "contact"}
-        title="Edit Contact Details"
-        onClose={closeModal}
-        footer={
-          <div className="flex gap-3">
-            <button
-              onClick={closeModal}
-              className="flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-700 border border-slate-200 hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={saveDraft}
-              className="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white hover:brightness-110 active:scale-[0.98] transition"
-            >
-              Save Changes
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          {contactFields.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <label className="text-sm font-bold text-slate-900">{field.label}</label>
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
-                <span className="material-symbols-outlined text-slate-400">{field.icon}</span>
-                <input
-                  type={field.type}
-                  value={draft[field.key]}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, [field.key]: e.target.value }))
-                  }
-                  className="w-full bg-transparent outline-none text-sm"
-                />
-              </div>
-            </div>
-          ))}
         </div>
       </Modal>
 

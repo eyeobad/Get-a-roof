@@ -145,6 +145,29 @@ function TypingIndicator({ visible }: { visible: boolean }) {
   );
 }
 
+function RouteHintToast({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <div className="absolute -top-16 right-14 z-20">
+      <button
+        type="button"
+        onClick={onClose}
+        className="relative inline-flex items-center gap-1 rounded-2xl border border-blue-100 bg-white px-3 py-2 text-[11px] font-semibold text-primary shadow-sm"
+      >
+        <span className="material-symbols-outlined text-[14px]">map</span>
+        Get route
+        <span className="absolute -bottom-1 right-3 h-2 w-2 rotate-45 border-b border-r border-blue-100 bg-white" />
+      </button>
+    </div>
+  );
+}
+
 function MessagesContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -186,6 +209,7 @@ function MessagesContent() {
   const [messageText, setMessageText] = useState("");
   const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showRouteHint, setShowRouteHint] = useState(false);
   const [routeAccessDurationByRequestId, setRouteAccessDurationByRequestId] =
     useState<Record<string, 5 | 30 | 1440>>({});
   const activeConversationId =
@@ -410,6 +434,16 @@ function MessagesContent() {
     setDidApplyDraft(true);
   }, [didApplyDraft, draftParam, activeConversationId]);
 
+  useEffect(() => {
+    if (isLandlordContext || !activeConversationId) {
+      setShowRouteHint(false);
+      return;
+    }
+    setShowRouteHint(true);
+    const timer = window.setTimeout(() => setShowRouteHint(false), 3200);
+    return () => window.clearTimeout(timer);
+  }, [isLandlordContext, activeConversationId]);
+
   if (!authToken) {
     return (
       <div className="min-h-screen bg-background-light text-slate-900 font-display flex items-center justify-center px-6">
@@ -447,14 +481,7 @@ function MessagesContent() {
               <h1 className="text-2xl font-bold tracking-tight text-primary">
                 Your Conversations
               </h1>
-              <button
-                aria-label="New Message"
-                className="rounded-full p-2 text-primary hover:bg-slate-100 transition-colors"
-              >
-                <span className="material-symbols-outlined text-[28px]">
-                  edit_square
-                </span>
-              </button>
+              <div className="h-10 w-10" />
             </header>
 
             <main className="flex-1 overflow-y-auto pb-24">
@@ -551,12 +578,7 @@ function MessagesContent() {
                 </div>
               </div>
 
-              <button
-                aria-label="More"
-                className="rounded-full p-2 hover:bg-slate-100 transition-colors text-slate-700"
-              >
-                <Icon name="more_vert" />
-              </button>
+              <div className="h-9 w-9" />
             </header>
 
             <main
@@ -581,7 +603,7 @@ function MessagesContent() {
                       {m.routeRequest ? (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[18px]">route</span>
+                            <span className="material-symbols-outlined text-[18px]">map</span>
                             <p className="text-sm font-semibold">Route Access Request</p>
                           </div>
                           <span
@@ -660,7 +682,11 @@ function MessagesContent() {
 
             <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-white/95 backdrop-blur-sm">
               <div className="px-3 pt-3 pb-3">
-                <div className="flex items-end gap-2">
+                <div className="relative flex items-end gap-2">
+                  <RouteHintToast
+                    visible={showRouteHint && !isLandlordContext}
+                    onClose={() => setShowRouteHint(false)}
+                  />
                   <button
                     aria-label="Attach"
                     className="mb-1 rounded-full p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
@@ -692,7 +718,7 @@ function MessagesContent() {
                     className="mb-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     title="Request route access"
                   >
-                    <span className="material-symbols-outlined text-[20px]">route</span>
+                    <span className="material-symbols-outlined text-[20px]">map</span>
                   </button>
 
                   <button
@@ -738,14 +764,7 @@ function MessagesContent() {
                     {conversations.length} chats
                   </p>
                 </div>
-                <button
-                  aria-label="New Message"
-                  className="rounded-full p-2 text-primary hover:bg-slate-100 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[26px]">
-                    edit_square
-                  </span>
-                </button>
+                <div className="h-10 w-10" />
               </header>
 
               <div className="px-6 pt-4 pb-3">
@@ -872,17 +891,7 @@ function MessagesContent() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button className="rounded-full p-2 hover:bg-slate-100 text-slate-700 transition-colors">
-                        <Icon name="call" />
-                      </button>
-                      <button className="rounded-full p-2 hover:bg-slate-100 text-slate-700 transition-colors">
-                        <Icon name="videocam" />
-                      </button>
-                      <button className="rounded-full p-2 hover:bg-slate-100 text-slate-700 transition-colors">
-                        <Icon name="more_vert" />
-                      </button>
-                    </div>
+                    <div className="h-9 w-9" />
                   </header>
 
                   <main
@@ -914,7 +923,7 @@ function MessagesContent() {
                               {m.routeRequest ? (
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-[18px]">route</span>
+                                    <span className="material-symbols-outlined text-[18px]">map</span>
                                     <p className="text-sm font-semibold">Route Access Request</p>
                                   </div>
                                   <span
@@ -994,7 +1003,11 @@ function MessagesContent() {
                   </main>
 
                   <div className="border-t border-slate-100 bg-white/95 backdrop-blur-sm px-6 py-4">
-                    <div className="mx-auto flex max-w-3xl items-end gap-3">
+                    <div className="relative mx-auto flex max-w-3xl items-end gap-3">
+                      <RouteHintToast
+                        visible={showRouteHint && !isLandlordContext}
+                        onClose={() => setShowRouteHint(false)}
+                      />
                       <button
                         aria-label="Attach"
                         className="mb-1 rounded-full p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
@@ -1026,7 +1039,7 @@ function MessagesContent() {
                         className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         title="Request route access"
                       >
-                        <span className="material-symbols-outlined text-[20px]">route</span>
+                        <span className="material-symbols-outlined text-[20px]">map</span>
                       </button>
 
                       <button

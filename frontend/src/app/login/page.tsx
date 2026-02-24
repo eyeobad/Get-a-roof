@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const login = useAppStore((state) => state.login);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const router = useRouter();
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -46,6 +47,9 @@ export default function LoginPage() {
         (!tenantPreferences ||
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
+      if (!isAdmin) {
+        void captureUserLocation();
+      }
       if (isAdmin) {
         router.push("/admin");
       } else if (isLandlord) {

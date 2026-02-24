@@ -281,41 +281,36 @@ function MapCanvas({
           source: "approx-areas",
           paint: {
             "circle-color": "#0a44b8",
-            "circle-opacity": [
-              "case",
-              ["get", "isExact"],
-              0.14,
-              0.24,
-            ],
+            "circle-opacity": 0.2,
             "circle-radius": [
-              "case",
-              ["get", "isExact"],
-              [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                10,
-                30,
-                14,
-                60,
-              ],
-              [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                10,
-                45,
-                14,
-                90,
-              ],
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              10,
+              100,
+              14,
+              170,
+            ],
+            "circle-blur": 0.18,
+          },
+        });
+        map.addLayer({
+          id: "approx-area-outline",
+          type: "circle",
+          source: "approx-areas",
+          paint: {
+            "circle-color": "transparent",
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              10,
+              100,
+              14,
+              170,
             ],
             "circle-stroke-color": "#0a44b8",
-            "circle-stroke-width": [
-              "case",
-              ["get", "isExact"],
-              1.5,
-              2,
-            ],
+            "circle-stroke-width": 2,
             "circle-stroke-opacity": 0.55,
           },
         });
@@ -423,53 +418,62 @@ function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoadedRef.current) return;
+    if (!map) return;
 
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
+    const renderMapPoints = () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
 
-    points.forEach((point) => {
-      const markerEl = document.createElement("div");
-      markerEl.className = "map-price-marker";
-      markerEl.textContent = "";
-      markerEl.setAttribute("aria-label", "Property marker");
-      markerEl.style.width = point.isExact ? "18px" : "14px";
-      markerEl.style.height = point.isExact ? "18px" : "14px";
-      markerEl.style.borderRadius = "999px";
-      markerEl.style.background = point.isExact ? "#0a44b8" : "rgba(10,68,184,0.78)";
-      markerEl.style.border = point.isExact ? "3px solid #fff" : "2px solid #0a44b8";
-      markerEl.style.boxShadow = point.index === activeIndex
-        ? "0 12px 28px rgba(10,68,184,0.45)"
-        : "0 8px 18px rgba(10,68,184,0.35)";
-      markerEl.style.transform = point.index === activeIndex
-        ? "translate(-50%, -50%) scale(1.15)"
-        : "translate(-50%, -50%)";
-      markerEl.style.transition = "transform 0.2s ease, box-shadow 0.2s ease";
-      markerEl.addEventListener("click", () => onSelect(point.index));
-      const marker = new mapboxgl.Marker({ element: markerEl })
-        .setLngLat([point.displayLng, point.displayLat])
-        .addTo(map);
-      markersRef.current.push(marker);
-    });
-
-    const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points.map((point) => ({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [point.displayLng, point.displayLat],
-        },
-        properties: {
-          isExact: point.isExact,
-        },
-      }));
-
-    const areaSource = map.getSource("approx-areas") as mapboxgl.GeoJSONSource | undefined;
-    if (areaSource) {
-      areaSource.setData({
-        type: "FeatureCollection",
-        features: approxFeatures,
+      points.forEach((point) => {
+        if (!point.isExact) return;
+        const markerEl = document.createElement("div");
+        markerEl.className = "map-price-marker map-dot-marker";
+        markerEl.textContent = "";
+        markerEl.setAttribute("aria-label", "Property marker");
+        markerEl.style.width = "18px";
+        markerEl.style.height = "18px";
+        markerEl.style.borderRadius = "999px";
+        markerEl.style.background = "#0a44b8";
+        markerEl.style.border = "3px solid #fff";
+        markerEl.style.boxShadow = point.index === activeIndex
+          ? "0 12px 28px rgba(10,68,184,0.45)"
+          : "0 8px 18px rgba(10,68,184,0.35)";
+        markerEl.style.transform = point.index === activeIndex
+          ? "translate(-50%, -50%) scale(1.15)"
+          : "translate(-50%, -50%)";
+        markerEl.style.transition = "transform 0.2s ease, box-shadow 0.2s ease";
+        markerEl.addEventListener("click", () => onSelect(point.index));
+        const marker = new mapboxgl.Marker({ element: markerEl })
+          .setLngLat([point.displayLng, point.displayLat])
+          .addTo(map);
+        markersRef.current.push(marker);
       });
-    }
+
+      const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points
+        .filter((point) => !point.isExact)
+        .map((point) => ({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [point.lng, point.lat],
+          },
+          properties: {},
+        }));
+
+      const areaSource = map.getSource("approx-areas") as mapboxgl.GeoJSONSource | undefined;
+      if (areaSource) {
+        areaSource.setData({
+          type: "FeatureCollection",
+          features: approxFeatures,
+        });
+      }
+    };
+
+    renderMapPoints();
+    map.on("load", renderMapPoints);
+    return () => {
+      map.off("load", renderMapPoints);
+    };
   }, [points, activeIndex, onSelect]);
 
   useEffect(() => {
@@ -515,6 +519,8 @@ export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const mapMatches = useAppStore((state) => state.mapMatches);
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
+  const userLocation = useAppStore((state) => state.userLocation);
   const likedIds = useAppStore((state) => state.likedIds);
   const toggleLikeListing = useAppStore((state) => state.toggleLikeListing);
   const ensureThreadForListing = useAppStore(
@@ -534,9 +540,10 @@ export default function MapView() {
 
   useEffect(() => {
     if (authToken) {
+      void captureUserLocation();
       void loadMapMatches();
     }
-  }, [authToken, loadMapMatches]);
+  }, [authToken, loadMapMatches, captureUserLocation]);
 
   const sourceListings = mapMatches;
   const showEmptyState = mapMatches.length === 0;
@@ -573,7 +580,9 @@ export default function MapView() {
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
           return null;
         }
-        const display = jitterPoint(lat, lng, `${listing.id}-${isExact ? "exact" : "approx"}`);
+        const display = isExact
+          ? jitterPoint(lat, lng, `${listing.id}-exact`)
+          : { lat, lng };
         return {
           id: listing.id,
           index,
@@ -586,6 +595,10 @@ export default function MapView() {
       })
       .filter((point): point is MapPoint => Boolean(point));
   }, [sourceListings, authToken]);
+  const hasApproxArea = useMemo(
+    () => mapPoints.some((point) => !point.isExact),
+    [mapPoints]
+  );
 
   const activeIndex =
     listItems.length > 0
@@ -673,21 +686,36 @@ export default function MapView() {
         return;
       }
       const sourceListing = sourceListings.find((listing) => listing.id === activeListing.id);
-      let originLng = sourceListing?.routeOriginLng;
-      let originLat = sourceListing?.routeOriginLat;
-      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
-        if (!navigator.geolocation) {
-          setRoutingError("Geolocation is not supported in this browser.");
-          return;
-        }
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 8000,
+      let originLng: number | undefined;
+      let originLat: number | undefined;
+
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 8000,
+            });
           });
-        });
-        originLng = position.coords.longitude;
-        originLat = position.coords.latitude;
+          originLng = position.coords.longitude;
+          originLat = position.coords.latitude;
+        } catch {
+          // Fall back to stored values.
+        }
+      }
+      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
+        if (userLocation) {
+          originLng = userLocation.lng;
+          originLat = userLocation.lat;
+        }
+      }
+      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
+        originLng = sourceListing?.routeOriginLng;
+        originLat = sourceListing?.routeOriginLat;
+      }
+      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
+        setRoutingError("Allow location access to get directions.");
+        return;
       }
       const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${originLng},${originLat};${target.lng},${target.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
       const response = await fetch(url);
@@ -825,6 +853,17 @@ export default function MapView() {
               </button>
             </div>
 
+            {hasApproxArea && (
+              <div className="absolute left-3 top-4 z-30">
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-primary shadow-sm backdrop-blur-sm">
+                  <span className="material-symbols-outlined text-[14px]">
+                    location_on
+                  </span>
+                  <span>Approximate area shown</span>
+                </div>
+              </div>
+            )}
+
             {showEmptyState && (
               <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
                 <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
@@ -839,112 +878,81 @@ export default function MapView() {
             )}
 
             {listItems.length > 0 && (
-              <div className="absolute bottom-4 left-4 right-4 z-20">
-                <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-100 relative">
-                  <div className="space-y-3">
-                    <div className="flex gap-4 items-start">
-                      <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
-                      {activeListing ? (
-                        <Image
-                          src={activeListing.image}
-                          alt={activeListing.displayAddress}
-                          fill
-                          className="object-cover"
-                        />
-                      ) : null}
-                    </div>
+              <div className="absolute bottom-4 left-3 z-20 w-[78%] max-w-[340px]">
+                <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm">
+                  <div className="space-y-2">
+                    <div className="flex gap-3 items-start">
+                      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
+                        {activeListing ? (
+                          <Image
+                            src={activeListing.image}
+                            alt={activeListing.displayAddress}
+                            fill
+                            className="object-cover"
+                          />
+                        ) : null}
+                      </div>
 
-                    <div className="flex-1 flex flex-col justify-between h-24 py-0.5">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <h2 className="text-xl font-bold text-primary leading-none">
-                            {activeListing?.price ?? "₦0"}
-                          </h2>
-                        </div>
+                      <div className="flex-1 flex flex-col justify-between h-16 py-0.5 min-w-0">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <h2 className="truncate text-base font-bold text-primary leading-none">
+                              {activeListing?.price ?? "₦0"}
+                            </h2>
+                          </div>
 
-                        <div className="flex items-center gap-3 text-gray-500 mt-1">
-                          {[
-                            { icon: "bed", value: activeListing?.beds ?? 0, label: "bd" },
-                            { icon: "bathtub", value: activeListing?.baths ?? 0, label: "ba" },
-                            { icon: "square_foot", value: activeListing?.sqft ?? "0", label: "sqft" },
-                          ].map((item) => (
-                            <div
-                              key={`${item.icon}-${item.label}`}
-                              className="flex items-center gap-1 text-sm font-medium"
-                            >
-                              {item.icon && (
-                                <span className="material-symbols-outlined text-[18px]">
-                                  {item.icon}
-                                </span>
-                              )}
-                              <span>{item.value}</span>
-                              <span>{item.label}</span>
-                            </div>
-                          ))}
-                        </div>
+                          <div className="flex items-center gap-2 text-gray-500 mt-1">
+                            {[
+                              { icon: "bed", value: activeListing?.beds ?? 0, label: "bd" },
+                              { icon: "bathtub", value: activeListing?.baths ?? 0, label: "ba" },
+                              { icon: "square_foot", value: activeListing?.sqft ?? "0", label: "sqft" },
+                            ].map((item) => (
+                              <div
+                                key={`${item.icon}-${item.label}`}
+                                className="flex items-center gap-1 text-[11px] font-medium"
+                              >
+                                {item.icon && (
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    {item.icon}
+                                  </span>
+                                )}
+                                <span>{item.value}</span>
+                                <span>{item.label}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {activeListing && (
-                      <Link
-                        href={`/property-details/${activeListing.id}`}
-                        className="w-full mt-4 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-full flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/25 group relative overflow-hidden"
-                      >
-                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                        <span className="relative">View Home Details</span>
-                        <span className="material-symbols-outlined text-sm relative group-hover:translate-x-1 transition-transform duration-200">
-                          arrow_forward
-                        </span>
-                      </Link>
-                    )}
-
-                    {activeListing?.isExact ? (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-primary">
-                            near_me
-                          </span>
-                          <span className="text-xs font-semibold text-slate-600">
-                            Directions
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <select
-                            value={routingProfile}
-                            onChange={(event) =>
-                              setRoutingProfile(
-                                event.target.value as "driving" | "walking" | "cycling"
-                              )
-                            }
-                            className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                          >
-                            <option value="driving">Driving</option>
-                            <option value="walking">Walking</option>
-                            <option value="cycling">Cycling</option>
-                          </select>
-                          <button
-                            type="button"
-                            onClick={requestDirections}
-                            disabled={isRouting}
-                            className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                          >
-                            {isRouting ? "Routing..." : "Get Route"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                        <p>Directions unlock after the landlord accepts your request.</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      {activeListing && (
+                        <Link
+                          href={`/property-details/${activeListing.id}`}
+                          className="inline-flex flex-1 items-center justify-center rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white"
+                        >
+                          View details
+                        </Link>
+                      )}
+                      {activeListing?.isExact ? (
+                        <button
+                          type="button"
+                          onClick={requestDirections}
+                          disabled={isRouting}
+                          className="inline-flex flex-1 items-center justify-center rounded-full border border-primary bg-white px-3 py-2 text-xs font-semibold text-primary disabled:opacity-60"
+                        >
+                          {isRouting ? "Routing..." : "Get route"}
+                        </button>
+                      ) : (
                         <button
                           type="button"
                           onClick={requestRouteAccess}
-                          className="mt-2 w-full rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white cursor-pointer"
+                          className="inline-flex flex-1 items-center justify-center rounded-full border border-primary bg-white px-3 py-2 text-xs font-semibold text-primary"
                         >
-                          Message landlord to request directions
+                          Request route
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -976,143 +984,143 @@ export default function MapView() {
       </div>
 
       <div className="hidden lg:flex h-screen overflow-hidden bg-background-light text-text-light font-display">
-                            <aside className="w-[450px] h-full bg-surface-light shadow-2xl border-r border-gray-200 flex flex-col overflow-hidden">
-                              <div className="p-6 border-b border-gray-200 shrink-0">
-                                <div className="flex items-center justify-between mb-2">
-                                  <h2 className="text-lg font-bold text-text-light">
-                                    {listItems.length} Properties Found
-                                  </h2>
-                                  <span className="text-xs font-medium text-text-muted-light bg-gray-100 px-2 py-1 rounded">
-                                    Springfield, IL
-                                  </span>
-                                </div>
-                                <div className="text-sm text-text-muted-light">
-                                  Sorted by:{" "}
-                                  <span className="font-medium text-primary cursor-pointer">
-                                    Price (Low to High)
-                                  </span>
-                                </div>
-                              </div>
+        <aside className="w-[450px] h-full bg-surface-light shadow-2xl border-r border-gray-200 flex flex-col overflow-hidden">
+          <div className="p-6 border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-text-light">
+                {listItems.length} Properties Found
+              </h2>
+              <span className="text-xs font-medium text-text-muted-light bg-gray-100 px-2 py-1 rounded">
+                Springfield, IL
+              </span>
+            </div>
+            <div className="text-sm text-text-muted-light">
+              Sorted by:{" "}
+              <span className="font-medium text-primary cursor-pointer">
+                Price (Low to High)
+              </span>
+            </div>
+          </div>
 
-                              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-                                {showEmptyState ? (
-                                  <EmptyState
-                                    title="No matches yet"
-                                    message="Like a few listings in Explore to see your matches here."
-                                    ctaLabel="Browse listings"
-                                    ctaHref="/explore"
-                                  />
-                                ) : (
-                                  listItems.map((item) => (
-                                    <PropertyCard
-                                      key={item.id}
-                                      item={item}
-                                      onToggleSave={toggleLikeListing}
-                                    />
-                                  ))
-                                )}
-                                {!showEmptyState && <div className="h-10" />}
-                              </div>
-                            </aside>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+            {showEmptyState ? (
+              <EmptyState
+                title="No matches yet"
+                message="Like a few listings in Explore to see your matches here."
+                ctaLabel="Browse listings"
+                ctaHref="/explore"
+              />
+            ) : (
+              listItems.map((item) => (
+                <PropertyCard
+                  key={item.id}
+                  item={item}
+                  onToggleSave={toggleLikeListing}
+                />
+              ))
+            )}
+            {!showEmptyState && <div className="h-10" />}
+          </div>
+        </aside>
 
-                            <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
-                              <MapCanvas
-                                points={mapPoints}
-                                activeIndex={activeIndex}
-                                onSelect={setSelectedIndex}
-                                onMapReady={handleDesktopMapReady}
-                                routeGeojson={routeGeojson}
-                                onMapError={setMapError}
-                                onMapStatus={handleMapStatus}
-                              />
-                              <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
-                                <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleZoomIn(desktopMapRef)}
-                                    className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
-                                  >
-                                    <span className="material-symbols-outlined">add</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleZoomOut(desktopMapRef)}
-                                    className="p-3 hover:bg-gray-100 text-gray-600"
-                                  >
-                                    <span className="material-symbols-outlined">remove</span>
-                                  </button>
-                                </div>
+        <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
+          <MapCanvas
+            points={mapPoints}
+            activeIndex={activeIndex}
+            onSelect={setSelectedIndex}
+            onMapReady={handleDesktopMapReady}
+            routeGeojson={routeGeojson}
+            onMapError={setMapError}
+            onMapStatus={handleMapStatus}
+          />
+          <div className="absolute top-6 right-6 flex flex-col space-y-2 z-30">
+            <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-col">
+              <button
+                type="button"
+                onClick={() => handleZoomIn(desktopMapRef)}
+                className="p-3 hover:bg-gray-100 border-b border-gray-200 text-gray-600"
+              >
+                <span className="material-symbols-outlined">add</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleZoomOut(desktopMapRef)}
+                className="p-3 hover:bg-gray-100 text-gray-600"
+              >
+                <span className="material-symbols-outlined">remove</span>
+              </button>
+            </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleLocate(desktopMapRef)}
-                                  className="bg-white p-3 rounded-full shadow-lg border border-gray-200"
-                                >
-                                  <span className="material-symbols-outlined text-primary">
-                                    near_me
-                                  </span>
-                                </button>
-                              </div>
+            <button
+              type="button"
+              onClick={() => handleLocate(desktopMapRef)}
+              className="bg-white p-3 rounded-full shadow-lg border border-gray-200"
+            >
+              <span className="material-symbols-outlined text-primary">
+                near_me
+              </span>
+            </button>
+          </div>
 
-                              {showEmptyState && (
-                                <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
-                                  <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
-                                    <EmptyState
-                                      title="No matches yet"
-                                      message="Like a few listings in Explore to see your matches on the map."
-                                      ctaLabel="Browse listings"
-                                      ctaHref="/explore"
-                                    />
-                                  </div>
-                                </div>
-                              )}
+          {showEmptyState && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+              <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                <EmptyState
+                  title="No matches yet"
+                  message="Like a few listings in Explore to see your matches on the map."
+                  ctaLabel="Browse listings"
+                  ctaHref="/explore"
+                />
+              </div>
+            </div>
+          )}
 
-                              {activeListing && (
-                                <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
-                                  <p className="text-sm font-semibold text-slate-700">Directions</p>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    {activeListing.isExact
-                                      ? "Get a route to this property."
-                                      : "Directions unlock after the landlord accepts your request."}
-                                  </p>
-                                  <div className="mt-3 flex items-center gap-2">
-                                    <select
-                                      value={routingProfile}
-                                      onChange={(event) =>
-                                        setRoutingProfile(
-                                          event.target.value as "driving" | "walking" | "cycling"
-                                        )
-                                      }
-                                      className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                                      disabled={!activeListing.isExact}
-                                    >
-                                      <option value="driving">Driving</option>
-                                      <option value="walking">Walking</option>
-                                      <option value="cycling">Cycling</option>
-                                    </select>
-                                    <button
-                                      type="button"
-                                      onClick={requestDirections}
-                                      disabled={isRouting || !activeListing.isExact}
-                                      className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                                    >
-                                      {isRouting ? "Routing..." : "Get Route"}
-                                    </button>
-                                  </div>
-                                  {!activeListing.isExact && (
-                                    <button
-                                      type="button"
-                                      onClick={requestRouteAccess}
-                                      className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary cursor-pointer"
-                                    >
-                                      Message landlord to request directions
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </section>
-                          </div>
+          {activeListing && (
+            <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
+              <p className="text-sm font-semibold text-slate-700">Directions</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {activeListing.isExact
+                  ? "Get a route to this property."
+                  : "Directions unlock after the landlord accepts your request."}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={routingProfile}
+                  onChange={(event) =>
+                    setRoutingProfile(
+                      event.target.value as "driving" | "walking" | "cycling"
+                    )
+                  }
+                  className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  disabled={!activeListing.isExact}
+                >
+                  <option value="driving">Driving</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={requestDirections}
+                  disabled={isRouting || !activeListing.isExact}
+                  className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {isRouting ? "Routing..." : "Get Route"}
+                </button>
+              </div>
+              {!activeListing.isExact && (
+                <button
+                  type="button"
+                  onClick={requestRouteAccess}
+                  className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary cursor-pointer"
+                >
+                  Message landlord to request directions
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
 
     </div>
-        );
+  );
 }

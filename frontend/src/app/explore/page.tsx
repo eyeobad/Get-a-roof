@@ -79,6 +79,17 @@ export default function ExploreCards() {
   const [filters, setFilters] = useState(defaultFilters);
   const [draftFilters, setDraftFilters] = useState(defaultFilters);
 
+  const hasActiveFilters = useMemo(() => {
+    if (
+      filters.budget !== defaultFilters.budget ||
+      filters.distance !== defaultFilters.distance ||
+      filters.propertyType !== defaultFilters.propertyType
+    ) {
+      return true;
+    }
+    return Object.values(filters.toggles).some(Boolean);
+  }, [filters, defaultFilters]);
+
   const exploreQueue = useAppStore((state) => state.exploreQueue);
   const listingsById = useAppStore((state) => state.listingsById);
   const likeListing = useAppStore((state) => state.likeListing);
@@ -87,6 +98,7 @@ export default function ExploreCards() {
   const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
   const loadExploreListings = useAppStore((state) => state.loadExploreListings);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
 
@@ -121,6 +133,22 @@ export default function ExploreCards() {
     void loadExploreListings(nextFilters);
     setFiltersOpen(false);
   };
+
+  const resetFilters = () => {
+    const next = {
+      ...defaultFilters,
+      toggles: { ...defaultFilters.toggles },
+    };
+    setDraftFilters(next);
+    setFilters(next);
+    resetExploreQueue();
+    void loadExploreListings(next);
+    setFiltersOpen(false);
+  };
+
+  useEffect(() => {
+    void captureUserLocation();
+  }, [captureUserLocation]);
 
   useEffect(() => {
     void loadExploreListings({
@@ -242,9 +270,14 @@ export default function ExploreCards() {
               setDraftFilters(filters);
               setFiltersOpen(true);
             }}
-            className="flex items-center justify-center w-12 h-12 rounded-full hover:bg-black/5 transition-colors"
+            className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
+              hasActiveFilters ? "bg-primary/10 text-primary" : "hover:bg-black/5"
+            }`}
           >
             <span className="material-symbols-outlined text-primary text-3xl">tune</span>
+            {hasActiveFilters && (
+              <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" />
+            )}
           </button>
         </div>
       </header>
@@ -315,7 +348,7 @@ export default function ExploreCards() {
         onApply={applyFilters}
         filters={draftFilters}
         setFilters={setDraftFilters}
-        onReset={() => setDraftFilters(defaultFilters)}
+        onReset={resetFilters}
         toggleOptions={toggleOptions}
       />
 
@@ -557,7 +590,7 @@ function FilterModal({
           <div className="border-t border-gray-100 px-6 py-6 bg-gray-50/50 mt-6 -mx-6">
             <div className="flex gap-3">
               <button
-                className="flex-1 rounded-xl bg-white px-3 py-3.5 text-xs font-bold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-200 hover:bg-gray-50"
+                className="flex-1 rounded-xl bg-gray-100 px-3 py-3.5 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-200"
                 onClick={onReset}
               >
                 Reset
