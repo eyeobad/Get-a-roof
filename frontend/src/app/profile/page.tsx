@@ -477,9 +477,10 @@ export default function ProfilePage() {
               clearAuth();
               router.push("/login");
             }}
-            className="text-right text-primary font-bold tracking-tight"
+            aria-label="Logout"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-slate-100"
           >
-            Logout
+            <span className="material-symbols-outlined text-[24px]">logout</span>
           </button>
         </header>
 

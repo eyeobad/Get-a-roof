@@ -583,7 +583,7 @@ function MessagesContent() {
 
             <main
               ref={chatRef}
-              className="flex-1 overflow-y-auto px-4 py-4 pb-28"
+              className="flex-1 overflow-y-auto px-4 py-4 pb-[140px]"
             >
               <div className="flex flex-col gap-3">
                 {activeMessages.map((m) => (
@@ -680,8 +680,8 @@ function MessagesContent() {
               </div>
             </main>
 
-            <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-white/95 backdrop-blur-sm">
-              <div className="px-3 pt-3 pb-3">
+            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 backdrop-blur-sm lg:hidden">
+              <div className="mx-auto w-full max-w-md px-3 pt-3 pb-3">
                 <div className="relative flex items-end gap-2">
                   <RouteHintToast
                     visible={showRouteHint && !isLandlordContext}
