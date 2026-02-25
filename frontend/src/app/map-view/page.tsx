@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -536,10 +536,10 @@ function MapCanvas({
   );
 }
 
-export default function MapView() {
+function MapViewContent() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const searchParams = useSearchParams();
-  const requestedPropertyId = searchParams.get("propertyId") ?? "";
+  const requestedPropertyId = searchParams?.get("propertyId") ?? "";
   const mapMatches = useAppStore((state) => state.mapMatches);
   const requestedListing = useAppStore((state) =>
     requestedPropertyId ? state.listingsById[requestedPropertyId] : undefined
@@ -1180,5 +1180,13 @@ export default function MapView() {
       </div>
 
     </div>
+  );
+}
+
+export default function MapView() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background-light" />}>
+      <MapViewContent />
+    </Suspense>
   );
 }
