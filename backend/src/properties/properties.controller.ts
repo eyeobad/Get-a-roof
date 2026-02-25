@@ -127,8 +127,8 @@ export class PropertiesController {
 
   @Get(":id")
   @UseGuards(JwtAuthGuard)
-  findOne(@Param("id") id: string) {
-    return this.propertiesService.getProperty(id);
+  findOne(@Param("id") id: string, @Req() req: Request & { user?: any }) {
+    return this.propertiesService.getPropertyForViewer(id, req.user?.sub);
   }
 
   private buildFilters(query: Record<string, string>) {

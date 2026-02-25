@@ -320,7 +320,7 @@ type AppState = {
   receiveMessage: (message: ApiMessage) => void;
   receiveTyping: (matchId: string, senderId: string, isTyping: boolean) => void;
   markMatchRead: (matchId: string) => Promise<void>;
-  fetchPropertyById: (listingId: string) => Promise<void>;
+  fetchPropertyById: (listingId: string, options?: { force?: boolean }) => Promise<void>;
   setLandlordDraft: (payload: Partial<LandlordDraft>) => void;
   clearLandlordDraft: () => void;
   loadLandlordDraftById: (propertyId: string) => Promise<void>;
@@ -1453,10 +1453,10 @@ export const useAppStore = create<AppState>()(
           ),
         }));
       },
-      fetchPropertyById: async (listingId) => {
+      fetchPropertyById: async (listingId, options) => {
         const state = get();
         if (!state.authToken || !isMongoId(listingId)) return;
-        if (state.listingsById[listingId]) return;
+        if (!options?.force && state.listingsById[listingId]) return;
         const property = await apiFetch<ApiProperty>(`/api/properties/${listingId}`, {
           token: state.authToken,
         });

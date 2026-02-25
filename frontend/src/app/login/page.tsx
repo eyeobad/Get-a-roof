@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const login = useAppStore((state) => state.login);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
+  const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -48,7 +49,15 @@ export default function LoginPage() {
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
       if (!isAdmin) {
-        void captureUserLocation();
+        const location = await captureUserLocation();
+        if (!location) {
+          clearAuth();
+          showToast({
+            title: "Location access is required after sign in. Please enable location and try again.",
+            variant: "error",
+          });
+          return;
+        }
       }
       if (isAdmin) {
         router.push("/admin");

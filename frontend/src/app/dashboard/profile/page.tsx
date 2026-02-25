@@ -52,6 +52,16 @@ export default function DashboardProfilePage() {
   const uploadProfilePhoto = useAppStore((state) => state.uploadProfilePhoto);
   const deleteAccount = useAppStore((state) => state.deleteAccount);
   const clearAuth = useAppStore((state) => state.clearAuth);
+  const landlordProperties = useAppStore((state) => state.landlordProperties);
+  const landlordPropertiesWithMatches = useAppStore(
+    (state) => state.landlordPropertiesWithMatches
+  );
+  const conversations = useAppStore((state) => state.conversations);
+  const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
+  const loadLandlordPropertiesWithMatches = useAppStore(
+    (state) => state.loadLandlordPropertiesWithMatches
+  );
+  const loadConversations = useAppStore((state) => state.loadConversations);
 
   // --- Local State ---
   const [isLoading, setIsLoading] = useState(true);
@@ -63,14 +73,6 @@ export default function DashboardProfilePage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Edit State
-  const [isEditModalOpen, setEditModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [editForm, setEditForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phoneNumber: "",
-  });
   const [isPhotoModalOpen, setPhotoModalOpen] = useState(false);
   const [photoDraft, setPhotoDraft] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -104,17 +106,18 @@ export default function DashboardProfilePage() {
     return () => { mounted = false; };
   }, [fetchUserProfile, authToken, userId]);
 
-  // Sync edit form with user data when modal opens
   useEffect(() => {
-    if (isEditModalOpen && user) {
-      setEditForm({
-        firstName: user.firstName || "",
-        lastName: user.lastName || "",
-        email: user.email || "",
-        phoneNumber: user.phoneNumber || "",
-      });
-    }
-  }, [isEditModalOpen, user]);
+    if (!authToken || !userId) return;
+    void loadLandlordProperties();
+    void loadLandlordPropertiesWithMatches({ sort: "newDesc" });
+    void loadConversations();
+  }, [
+    authToken,
+    userId,
+    loadLandlordProperties,
+    loadLandlordPropertiesWithMatches,
+    loadConversations,
+  ]);
 
   useEffect(() => {
     if (isPhotoModalOpen && user) {
@@ -127,43 +130,65 @@ export default function DashboardProfilePage() {
   // --- Derived Dynamic Data ---
   const fullName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "Loading...";
   const isVerified = user?.isVerified ?? false;
+  const roleValue = Array.isArray(user?.role) ? user?.role[0] : user?.role;
+  const roleLabel = roleValue
+    ? `${String(roleValue).charAt(0).toUpperCase()}${String(roleValue).slice(1).toLowerCase()}`
+    : "Landlord";
   const photoUrl = user?.photoUrl || "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P";
   
-  const cards = useMemo(() => [
-    { 
-      icon: "domain", 
-      label: "My Listings", 
-      value: user?.listingsCount ?? 0 
-    },
-    { 
-      icon: "handshake", 
-      label: "Total Matches", 
-      value: user?.matchesCount ?? 0 
-    },
-    { 
-      icon: "chat_bubble", 
-      label: "Unread Messages", 
-      value: user?.unreadMessages ?? 0, 
-      hasBadge: (user?.unreadMessages ?? 0) > 0 
-    },
-  ], [user]);
+  const listingsCount = landlordProperties.length || user?.listingsCount || 0;
+  const matchesCount =
+    landlordPropertiesWithMatches.reduce(
+      (sum, property) => sum + (property.matchCount ?? property.matches ?? 0),
+      0
+    ) || user?.matchesCount || 0;
+  const unreadMessages =
+    conversations.reduce((sum, conversation) => sum + (conversation.unreadCount ?? 0), 0) ||
+    user?.unreadMessages ||
+    0;
+
+  const cards = useMemo(
+    () => [
+      {
+        icon: "domain",
+        label: "My Listings",
+        value: listingsCount,
+        href: "/dashboard/properties",
+      },
+      {
+        icon: "handshake",
+        label: "Total Matches",
+        value: matchesCount,
+        href: "/dashboard/matches",
+      },
+      {
+        icon: "chat_bubble",
+        label: "Unread Messages",
+        value: unreadMessages,
+        hasBadge: unreadMessages > 0,
+        href: "/dashboard/messages",
+      },
+    ],
+    [listingsCount, matchesCount, unreadMessages]
+  );
 
   const sections = useMemo(() => [
     { 
         icon: "person", 
         title: "Personal Information", 
         description: [user?.email, user?.phoneNumber].filter(Boolean).join(", ") || "Email, Phone",
-        action: () => setEditModalOpen(true) // Open edit modal
     },
     { 
         icon: "info", 
         title: "More About You", 
-        description: "Preferences, Annual Earnings" 
+        description: "Preferences, Annual Earnings",
+        action: () => router.push("/add-property-requirements"),
     },
     { 
         icon: "home_work", 
         title: "Apartment Preferences", 
-        description: "Property styles, size, rules" 
+        description: "Property styles, size, rules",
+        action: () => router.push("/add-property-requirements"),
     },
     { 
         icon: "verified_user", 
@@ -180,29 +205,6 @@ export default function DashboardProfilePage() {
     clearAuth();
     router.push("/login");
   };
-
-  const handleSaveProfile = async () => {
-    setIsSaving(true);
-    try {
-      if (!updateUser) {
-        throw new Error("Unable to save profile");
-      }
-      await updateUser({
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        email: editForm.email,
-        phoneNumber: editForm.phoneNumber,
-      });
-      showToast({ title: "Profile updated", variant: "success" });
-      setEditModalOpen(false);
-    } catch (error) {
-      const message = getApiErrorMessage(error);
-      console.error("Failed to update profile", error);
-      showToast({ title: message, variant: "error" });
-    } finally {
-      setIsSaving(false);
-    }
-    };
 
   const handlePhotoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -315,16 +317,10 @@ export default function DashboardProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold leading-tight text-primary">{fullName}</h1>
-                <button 
-                    onClick={() => setEditModalOpen(true)}
-                    className="p-2 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                >
-                    <span className="material-symbols-outlined text-[20px]">edit</span>
-                </button>
             </div>
             <div className="flex items-center gap-1 mt-1">
               <span className="text-slate-500 font-medium text-lg">
-                {isVerified ? "Verified Landlord" : "User"}
+                {isVerified ? `Verified ${roleLabel}` : roleLabel}
               </span>
             </div>
           </div>
@@ -336,41 +332,60 @@ export default function DashboardProfilePage() {
         
         {/* Stats Cards */}
         <section>
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-slate-400 text-lg">dashboard</span>
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Dashboard Overview</h2>
+            </div>
           </div>
           <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 sm:overflow-visible">
-            {cards.map((card) => (
-              <div
-                key={card.label}
-                className="min-w-[160px] bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow"
-              >
-                <div className="flex justify-between items-start">
-                  <span className="material-symbols-outlined text-primary text-3xl">{card.icon}</span>
-                  {card.hasBadge && <span className="h-3 w-3 rounded-full bg-red-500 ring-2 ring-white" />}
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-slate-900">{card.value}</div>
-                  <div className="text-sm font-medium text-slate-500">{card.label}</div>
-                </div>
-              </div>
-            ))}
+            {isLoading
+              ? Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`skeleton-${index}`}
+                    className="min-w-[160px] rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="h-6 w-6 rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-4 h-8 w-14 rounded bg-slate-200 animate-pulse" />
+                    <div className="mt-2 h-4 w-24 rounded bg-slate-200 animate-pulse" />
+                  </div>
+                ))
+              : cards.map((card) => (
+                  <button
+                    key={card.label}
+                    type="button"
+                    onClick={() => router.push(card.href)}
+                    className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="material-symbols-outlined text-primary text-3xl">{card.icon}</span>
+                      {card.hasBadge && <span className="h-3 w-3 rounded-full bg-red-500 ring-2 ring-white" />}
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-slate-900">{card.value}</div>
+                      <div className="text-sm font-medium text-slate-500">{card.label}</div>
+                    </div>
+                  </button>
+                ))}
           </div>
         </section>
 
         {/* Settings Links */}
         <section className="space-y-4">
-          <h2 className="text-xl font-bold text-primary">Profile Settings</h2>
-          <div className="bg-white rounded-3xl border border-slate-200 divide-y divide-slate-100 shadow-sm overflow-hidden">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-primary">Profile Settings</h2>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manage</span>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {sections.map((section) => (
               <button
                 key={section.title}
-                onClick={section.action} // Trigger action if defined
-                className="w-full flex items-center justify-between p-5 text-left active:bg-slate-50 hover:bg-slate-50 transition-colors group"
+                onClick={section.action}
+                disabled={!section.action}
+                className="group flex w-full items-center justify-between border-b border-slate-100 p-5 text-left transition-colors hover:bg-slate-50 active:bg-slate-50 last:border-b-0 disabled:cursor-default disabled:bg-white"
               >
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 transition-colors group-hover:bg-blue-100">
                     <span className="material-symbols-outlined text-primary">{section.icon}</span>
                   </div>
                   <div>
@@ -383,6 +398,10 @@ export default function DashboardProfilePage() {
                     <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
                     <span className="text-[11px] uppercase tracking-wide text-green-600 font-bold pt-1">Verified</span>
                   </div>
+                ) : !section.action ? (
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    Read-only
+                  </span>
                 ) : (
                   <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
                 )}
@@ -413,72 +432,6 @@ export default function DashboardProfilePage() {
           </button>
         </section>
       </main>
-
-      {/* --- Edit Profile Modal --- */}
-      <Modal
-        open={isEditModalOpen}
-        title="Edit Personal Info"
-        onClose={() => setEditModalOpen(false)}
-      >
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">First Name</label>
-                    <input 
-                        type="text" 
-                        value={editForm.firstName}
-                        onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                    />
-                </div>
-                <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Last Name</label>
-                    <input 
-                        type="text" 
-                        value={editForm.lastName}
-                        onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                    />
-                </div>
-            </div>
-
-            <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Email Address</label>
-                <input 
-                    type="email" 
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                />
-            </div>
-
-            <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Phone Number</label>
-                <input 
-                    type="tel" 
-                    value={editForm.phoneNumber}
-                    onChange={(e) => setEditForm({...editForm, phoneNumber: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                />
-            </div>
-
-            <div className="pt-4 flex gap-3">
-                <button
-                    onClick={() => setEditModalOpen(false)}
-                    className="flex-1 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={handleSaveProfile}
-                    disabled={isSaving}
-                    className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-dark transition-colors shadow-sm disabled:opacity-70"
-                >
-                    {isSaving ? "Saving..." : "Save Changes"}
-                </button>
-            </div>
-        </div>
-      </Modal>
 
       <Modal
         open={isPhotoModalOpen}

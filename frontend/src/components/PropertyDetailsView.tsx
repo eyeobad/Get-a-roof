@@ -369,7 +369,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
               />
               <div className="absolute inset-0 bg-black/5 flex items-center justify-center">
                 <Link
-                  href="/map-view"
+                  href={`/map-view?propertyId=${listing.id}`}
                   className="bg-white text-primary px-7 py-3.5 rounded-full flex items-center gap-2.5 shadow-xl transform transition-transform active:scale-95 group-hover:scale-105"
                 >
                   <span className="material-symbols-outlined text-primary">map</span>

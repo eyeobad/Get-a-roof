@@ -5,10 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 
-const solidIconStyle: React.CSSProperties = {
-  fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
-};
-
 type PropertyCard = {
   id: string;
   title: string;
@@ -16,6 +12,7 @@ type PropertyCard = {
   type: string;
   beds: number;
   baths: number;
+  matchCount: number;
   newCount: number;
   coverUrl: string;
   tone?: "primary" | "warning";
@@ -90,6 +87,7 @@ export default function LandlordMatchesPropertyListPage() {
     (state) => state.loadLandlordPropertiesWithMatches
   );
   const [sort, setSort] = useState<"newDesc" | "matchesDesc">("newDesc");
+  const [showOnlyNew, setShowOnlyNew] = useState(false);
 
   const mappedProperties: PropertyCard[] = useMemo(
     () =>
@@ -100,6 +98,7 @@ export default function LandlordMatchesPropertyListPage() {
         type: property.type ?? "Property",
         beds: property.beds ?? 0,
         baths: property.baths ?? 0,
+        matchCount: property.matchCount ?? property.matches ?? 0,
         newCount: property.newCount ?? 0,
         coverUrl: property.coverUrl ?? "/hero.png",
         tone: (property.newCount ?? 0) > 0 ? "primary" : undefined,
@@ -111,41 +110,73 @@ export default function LandlordMatchesPropertyListPage() {
     () => mappedProperties.reduce((sum, item) => sum + (item.newCount ?? 0), 0),
     [mappedProperties]
   );
+  const filteredProperties = useMemo(() => {
+    const base = showOnlyNew
+      ? mappedProperties.filter((property) => (property.newCount ?? 0) > 0)
+      : mappedProperties;
+    if (sort === "newDesc") {
+      return [...base].sort((a, b) => (b.newCount ?? 0) - (a.newCount ?? 0));
+    }
+    return [...base].sort((a, b) => (b.matchCount ?? 0) - (a.matchCount ?? 0));
+  }, [mappedProperties, showOnlyNew, sort]);
+  const hasActiveFilters = showOnlyNew || sort !== "newDesc";
+  const activeSortLabel = sort === "newDesc" ? "New count" : "Total matches";
 
   useEffect(() => {
     if (!authToken) return;
     void loadLandlordPropertiesWithMatches({ sort });
   }, [authToken, sort, loadLandlordPropertiesWithMatches]);
 
-  const handleSort = () => {
-    setSort((prev) => (prev === "newDesc" ? "matchesDesc" : "newDesc"));
-  };
-
   return (
     <div className="min-h-screen bg-[#fcfbf8] text-[#1a1a1a] font-display antialiased flex flex-col pb-24">
       <header className="sticky top-0 z-50 bg-[#0a44b8] px-4 py-4 shadow-md text-white">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Matches</h1>
-          <button
-            aria-label="Sort Properties"
-            className="flex items-center justify-center h-12 w-12 rounded-full hover:bg-white/10 transition-colors"
-            type="button"
-            onClick={handleSort}
-          >
-            <span className="material-symbols-outlined text-[28px]" style={solidIconStyle}>
-              sort
-            </span>
-          </button>
+          <div />
         </div>
         <p className="text-white/80 text-sm mt-1">
           Select a property to view {totalNew} new candidate
           {totalNew === 1 ? "" : "s"}
         </p>
+        {hasActiveFilters && (
+          <p className="text-[12px] text-white/90 mt-1">
+            Active: {showOnlyNew ? "New only" : "All properties"} • {activeSortLabel}
+          </p>
+        )}
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setShowOnlyNew(false)}
+            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
+              !showOnlyNew ? "bg-white text-[#0a44b8]" : "bg-white/10 text-white"
+            }`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowOnlyNew(true)}
+            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
+              showOnlyNew ? "bg-white text-[#0a44b8]" : "bg-white/10 text-white"
+            }`}
+          >
+            New only
+          </button>
+          <button
+            type="button"
+            onClick={() => setSort("matchesDesc")}
+            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
+              sort === "matchesDesc" ? "bg-white text-[#0a44b8]" : "bg-white/10 text-white"
+            }`}
+          >
+            Top matches
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 px-4 py-6 flex flex-col gap-4">
-        {mappedProperties.length ? (
-          mappedProperties.map((card) => (
+        {filteredProperties.length ? (
+          filteredProperties.map((card) => (
             <PropertyListCard key={card.id} card={card} />
           ))
         ) : authToken ? (
@@ -160,6 +191,7 @@ export default function LandlordMatchesPropertyListPage() {
       </main>
 
       <BottomNav active="matches" />
+
     </div>
   );
 }

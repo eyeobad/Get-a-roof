@@ -8,6 +8,13 @@ export function useToastError(error: unknown, enabled = true) {
     if (!enabled || !error || hasShownErrorToast(error)) {
       return;
     }
+    if (typeof error === "string") {
+      showToast({
+        title: error.trim() || "Something went wrong.",
+        variant: "error",
+      });
+      return;
+    }
     showToast({
       title: getApiErrorMessage(error),
       variant: "error",

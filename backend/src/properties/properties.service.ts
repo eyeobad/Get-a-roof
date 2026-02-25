@@ -78,6 +78,21 @@ export class PropertiesService {
     return property;
   }
 
+  async getPropertyForViewer(id: string, userId?: string) {
+    const property = await this.getProperty(id);
+    const base = property.toObject();
+    if (!userId) {
+      return base;
+    }
+
+    const routeAccessMap = await this.getTenantRouteAccessMap(userId, [property._id]);
+    const routeAccess = routeAccessMap.get(property._id.toString());
+    return {
+      ...base,
+      ...(routeAccess ?? { routeAccessStatus: RouteAccessStatus.None }),
+    };
+  }
+
   async exploreProperties(
     filters: Record<string, unknown>,
     options?: {

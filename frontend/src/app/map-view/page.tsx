@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import mapboxgl from "mapbox-gl";
@@ -31,6 +31,38 @@ type MapPoint = {
   displayLat: number;
   displayLng: number;
   isExact: boolean;
+};
+
+const APPROX_RADIUS_METERS = 280;
+
+const createGeoCirclePolygon = (
+  lng: number,
+  lat: number,
+  radiusMeters: number,
+  steps = 48
+): GeoJSON.Feature<GeoJSON.Polygon> => {
+  const coordinates: number[][] = [];
+  const latRad = (lat * Math.PI) / 180;
+  const metersPerDegLat = 111_320;
+  const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+
+  for (let i = 0; i <= steps; i += 1) {
+    const angle = (i / steps) * Math.PI * 2;
+    const dx = Math.cos(angle) * radiusMeters;
+    const dy = Math.sin(angle) * radiusMeters;
+    const pointLng = lng + dx / metersPerDegLng;
+    const pointLat = lat + dy / metersPerDegLat;
+    coordinates.push([pointLng, pointLat]);
+  }
+
+  return {
+    type: "Feature",
+    geometry: {
+      type: "Polygon",
+      coordinates: [coordinates],
+    },
+    properties: {},
+  };
 };
 
 const MAPBOX_TOKEN = (process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "").trim();
@@ -277,41 +309,21 @@ function MapCanvas({
         });
         map.addLayer({
           id: "approx-area-fill",
-          type: "circle",
+          type: "fill",
           source: "approx-areas",
           paint: {
-            "circle-color": "#0a44b8",
-            "circle-opacity": 0.2,
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              10,
-              100,
-              14,
-              170,
-            ],
-            "circle-blur": 0.18,
+            "fill-color": "#0a44b8",
+            "fill-opacity": 0.14,
           },
         });
         map.addLayer({
           id: "approx-area-outline",
-          type: "circle",
+          type: "line",
           source: "approx-areas",
           paint: {
-            "circle-color": "transparent",
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              10,
-              100,
-              14,
-              170,
-            ],
-            "circle-stroke-color": "#0a44b8",
-            "circle-stroke-width": 2,
-            "circle-stroke-opacity": 0.55,
+            "line-color": "#0a44b8",
+            "line-width": 2,
+            "line-opacity": 0.45,
           },
         });
       }
@@ -449,16 +461,11 @@ function MapCanvas({
         markersRef.current.push(marker);
       });
 
-      const approxFeatures: GeoJSON.Feature<GeoJSON.Point>[] = points
+      const approxFeatures: GeoJSON.Feature<GeoJSON.Polygon>[] = points
         .filter((point) => !point.isExact)
-        .map((point) => ({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [point.lng, point.lat],
-          },
-          properties: {},
-        }));
+        .map((point) =>
+          createGeoCirclePolygon(point.lng, point.lat, APPROX_RADIUS_METERS)
+        );
 
       const areaSource = map.getSource("approx-areas") as mapboxgl.GeoJSONSource | undefined;
       if (areaSource) {
@@ -499,12 +506,26 @@ function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !points.length) return;
+    if (routeGeojson) return;
     const bounds = new mapboxgl.LngLatBounds();
     points.forEach((point) => {
-      bounds.extend([point.displayLng, point.displayLat]);
+      if (point.isExact) {
+        bounds.extend([point.displayLng, point.displayLat]);
+        return;
+      }
+
+      // Include the full hidden-area radius so the whole circle is visible on first fit.
+      const latRad = (point.lat * Math.PI) / 180;
+      const metersPerDegLat = 111_320;
+      const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+      const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
+      const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
+
+      bounds.extend([point.lng - lngOffset, point.lat - latOffset]);
+      bounds.extend([point.lng + lngOffset, point.lat + latOffset]);
     });
     map.fitBounds(bounds, { padding: 60, duration: 0 });
-  }, [points]);
+  }, [points, routeGeojson]);
 
   return (
     <div
@@ -517,8 +538,14 @@ function MapCanvas({
 
 export default function MapView() {
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const searchParams = useSearchParams();
+  const requestedPropertyId = searchParams.get("propertyId") ?? "";
   const mapMatches = useAppStore((state) => state.mapMatches);
+  const requestedListing = useAppStore((state) =>
+    requestedPropertyId ? state.listingsById[requestedPropertyId] : undefined
+  );
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const fetchPropertyById = useAppStore((state) => state.fetchPropertyById);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const userLocation = useAppStore((state) => state.userLocation);
   const likedIds = useAppStore((state) => state.likedIds);
@@ -545,8 +572,37 @@ export default function MapView() {
     }
   }, [authToken, loadMapMatches, captureUserLocation]);
 
-  const sourceListings = mapMatches;
-  const showEmptyState = mapMatches.length === 0;
+  useEffect(() => {
+    if (!authToken || !requestedPropertyId) return;
+    void fetchPropertyById(requestedPropertyId, { force: true });
+  }, [authToken, requestedPropertyId, fetchPropertyById]);
+
+  useEffect(() => {
+    if (!authToken || !requestedPropertyId) return;
+    const refresh = () => {
+      void loadMapMatches();
+      void fetchPropertyById(requestedPropertyId, { force: true });
+    };
+    const timer = window.setInterval(refresh, 15000);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [authToken, requestedPropertyId, loadMapMatches, fetchPropertyById]);
+
+  const sourceListings = useMemo(() => {
+    if (!requestedListing) return mapMatches;
+
+    const alreadyIncluded = mapMatches.some(
+      (listing) => listing.id === requestedListing.id
+    );
+    if (alreadyIncluded) return mapMatches;
+
+    return [requestedListing, ...mapMatches];
+  }, [mapMatches, requestedListing]);
+  const showEmptyState = sourceListings.length === 0;
 
   const listItems = useMemo<ListingCard[]>(() => {
     return sourceListings.map((listing) => {
@@ -732,7 +788,9 @@ export default function MapView() {
       };
       const route = data.routes?.[0]?.geometry;
       if (!route) {
-        throw new Error("No route found.");
+        throw new Error(
+          "No route found from your current location. Try a different profile or move closer."
+        );
       }
       setRouteGeojson({
         type: "Feature",
