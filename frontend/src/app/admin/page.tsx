@@ -52,6 +52,14 @@ type AdminListing = {
   };
 };
 
+type AdminListResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 declare global {
   interface Window {
     Chart?: new (
@@ -76,6 +84,16 @@ export default function AdminPage() {
   const [listings, setListings] = useState<AdminListing[]>([]);
   const [auditRows, setAuditRows] = useState<Array<Record<string, unknown>>>([]);
   const [userRoleDraft, setUserRoleDraft] = useState<Record<string, string>>({});
+  const [userPage, setUserPage] = useState(1);
+  const [userTotalPages, setUserTotalPages] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userSearchInput, setUserSearchInput] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [listingPage, setListingPage] = useState(1);
+  const [listingTotalPages, setListingTotalPages] = useState(1);
+  const [listingTotal, setListingTotal] = useState(0);
+  const [listingSearchInput, setListingSearchInput] = useState("");
+  const [listingSearch, setListingSearch] = useState("");
   const [error, setError] = useState("");
   useToastError(error);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,47 +118,82 @@ export default function AdminPage() {
     }
   }, [authToken, role, router]);
 
-  const authFetch = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return (await response.json()) as T;
-  };
+  const authFetch = useCallback(
+    async <T,>(path: string, init?: RequestInit): Promise<T> => {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+          ...(init?.headers ?? {}),
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return (await response.json()) as T;
+    },
+    [authToken]
+  );
 
   const load = useCallback(async () => {
     if (!authToken) return;
     setError("");
     setIsLoading(true);
     try {
+      const userParams = new URLSearchParams({
+        limit: "10",
+        page: String(userPage),
+      });
+      if (userSearch.trim()) {
+        userParams.set("q", userSearch.trim());
+      }
+
+      const listingParams = new URLSearchParams({
+        limit: "10",
+        page: String(listingPage),
+      });
+      if (listingSearch.trim()) {
+        listingParams.set("q", listingSearch.trim());
+      }
+
       const [m, u, l, a] = await Promise.all([
         authFetch<AdminMetrics>("/api/admin/metrics"),
-        authFetch<{ items: AdminUser[] }>("/api/admin/users?limit=10"),
-        authFetch<{ items: AdminListing[] }>("/api/admin/listings?limit=10"),
+        authFetch<AdminListResponse<AdminUser>>(
+          `/api/admin/users?${userParams.toString()}`
+        ),
+        authFetch<AdminListResponse<AdminListing>>(
+          `/api/admin/listings?${listingParams.toString()}`
+        ),
         authFetch<{ items: Array<Record<string, unknown>> }>("/api/admin/audit-logs?limit=10"),
       ]);
       setMetrics(m);
       setUsers(u.items ?? []);
+      setUserTotal(u.total ?? 0);
+      setUserTotalPages(u.totalPages ?? 1);
       setListings(l.items ?? []);
+      setListingTotal(l.total ?? 0);
+      setListingTotalPages(l.totalPages ?? 1);
       setAuditRows(a.items ?? []);
     } catch (err) {
       setError((err as Error)?.message || "Failed to load admin data");
     } finally {
       setIsLoading(false);
     }
-  }, [authToken]);
+  }, [authFetch, authToken, listingPage, listingSearch, userPage, userSearch]);
 
   useEffect(() => {
     void load();
   }, [authToken, load]);
+
+  useEffect(() => {
+    setListingPage(1);
+  }, [listingSearch]);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearch]);
 
   const mountCharts = useCallback(() => {
     if (!window.Chart || !metrics) return;
@@ -344,7 +397,40 @@ export default function AdminPage() {
 
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h2 className="text-lg font-semibold">Users</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Users</h2>
+              <div className="flex items-center gap-2">
+                <input
+                  type="search"
+                  value={userSearchInput}
+                  onChange={(event) => setUserSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      setUserSearch(userSearchInput.trim());
+                    }
+                  }}
+                  placeholder="Search users..."
+                  className="h-9 w-52 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setUserSearch(userSearchInput.trim())}
+                  className="h-9 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white"
+                >
+                  Search
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserSearchInput("");
+                    setUserSearch("");
+                  }}
+                  className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
             <div className="mt-3 space-y-2 text-sm">
               {users.map((item) => (
                 <div
@@ -400,11 +486,69 @@ export default function AdminPage() {
               {!users.length && !isLoading ? (
                 <p className="text-slate-500">No users found.</p>
               ) : null}
+              <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                <p className="text-xs text-slate-500">
+                  Showing page {userPage} of {userTotalPages} ({userTotal} total)
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={userPage <= 1 || isLoading}
+                    onClick={() => setUserPage((prev) => Math.max(1, prev - 1))}
+                    className="h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={userPage >= userTotalPages || isLoading}
+                    onClick={() =>
+                      setUserPage((prev) => Math.min(userTotalPages, prev + 1))
+                    }
+                    className="h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h2 className="text-lg font-semibold">Listings</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Listings</h2>
+              <div className="flex items-center gap-2">
+                <input
+                  type="search"
+                  value={listingSearchInput}
+                  onChange={(event) => setListingSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      setListingSearch(listingSearchInput.trim());
+                    }
+                  }}
+                  placeholder="Search listings..."
+                  className="h-9 w-52 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setListingSearch(listingSearchInput.trim())}
+                  className="h-9 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white"
+                >
+                  Search
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListingSearchInput("");
+                    setListingSearch("");
+                  }}
+                  className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
             <div className="mt-3 space-y-2 text-sm">
               {listings.map((item) => (
                 <div
@@ -431,7 +575,7 @@ export default function AdminPage() {
                         .join(" ") || "Unknown landlord"}
                     </p>
                     <p className="text-xs text-slate-600">
-                      {item.landlord?.email || "No email"} · ID:{" "}
+                      {item.landlord?.email || "No email"} - ID:{" "}
                       {item.landlord?.id || String(item.landlordId || "N/A")}
                     </p>
                   </div>
@@ -466,6 +610,31 @@ export default function AdminPage() {
               {!listings.length && !isLoading ? (
                 <p className="text-slate-500">No listings found.</p>
               ) : null}
+              <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                <p className="text-xs text-slate-500">
+                  Showing page {listingPage} of {listingTotalPages} ({listingTotal} total)
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={listingPage <= 1 || isLoading}
+                    onClick={() => setListingPage((prev) => Math.max(1, prev - 1))}
+                    className="h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={listingPage >= listingTotalPages || isLoading}
+                    onClick={() =>
+                      setListingPage((prev) => Math.min(listingTotalPages, prev + 1))
+                    }
+                    className="h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -517,3 +686,4 @@ function ChartCard({
     </div>
   );
 }
+

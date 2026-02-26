@@ -21,6 +21,9 @@ export type Listing = {
   lat: number;
   lng: number;
   description: string;
+  matchScore?: number;
+  preferencesMatchPercentage?: number;
+  apartmentPreferenceMatchPercentage?: number;
   routeAccessStatus?: "None" | "Pending" | "Approved" | "Denied";
   routeOriginLat?: number;
   routeOriginLng?: number;

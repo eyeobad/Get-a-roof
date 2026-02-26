@@ -78,8 +78,8 @@ let PropertiesController = class PropertiesController {
         options.userId = req.user?.sub;
         return this.propertiesService.getMapMatches(filters, options);
     }
-    findOne(id) {
-        return this.propertiesService.getProperty(id);
+    findOne(id, req) {
+        return this.propertiesService.getPropertyForViewer(id, req.user?.sub);
     }
     buildFilters(query) {
         const filters = {};
@@ -284,8 +284,9 @@ __decorate([
     (0, common_1.Get)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], PropertiesController.prototype, "findOne", null);
 exports.PropertiesController = PropertiesController = __decorate([

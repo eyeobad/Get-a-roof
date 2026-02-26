@@ -580,6 +580,10 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
     lat: property?.address?.lat ?? 0,
     lng: property?.address?.lng ?? 0,
     description: property?.description ?? "",
+    matchScore: property?.matchScore,
+    preferencesMatchPercentage: property?.preferencesMatchPercentage,
+    apartmentPreferenceMatchPercentage:
+      property?.apartmentPreferenceMatchPercentage,
     routeAccessStatus: property?.routeAccessStatus,
     routeOriginLat: property?.routeOriginLat,
     routeOriginLng: property?.routeOriginLng,

@@ -106,6 +106,43 @@ const buildDisplayAddress = (address: string, neighborhood?: string) => {
   return "Area in this neighborhood";
 };
 
+const randomizedSimilaritySort = <
+  T extends {
+    matchScore?: number;
+    preferencesMatchPercentage?: number;
+    apartmentPreferenceMatchPercentage?: number;
+  }
+>(
+  items: T[],
+  target: T
+) => {
+  const targetScore =
+    target.matchScore ??
+    target.preferencesMatchPercentage ??
+    target.apartmentPreferenceMatchPercentage ??
+    0;
+
+  return [...items]
+    .map((item) => {
+      const score =
+        item.matchScore ??
+        item.preferencesMatchPercentage ??
+        item.apartmentPreferenceMatchPercentage ??
+        0;
+      const diff = Math.abs(score - targetScore);
+      return {
+        item,
+        bucket: Math.floor(diff / 5),
+        tieBreaker: Math.random(),
+      };
+    })
+    .sort((a, b) => {
+      if (a.bucket !== b.bucket) return a.bucket - b.bucket;
+      return a.tieBreaker - b.tieBreaker;
+    })
+    .map((entry) => entry.item);
+};
+
 function EmptyState({
   title,
   message,
@@ -206,6 +243,7 @@ function PropertyCard({
 function MapCanvas({
   points,
   activeIndex,
+  focusPointId,
   onSelect,
   onMapReady,
   routeGeojson,
@@ -214,6 +252,7 @@ function MapCanvas({
 }: {
   points: MapPoint[];
   activeIndex: number;
+  focusPointId?: string;
   onSelect: (index: number) => void;
   onMapReady: (map: mapboxgl.Map) => void;
   routeGeojson: GeoJSON.Feature<GeoJSON.LineString> | null;
@@ -507,6 +546,32 @@ function MapCanvas({
     const map = mapRef.current;
     if (!map || !points.length) return;
     if (routeGeojson) return;
+
+    if (focusPointId) {
+      const anchor = points.find((point) => point.id === focusPointId);
+      if (anchor) {
+        if (anchor.isExact) {
+          map.flyTo({
+            center: [anchor.displayLng, anchor.displayLat],
+            zoom: Math.max(map.getZoom(), 14),
+            duration: 0,
+          });
+          return;
+        }
+
+        const latRad = (anchor.lat * Math.PI) / 180;
+        const metersPerDegLat = 111_320;
+        const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+        const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
+        const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([anchor.lng - lngOffset, anchor.lat - latOffset]);
+        bounds.extend([anchor.lng + lngOffset, anchor.lat + latOffset]);
+        map.fitBounds(bounds, { padding: 60, duration: 0 });
+        return;
+      }
+    }
+
     const bounds = new mapboxgl.LngLatBounds();
     points.forEach((point) => {
       if (point.isExact) {
@@ -525,7 +590,7 @@ function MapCanvas({
       bounds.extend([point.lng + lngOffset, point.lat + latOffset]);
     });
     map.fitBounds(bounds, { padding: 60, duration: 0 });
-  }, [points, routeGeojson]);
+  }, [points, routeGeojson, focusPointId]);
 
   return (
     <div
@@ -541,10 +606,12 @@ function MapViewContent() {
   const searchParams = useSearchParams();
   const requestedPropertyId = searchParams?.get("propertyId") ?? "";
   const mapMatches = useAppStore((state) => state.mapMatches);
+  const listingsById = useAppStore((state) => state.listingsById);
   const requestedListing = useAppStore((state) =>
     requestedPropertyId ? state.listingsById[requestedPropertyId] : undefined
   );
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const loadExploreListings = useAppStore((state) => state.loadExploreListings);
   const fetchPropertyById = useAppStore((state) => state.fetchPropertyById);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const userLocation = useAppStore((state) => state.userLocation);
@@ -579,6 +646,12 @@ function MapViewContent() {
 
   useEffect(() => {
     if (!authToken || !requestedPropertyId) return;
+    // Pull a broader pool so "similar properties" is not limited to current matched subset.
+    void loadExploreListings({ distance: 200 });
+  }, [authToken, requestedPropertyId, loadExploreListings]);
+
+  useEffect(() => {
+    if (!authToken || !requestedPropertyId) return;
     const refresh = () => {
       void loadMapMatches();
       void fetchPropertyById(requestedPropertyId, { force: true });
@@ -593,16 +666,44 @@ function MapViewContent() {
   }, [authToken, requestedPropertyId, loadMapMatches, fetchPropertyById]);
 
   const sourceListings = useMemo(() => {
-    if (!requestedListing) return mapMatches;
+    const cachedListings = Object.values(listingsById);
+    const requestedAnchor =
+      (requestedPropertyId ? listingsById[requestedPropertyId] : undefined) ??
+      mapMatches.find((listing) => listing.id === requestedPropertyId) ??
+      cachedListings.find((listing) => listing.id === requestedPropertyId);
 
-    const alreadyIncluded = mapMatches.some(
-      (listing) => listing.id === requestedListing.id
+    if (!requestedAnchor) {
+      return mapMatches;
+    }
+
+    const mapPool = mapMatches.filter((listing) => listing.id !== requestedAnchor.id);
+    const cachedPool = cachedListings.filter(
+      (listing) =>
+        listing.id !== requestedAnchor.id &&
+        Number.isFinite(listing.lat) &&
+        Number.isFinite(listing.lng)
     );
-    if (alreadyIncluded) return mapMatches;
 
-    return [requestedListing, ...mapMatches];
-  }, [mapMatches, requestedListing]);
+    const merged = new Map<string, (typeof cachedPool)[number]>();
+    mapPool.forEach((listing) => merged.set(listing.id, listing));
+    cachedPool.forEach((listing) => {
+      if (!merged.has(listing.id)) {
+        merged.set(listing.id, listing);
+      }
+    });
+
+    const others = Array.from(merged.values());
+    if (!others.length) return [requestedAnchor];
+    const sorted = randomizedSimilaritySort(others, requestedAnchor).slice(0, 24);
+    return [requestedAnchor, ...sorted];
+  }, [mapMatches, listingsById, requestedPropertyId]);
   const showEmptyState = sourceListings.length === 0;
+
+  const mapSourceListings = useMemo(() => {
+    if (!requestedPropertyId) return sourceListings;
+    const anchor = sourceListings.find((listing) => listing.id === requestedPropertyId);
+    return anchor ? [anchor] : sourceListings;
+  }, [requestedPropertyId, sourceListings]);
 
   const listItems = useMemo<ListingCard[]>(() => {
     return sourceListings.map((listing) => {
@@ -626,7 +727,7 @@ function MapViewContent() {
   }, [sourceListings, authToken, likedIds]);
 
   const mapPoints = useMemo<MapPoint[]>(() => {
-    return sourceListings
+    return mapSourceListings
       .map((listing, index) => {
         const isExact =
           !authToken ||
@@ -650,7 +751,7 @@ function MapViewContent() {
         };
       })
       .filter((point): point is MapPoint => Boolean(point));
-  }, [sourceListings, authToken]);
+  }, [mapSourceListings, authToken]);
   const hasApproxArea = useMemo(
     () => mapPoints.some((point) => !point.isExact),
     [mapPoints]
@@ -661,6 +762,10 @@ function MapViewContent() {
       ? Math.min(selectedIndex, listItems.length - 1)
       : 0;
   const activeListing = listItems[activeIndex] ?? listItems[0];
+  const activeMapIndex =
+    (activeListing
+      ? mapPoints.find((point) => point.id === activeListing.id)?.index
+      : undefined) ?? 0;
 
   const mobileMapRef = useRef<mapboxgl.Map | null>(null);
   const desktopMapRef = useRef<mapboxgl.Map | null>(null);
@@ -686,7 +791,9 @@ function MapViewContent() {
   };
 
   const handleLocate = (mapRef: { current: mapboxgl.Map | null }) => {
-    const target = mapPoints.find((point) => point.index === activeIndex);
+    const target = activeListing
+      ? mapPoints.find((point) => point.id === activeListing.id)
+      : mapPoints[0];
     if (!target || !mapRef.current) return;
     const currentZoom = mapRef.current.getZoom();
     mapRef.current.flyTo({
@@ -695,6 +802,37 @@ function MapViewContent() {
       duration: 600,
     });
   };
+
+  useEffect(() => {
+    if (!requestedPropertyId || routeGeojson) return;
+    const anchor = mapPoints.find((point) => point.id === requestedPropertyId);
+    if (!anchor) return;
+    setSelectedIndex(anchor.index);
+
+    const focusMap = (map: mapboxgl.Map | null) => {
+      if (!map) return;
+      if (anchor.isExact) {
+        map.flyTo({
+          center: [anchor.displayLng, anchor.displayLat],
+          zoom: Math.max(map.getZoom(), 14),
+          duration: 0,
+        });
+        return;
+      }
+      const latRad = (anchor.lat * Math.PI) / 180;
+      const metersPerDegLat = 111_320;
+      const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+      const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
+      const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
+      const bounds = new mapboxgl.LngLatBounds();
+      bounds.extend([anchor.lng - lngOffset, anchor.lat - latOffset]);
+      bounds.extend([anchor.lng + lngOffset, anchor.lat + latOffset]);
+      map.fitBounds(bounds, { padding: 60, duration: 0 });
+    };
+
+    focusMap(mobileMapRef.current);
+    focusMap(desktopMapRef.current);
+  }, [requestedPropertyId, mapPoints, routeGeojson]);
 
   useEffect(() => {
     const safeResize = (map: mapboxgl.Map | null) => {
@@ -736,7 +874,9 @@ function MapViewContent() {
     setIsRouting(true);
     setRouteGeojson(null);
     try {
-      const target = mapPoints.find((point) => point.index === activeIndex);
+      const target = activeListing
+        ? mapPoints.find((point) => point.id === activeListing.id)
+        : mapPoints[0];
       if (!target) {
         setRoutingError("Unable to find destination.");
         return;
@@ -819,22 +959,10 @@ function MapViewContent() {
       {/* Mobile */}
       <div className="lg:hidden h-screen bg-background-light text-[#0c141d] font-display antialiased flex flex-col">
         <header className="bg-primary text-white pt-10 pb-4 px-4 shadow-lg shrink-0 rounded-b-lg z-10 w-full">
-          <div className="flex items-center justify-between mb-4">
-            <button className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-slate-100 shadow-sm text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all active:scale-90 touch-manipulation">
-              <span className={`material-symbols-outlined text-[22px] ${activeListing?.isSaved ? "text-red-500 fill-current" : ""}`}>
-                favorite
-              </span>
-            </button>
-
+          <div className="flex items-center justify-center mb-4">
             <h1 className="text-xl font-bold tracking-tight">
               Matched Properties
             </h1>
-
-            <button className="flex items-center justify-center p-2 rounded-full hover:bg-white/10 transition-colors">
-              <span className="material-symbols-outlined text-[28px]">
-                filter_list
-              </span>
-            </button>
           </div>
 
           {/* Controlled toggle */}
@@ -874,12 +1002,13 @@ function MapViewContent() {
         {/* MOBILE BODY SWITCHES HERE */}
         {viewMode === "map" ? (
           <main className="relative w-full flex-1 min-h-0 overflow-hidden bg-[#e8e4dc]">
-            <MapCanvas
-              points={mapPoints}
-              activeIndex={activeIndex}
-              onSelect={setSelectedIndex}
-              onMapReady={handleMobileMapReady}
-              routeGeojson={routeGeojson}
+                <MapCanvas
+                  points={mapPoints}
+                  activeIndex={activeMapIndex}
+                  focusPointId={requestedPropertyId || undefined}
+                  onSelect={setSelectedIndex}
+                  onMapReady={handleMobileMapReady}
+                  routeGeojson={routeGeojson}
               onMapError={setMapError}
               onMapStatus={handleMapStatus}
             />
@@ -1084,7 +1213,8 @@ function MapViewContent() {
         <section className="relative flex-1 h-full min-h-0 overflow-hidden bg-gray-200">
           <MapCanvas
             points={mapPoints}
-            activeIndex={activeIndex}
+            activeIndex={activeMapIndex}
+            focusPointId={requestedPropertyId || undefined}
             onSelect={setSelectedIndex}
             onMapReady={handleDesktopMapReady}
             routeGeojson={routeGeojson}

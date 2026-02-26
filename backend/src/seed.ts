@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import mongoose, { Model } from "mongoose";
-import bcrypt from "bcrypt";
+import * as bcrypt from "bcrypt";
 import { User, UserSchema } from "./users/schemas/user.schema";
 import { Property, PropertySchema } from "./properties/schemas/property.schema";
 import { Match, MatchSchema } from "./matches/schemas/match.schema";
@@ -31,19 +31,30 @@ const getModel = <T>(name: string, schema: mongoose.Schema): Model<T> =>
   (mongoose.models[name] as Model<T>) || mongoose.model<T>(name, schema);
 
 async function seed() {
+  console.log("Loading environment variables...");
   loadEnv();
   const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/get-a-roof";
-  await mongoose.connect(uri);
 
+  console.log(`Connecting to database at ${uri.substring(0, 20)}...`);
+  try {
+    await mongoose.connect(uri);
+    console.log("Successfully connected to the database.");
+  } catch (err) {
+    console.error("Failed to connect to the database:", err);
+    return;
+  }
+
+  console.log("Initializing models...");
   const UserModel = getModel<User>("User", UserSchema);
   const PropertyModel = getModel<Property>("Property", PropertySchema);
   const MatchModel = getModel<Match>("Match", MatchSchema);
   const MessageModel = getModel<Message>("Message", MessageSchema);
 
-  const password = "Password123!";
+  console.log("Hashing password...");
+  const password = process.env.SEED_PASSWORD || "Victor1@seun";
   const passwordHash = await bcrypt.hash(password, 10);
 
-  const landlordEmail = "landlord@getaroof.dev";
+  const landlordEmail = "seunv0619@gmail.com";
   const tenantEmail = "tenant@getaroof.dev";
   const tenantTwoEmail = "tenant2@getaroof.dev";
   const seedEmails = [landlordEmail, tenantEmail, tenantTwoEmail];
@@ -86,7 +97,7 @@ async function seed() {
     {
       $set: {
         email: landlordEmail,
-        firstName: "Lana",
+        firstName: "Victor",
         lastName: "Landlord",
         role: UserRole.Landlord,
         phoneNumber: "+15550001",
@@ -188,92 +199,88 @@ async function seed() {
     await PropertyModel.deleteMany({ _id: { $in: existingPropertyIds } });
   }
 
-  const properties = await PropertyModel.insertMany([
-    {
-      landlordId,
-      images: ["/p2.png", "/p5.png", "/p6.png"],
-      monthlyPrice: 2200,
-      address: {
-        street: "21 Johnson Street",
-        city: "Victoria Island",
-        state: "Lagos",
-        zip: "101241",
-        lat: 6.4358,
-        lng: 3.4251,
-      },
-      neighborhood: "Victoria Island",
-      bedCount: 2,
-      bathCount: 2,
-      sqFt: 1300,
-      petFriendly: true,
-      propertyType: PropertyType.SelfCompound,
-      description: `${seedTag} Bright self compound close to the lagoon.`,
-      amenities: ["Laundry", "Security", "Elevator"],
-      status: PropertyStatus.Listed,
-      landlordRequirements: {
-        budgetRange: { min: 1500, max: 3000 },
-        annualIncome: { min: 60000 },
-        petsAllowed: true,
-        selfCompound: true,
-      },
-    },
-    {
-      landlordId,
-      images: ["/p3.png", "/p7.png", "/p8.png"],
-      monthlyPrice: 3400,
-      address: {
-        street: "8 Palm Drive",
-        city: "Lekki",
-        state: "Lagos",
-        zip: "105102",
-        lat: 6.4281,
-        lng: 3.4287,
-      },
-      neighborhood: "Lekki Phase 1",
-      bedCount: 4,
-      bathCount: 3,
-      sqFt: 2100,
-      petFriendly: false,
-      propertyType: PropertyType.Shortlet,
-      description: `${seedTag} Premium shortlet with private balcony views.`,
-      amenities: ["Pool", "Gym", "Parking"],
-      status: PropertyStatus.Listed,
-      landlordRequirements: {
-        budgetRange: { min: 3000, max: 5000 },
-        annualIncome: { min: 100000 },
-        shortlet: true,
-        sharedCompound: false,
-      },
-    },
-    {
-      landlordId,
-      images: ["/p4.png", "/p6.png", "/p7.png"],
-      monthlyPrice: 1800,
-      address: {
-        street: "120 Harmon Road",
-        city: "Abuja",
-        state: "FCT",
-        zip: "900108",
-        lat: 9.0732,
-        lng: 7.4911,
-      },
-      neighborhood: "Gwarinpa",
-      bedCount: 3,
-      bathCount: 2,
-      sqFt: 1600,
-      petFriendly: true,
-      propertyType: PropertyType.SharedApartment,
-      description: `${seedTag} Renovated shared apartment with skylight.`,
-      amenities: ["Security", "Generator"],
-      status: PropertyStatus.Listed,
-      landlordRequirements: {
-        budgetRange: { min: 1200, max: 2200 },
-        annualIncome: { min: 50000 },
-        sharedApartment: true,
-      },
-    },
-  ]);
+  // Helper arrays for generation
+  const AI_IMAGES = [
+    "/ai_house_1.png",
+    "/ai_house_2.png",
+    "/ai_house_3.png",
+    "/ai_house_4.png",
+    "/ai_house_5.png",
+  ];
 
+  const SUBURBS = [
+    { city: "Victoria Island", state: "Lagos", zip: "101241", lat: 6.4358, lng: 3.4251, neighborhood: "Victoria Island" },
+    { city: "Lekki", state: "Lagos", zip: "105102", lat: 6.4281, lng: 3.4287, neighborhood: "Lekki Phase 1" },
+    { city: "Abuja", state: "FCT", zip: "900108", lat: 9.0732, lng: 7.4911, neighborhood: "Gwarinpa" },
+    { city: "Ikeja", state: "Lagos", zip: "100281", lat: 6.6018, lng: 3.3515, neighborhood: "GRA" },
+    { city: "Yaba", state: "Lagos", zip: "101212", lat: 6.5095, lng: 3.3711, neighborhood: "Alagomeji" }
+  ];
+
+  const ADJECTIVES = ["Bright", "Premium", "Renovated", "Cozy", "Spacious", "Luxurious", "Modern", "Classic"];
+  const TYPES = [PropertyType.SelfCompound, PropertyType.Shortlet, PropertyType.SharedApartment, PropertyType.SharedCompound];
+  const AMENITIES_POOL = ["Laundry", "Security", "Elevator", "Pool", "Gym", "Parking", "Generator", "Fast WiFi"];
+
+  const generateRandomProperty = (index: number) => {
+    const suburb = SUBURBS[index % SUBURBS.length];
+    const propertyType = TYPES[Math.floor(Math.random() * TYPES.length)];
+    const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+
+    // Pick 3 random images setup
+    const shuffledImages = [...AI_IMAGES].sort(() => 0.5 - Math.random());
+    const selectedImages = shuffledImages.slice(0, 3);
+
+    const shuffledAmenities = [...AMENITIES_POOL].sort(() => 0.5 - Math.random());
+    const selectedAmenities = shuffledAmenities.slice(0, Math.floor(Math.random() * 4) + 2); // 2 to 5 amenities
+
+    const isPetFriendly = Math.random() > 0.5;
+    const basePrice = Math.floor(Math.random() * 3000) + 1000; // 1000 to 4000
+
+    return {
+      landlordId,
+      images: selectedImages,
+      monthlyPrice: basePrice,
+      address: {
+        street: `${Math.floor(Math.random() * 999) + 1} Example Street ${index}`,
+        city: suburb.city,
+        state: suburb.state,
+        zip: suburb.zip,
+        lat: suburb.lat + (Math.random() - 0.5) * 0.05,
+        lng: suburb.lng + (Math.random() - 0.5) * 0.05,
+      },
+      neighborhood: suburb.neighborhood,
+      bedCount: Math.floor(Math.random() * 4) + 1, // 1 to 4
+      bathCount: Math.floor(Math.random() * 3) + 1, // 1 to 3
+      sqFt: Math.floor(Math.random() * 1500) + 500, // 500 to 2000
+      petFriendly: isPetFriendly,
+      propertyType,
+      description: `${seedTag} ${adjective} ${propertyType.toLowerCase().replace('_', ' ')} located in ${suburb.neighborhood}.`,
+      amenities: selectedAmenities,
+      status: PropertyStatus.Listed,
+      landlordRequirements: {
+        budgetRange: { min: Math.floor(basePrice * 0.8), max: Math.floor(basePrice * 1.5) },
+        annualIncome: { min: basePrice * 30 },
+        petsAllowed: isPetFriendly,
+        [propertyType === PropertyType.SelfCompound ? 'selfCompound' :
+          propertyType === PropertyType.Shortlet ? 'shortlet' :
+            propertyType === PropertyType.SharedApartment ? 'sharedApartment' : 'sharedCompound']: true,
+      },
+    };
+  };
+
+  const propertiesData = Array.from({ length: 50 }, (_, i) => generateRandomProperty(i));
+  const properties = [];
+
+  console.log("Starting to insert 50 properties in batches of 10...");
+  // Insert in batches of 10 to avoid OOM
+  for (let i = 0; i < propertiesData.length; i += 10) {
+    const batch = propertiesData.slice(i, i + 10);
+    console.log(`Inserting batch ${i / 10 + 1}...`);
+    const insertedBatch = await PropertyModel.insertMany(batch);
+    properties.push(...insertedBatch);
+  }
+  console.log("Successfully inserted all 50 properties.");
+
+  // Take first 3 properties for dummy matches
   const [propertyOne, propertyTwo, propertyThree] = properties;
 
   const matches = await MatchModel.insertMany([

@@ -35,9 +35,10 @@ type TenantPreferences = {
 };
 
 function MatchCardView({ match }: { match: MatchCard }) {
+  const hasStrongScore = match.tags.some((tag) => tag.tone === "success");
   return (
-    <section className="bg-white rounded-xl shadow border p-5 space-y-4">
-      <div className="flex gap-4">
+    <section className="bg-white rounded-2xl shadow-[0_12px_30px_rgba(15,23,42,0.08)] border border-slate-200 p-5 space-y-4">
+      <div className="flex gap-4 items-start">
         <div className="relative">
           <Image
             src={match.avatarUrl}
@@ -56,20 +57,24 @@ function MatchCardView({ match }: { match: MatchCard }) {
         </div>
 
         <div className="flex-1">
-          <div className="flex justify-between">
-            <h2 className="text-lg font-bold">{match.name}</h2>
-            <span className="text-sm text-gray-500">{match.time}</span>
+          <div className="flex justify-between items-start gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{match.name}</h2>
+              <p className="text-sm text-slate-500">{match.role}</p>
+            </div>
+            <span className="text-xs font-semibold text-slate-500 rounded-full bg-slate-100 px-2.5 py-1">
+              {match.time || "Now"}
+            </span>
           </div>
-          <p className="text-gray-600">{match.role}</p>
 
           <div className="flex flex-wrap gap-2 mt-3">
             {match.tags.map((tag) => (
               <span
                 key={tag.label}
                 className={[
-                  "px-3 py-1 text-sm font-semibold rounded-full border",
+                  "px-3 py-1 text-xs font-semibold rounded-full border",
                   tag.tone === "success"
-                    ? "bg-green-50 text-green-700 border-green-100"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
                     : "bg-blue-50 text-[#0a44b8] border-blue-100",
                 ].join(" ")}
               >
@@ -83,23 +88,23 @@ function MatchCardView({ match }: { match: MatchCard }) {
       {match.note ? (
         <div
           className={[
-            "rounded-lg p-3 flex gap-2 border",
+            "rounded-xl p-3.5 flex gap-2 border",
             match.noteTone === "neutral"
-              ? "bg-gray-50 border-gray-200 text-gray-600"
-              : "bg-blue-50 border-blue-100",
+              ? "bg-slate-50 border-slate-200 text-slate-600"
+              : "bg-blue-50 border-blue-100 text-[#0a44b8]",
           ].join(" ")}
         >
           <span className="material-symbols-outlined text-[#0a44b8]">
-            thumb_up
+            {hasStrongScore ? "workspace_premium" : "insights"}
           </span>
           <p className="text-sm">{match.note}</p>
         </div>
       ) : null}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-1">
         <Link
           href={match.chatHref}
-          className="w-14 h-14 rounded-full border-2 border-[#0a44b8]/30 flex items-center justify-center text-[#0a44b8]"
+          className="w-12 h-12 rounded-full border border-[#0a44b8]/30 bg-[#0a44b8]/5 flex items-center justify-center text-[#0a44b8] hover:bg-[#0a44b8]/10 transition-colors"
           aria-label={`Chat with ${match.name}`}
         >
           <span className="material-symbols-outlined">chat</span>
@@ -107,12 +112,12 @@ function MatchCardView({ match }: { match: MatchCard }) {
         {match.tenantId ? (
           <Link
             href={`/dashboard/tenants/${match.tenantId}`}
-            className="flex-1 h-14 rounded-full bg-[#0a44b8] text-white font-bold text-lg shadow active:scale-95 flex items-center justify-center"
+            className="flex-1 h-12 rounded-full bg-[#0a44b8] text-white font-bold text-[15px] shadow active:scale-95 flex items-center justify-center hover:brightness-95 transition"
           >
             View Profile
           </Link>
         ) : (
-          <button className="flex-1 h-14 rounded-full bg-[#0a44b8] text-white font-bold text-lg shadow active:scale-95">
+          <button className="flex-1 h-12 rounded-full bg-[#0a44b8] text-white font-bold text-[15px] shadow active:scale-95">
             View Profile
           </button>
         )}
@@ -241,15 +246,8 @@ export default function LandlordMatchesPage() {
       {/* Header */}
       <header className="sticky top-0 bg-[#0a44b8] text-white shadow-md z-50">
         <div className="mx-auto w-full max-w-3xl px-4 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex items-center">
             <h1 className="text-2xl font-bold">Matches</h1>
-            <button
-              type="button"
-              className="w-11 h-11 rounded-full hover:bg-white/10 flex items-center justify-center"
-              aria-label="Filter matches"
-            >
-              <span className="material-symbols-outlined text-2xl">tune</span>
-            </button>
           </div>
           <p className="text-sm opacity-80 mt-1">
             {newCount} new match{newCount === 1 ? "" : "es"} waiting for review

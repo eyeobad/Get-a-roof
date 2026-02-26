@@ -211,7 +211,11 @@ export class PropertiesService {
     landlordId: string,
     options?: { q?: string; status?: string; sort?: string }
   ) {
-    const filters: Record<string, any> = { landlordId };
+    const filters: Record<string, any> = {
+      landlordId: Types.ObjectId.isValid(landlordId)
+        ? new Types.ObjectId(landlordId)
+        : landlordId,
+    };
     if (options?.status) {
       filters.status = options.status;
     }

@@ -48,7 +48,7 @@ export default function LoginPage() {
         (!tenantPreferences ||
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
-      if (!isAdmin) {
+      if (!isAdmin && !isLandlord) {
         const location = await captureUserLocation();
         if (!location) {
           clearAuth();
