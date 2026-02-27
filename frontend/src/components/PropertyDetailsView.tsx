@@ -62,6 +62,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const router = useRouter();
 
   const ensureThreadForListing = useAppStore((s) => s.ensureThreadForListing);
+  const authToken = useAppStore((s) => s.authToken);
 
   const likeListing = useAppStore((s) => s.likeListing);
   const unlikeListing = useAppStore((s) => s.unlikeListing);
