@@ -65,25 +65,9 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
   const likeListing = useAppStore((s) => s.likeListing);
   const unlikeListing = useAppStore((s) => s.unlikeListing);
-  const loadMatches = useAppStore((s) => s.loadMatches);
-  const matchSummaries = useAppStore((s) => s.matchSummaries);
-  const authToken = useAppStore((s) => s.authToken);
 
   const likedIds = useAppStore((s) => s.likedIds);
-
-  useEffect(() => {
-    if (!authToken) return;
-    void loadMatches();
-  }, [authToken, loadMatches]);
-
-  const isSavedFromMatches = useMemo(
-    () => matchSummaries.some((match) => match.listingId === listing.id),
-    [matchSummaries, listing.id]
-  );
-  const isSaved = useMemo(
-    () => likedIds.includes(listing.id) || isSavedFromMatches,
-    [likedIds, listing.id, isSavedFromMatches]
-  );
+  const isSaved = useMemo(() => likedIds.includes(listing.id), [likedIds, listing.id]);
 
   const gallery = useMemo(() => {
     const rawImages =

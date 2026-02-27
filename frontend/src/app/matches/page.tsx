@@ -128,8 +128,8 @@ export default function MatchesPage() {
     <>
       {/* MOBILE */}
       <div className="lg:hidden min-h-screen bg-background-light text-[#0c141d] font-display antialiased flex flex-col">
-        <div className="flex-1 pb-[90px] overflow-x-hidden">
-          <header className="sticky top-0 z-50 bg-background-light/95 backdrop-blur-md px-5 pt-12 pb-4 border-b border-black/5">
+        <div className="flex-1 pb-[110px] overflow-x-hidden">
+          <header className="sticky top-0 z-[70] bg-background-light/95 backdrop-blur-md px-5 pt-12 pb-4 border-b border-black/5">
             <div className="flex items-center justify-between gap-3">
               <h1 className="text-3xl font-extrabold tracking-tight text-[#1A1A1A]">
                 Matches
@@ -197,7 +197,7 @@ export default function MatchesPage() {
             )}
           </header>
 
-          <main className="flex-1 px-5 pt-6 space-y-5">
+          <main className="relative z-0 flex-1 px-5 pt-6 space-y-5">
             {filteredMatches.length === 0 ? (
               <div className="rounded-3xl border border-black/5 bg-white p-8 text-center shadow-sm">
                 <p className="text-lg font-bold text-[#1A1A1A]">
@@ -278,7 +278,7 @@ export default function MatchesPage() {
           </main>
         </div>
 
-        <BottomNav />
+        <BottomNav className="fixed bottom-0 left-0 right-0 z-[70]" />
       </div>
 
       {/* DESKTOP */}

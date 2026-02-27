@@ -117,6 +117,7 @@ export default function ExploreCards() {
     };
     setDraftFilters(next);
     setFilters(next);
+    setCardImageIndexes({});
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);

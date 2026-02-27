@@ -98,7 +98,7 @@ type ProfileState = {
   apartmentPrefs: Record<string, boolean>; // check label -> bool
 };
 
-type ModalType = "none" | "photo" | "preferences";
+type ModalType = "none" | "photo" | "preferences" | "delete";
 
 type ApiTenantPreferences = {
   lookingFor?: string[];
@@ -456,6 +456,11 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSignOut = () => {
+    clearAuth();
+    router.push("/login");
+  };
+
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-900">
       {/* Responsive container */}
@@ -473,10 +478,7 @@ export default function ProfilePage() {
           <h2 className="flex-1 text-center text-2xl font-bold tracking-tight text-primary">My Profile</h2>
 
           <button
-            onClick={() => {
-              clearAuth();
-              router.push("/login");
-            }}
+            onClick={handleSignOut}
             aria-label="Logout"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-slate-100"
           >
@@ -740,58 +742,16 @@ export default function ProfilePage() {
               </div>
             </section>
 
-            {/* Delete Account Section - UPDATED WITH DANGER ZONE */}
-            <section className="mt-12 border-t border-gray-100 pt-10">
-              <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm ring-1 ring-red-50">
-                <div className="flex flex-col gap-8 p-6 md:flex-row md:items-start md:justify-between">
-                  
-                  {/* Left Side: The Warning */}
-                  <div className="max-w-md space-y-3">
-                    <div className="flex items-center gap-2 text-red-600">
-                      <span className="material-symbols-outlined">warning</span>
-                      <h3 className="text-lg font-bold text-gray-900">Danger Zone</h3>
-                    </div>
-                    <p className="text-sm leading-relaxed text-gray-500">
-                      Permanently delete your account and all matching history. This action 
-                      <span className="font-semibold text-gray-900"> cannot be undone</span>.
-                    </p>
-                  </div>
-
-                  {/* Right Side: The Input & Action */}
-                  <div className="w-full max-w-sm rounded-xl bg-red-50/50 p-5 border border-red-100">
-                    <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">
-                      To confirm, type <span className="font-mono font-bold text-red-600">delete</span> below
-                    </label>
-                    
-                    <div className="flex flex-col gap-3">
-                      <input 
-                        type="text" 
-                        placeholder="delete"
-                        value={confirmInput}
-                        onChange={(e) => setConfirmInput(e.target.value)}
-                        className="w-full rounded-lg border-red-200 bg-white px-4 py-2 text-sm text-gray-900 placeholder:text-gray-300 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                      />
-
-                      <button
-                        onClick={handleDeleteAccount}
-                        disabled={isDeleting || confirmInput !== "delete"}
-                        className="group flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
-                      >
-                        {isDeleting ? (
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                        ) : (
-                          // Icon changes based on whether the input matches
-                          <span className="material-symbols-outlined text-[18px] transition-transform group-hover:scale-110">
-                            {confirmInput === "delete" ? "delete_forever" : "lock"}
-                          </span>
-                        )}
-                        {isDeleting ? "Deleting..." : "Delete Account"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                
-              </div>
+            <section className="space-y-3 pt-4">
+              <button
+                onClick={() => {
+                  setConfirmInput("");
+                  openModal("delete");
+                }}
+                className="w-full py-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 font-bold hover:bg-red-100 active:bg-red-200 transition-colors"
+              >
+                Delete Account
+              </button>
             </section>
           </main>
         </div>
@@ -955,6 +915,61 @@ export default function ProfilePage() {
           ))}
         </div>
       </Modal>
+
+      {activeModal === "delete" && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={closeModal} />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">Delete Account</h3>
+              <button
+                onClick={closeModal}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[22px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 p-4 rounded-2xl flex items-start gap-3">
+                <span className="material-symbols-outlined text-red-600">warning</span>
+                <p className="text-sm text-red-800 leading-relaxed">
+                  This action is permanent and cannot be undone. All your listings, matches, and messages will be permanently removed.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">
+                  Type <span className="font-mono text-red-600">delete</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  placeholder="delete"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 font-medium text-slate-900 placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={confirmInput.trim() !== "delete" || isDeleting}
+                  className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  {isDeleting ? "Deleting..." : "Confirm Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
