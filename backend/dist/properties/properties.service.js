@@ -145,6 +145,7 @@ let PropertiesService = class PropertiesService {
             address: property.address,
             monthlyPrice: property.monthlyPrice,
             propertyType: property.propertyType,
+            listingIntent: property.listingIntent,
             bedCount: property.bedCount,
             bathCount: property.bathCount,
             sqFt: property.sqFt,
@@ -177,7 +178,11 @@ let PropertiesService = class PropertiesService {
         return { url: result.url };
     }
     async getLandlordProperties(landlordId, options) {
-        const filters = { landlordId };
+        const filters = {
+            landlordId: mongoose_2.Types.ObjectId.isValid(landlordId)
+                ? new mongoose_2.Types.ObjectId(landlordId)
+                : landlordId,
+        };
         if (options?.status) {
             filters.status = options.status;
         }
@@ -198,6 +203,7 @@ let PropertiesService = class PropertiesService {
             bedCount: 1,
             bathCount: 1,
             propertyType: 1,
+            listingIntent: 1,
             images: 1,
             updatedAt: 1,
             landlordId: 1,

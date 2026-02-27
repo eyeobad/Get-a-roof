@@ -23,6 +23,7 @@ export default function AddPropertyDetailsPage() {
   const [location, setLocation] = useState("");
   const [rent, setRent] = useState("");
   const [propertyType, setPropertyType] = useState("");
+  const [listingIntent, setListingIntent] = useState<"Rent" | "Shortlet">("Rent");
   const [desc, setDesc] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -67,6 +68,9 @@ export default function AddPropertyDetailsPage() {
     if (draft.address?.street) setLocation(draft.address.street);
     if (draft.monthlyPrice) setRent(String(Math.round(draft.monthlyPrice * 12)));
     if (draft.propertyType) setPropertyType(draft.propertyType);
+    if (draft.listingIntent === "Shortlet" || draft.listingIntent === "Rent") {
+      setListingIntent(draft.listingIntent);
+    }
     if (draft.description) setDesc(draft.description);
     if (draft.address?.lat) setLat(String(draft.address.lat));
     if (draft.address?.lng) setLng(String(draft.address.lng));
@@ -151,6 +155,7 @@ export default function AddPropertyDetailsPage() {
     setLandlordDraft({
       monthlyPrice,
       propertyType: propertyType || undefined,
+      listingIntent,
       description: desc || undefined,
       bedCount: beds ?? undefined,
       bathCount: baths ?? undefined,
@@ -318,6 +323,21 @@ export default function AddPropertyDetailsPage() {
                   {PROPERTY_TYPE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
+                </select>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-gray-400">expand_more</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-bold uppercase tracking-wider text-gray-500 ml-1">Listing Intent</label>
+              <div className="relative input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                <select
+                  value={listingIntent}
+                  onChange={(e) => setListingIntent(e.target.value as "Rent" | "Shortlet")}
+                  className="w-full bg-transparent py-4 px-5 outline-none text-lg font-medium cursor-pointer"
+                >
+                  <option value="Rent">For Rent</option>
+                  <option value="Shortlet">Shortlet</option>
                 </select>
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-gray-400">expand_more</span>
               </div>

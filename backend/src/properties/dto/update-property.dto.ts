@@ -8,7 +8,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { Transform, Type } from "class-transformer";
-import { PropertyStatus, PropertyType } from "../../common/enums";
+import { ListingIntent, PropertyStatus, PropertyType } from "../../common/enums";
 import { PropertyAddressDto } from "./property-address.dto";
 import { LandlordRequirementsDto } from "./landlord-requirements.dto";
 import { normalizePropertyType } from "../../common/utils/property.utils";
@@ -59,6 +59,10 @@ export class UpdatePropertyDto {
   @IsEnum(PropertyType)
   @Transform(({ value }) => normalizePropertyType(value))
   propertyType?: PropertyType;
+
+  @IsOptional()
+  @IsEnum(ListingIntent)
+  listingIntent?: ListingIntent;
 
   @IsOptional()
   @IsString()

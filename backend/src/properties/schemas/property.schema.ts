@@ -1,6 +1,11 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument, Types } from "mongoose";
-import { PropertyStatus, PropertyType, VehiclePreference } from "../../common/enums";
+import {
+  ListingIntent,
+  PropertyStatus,
+  PropertyType,
+  VehiclePreference,
+} from "../../common/enums";
 
 export type PropertyDocument = HydratedDocument<Property>;
 
@@ -131,6 +136,9 @@ export class Property {
 
   @Prop({ type: String, enum: PropertyType })
   propertyType?: PropertyType;
+
+  @Prop({ type: String, enum: ListingIntent, default: ListingIntent.Rent })
+  listingIntent?: ListingIntent;
 
   @Prop()
   description?: string;

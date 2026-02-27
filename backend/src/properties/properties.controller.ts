@@ -21,7 +21,7 @@ import { PropertiesService } from "./properties.service";
 import { CreatePropertyDto } from "./dto/create-property.dto";
 import { UpdatePropertyDto } from "./dto/update-property.dto";
 import { toNumber } from "../common/utils/match.helpers";
-import { PropertyStatus } from "../common/enums";
+import { ListingIntent, PropertyStatus } from "../common/enums";
 import { normalizePropertyType } from "../common/utils/property.utils";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { Roles } from "../common/guards/roles.decorator";
@@ -244,6 +244,15 @@ export class PropertiesController {
 
     if (query.petFriendly) {
       filters.petFriendly = query.petFriendly === "true";
+    }
+
+    if (query.listingIntent) {
+      const normalizedIntent = query.listingIntent.trim().toLowerCase();
+      if (normalizedIntent === "shortlet") {
+        filters.listingIntent = ListingIntent.Shortlet;
+      } else if (normalizedIntent === "rent") {
+        filters.listingIntent = ListingIntent.Rent;
+      }
     }
 
     if (query.landlordId) {

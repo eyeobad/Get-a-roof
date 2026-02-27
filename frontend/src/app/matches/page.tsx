@@ -26,15 +26,6 @@ type TagFacet = {
   count: number;
 };
 
-const formatTagLabel = (value?: string) => {
-  if (!value) return "";
-  if (value.toLowerCase() === "listed") return "";
-  return value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[-_]/g, " ")
-    .trim();
-};
-
 export default function MatchesPage() {
   const router = useRouter();
   const matchSummaries = useAppStore((state) => state.matchSummaries);
@@ -61,6 +52,7 @@ export default function MatchesPage() {
       .map((summary) => {
         const listing = listingsById[summary.listingId];
         if (!listing) return null;
+        const listingMode = listing.listingIntent === "Shortlet" ? "Shortlet" : "Rent";
         return {
           id: summary.id,
           listingId: summary.listingId,
@@ -69,8 +61,8 @@ export default function MatchesPage() {
           price: listing.price,
           priceValue: Number(listing.price.replace(/[^\d]/g, "")) || 0,
           image: listing.image,
-          tags: [formatTagLabel(listing.highlight), formatTagLabel(listing.tag)].filter(Boolean),
-          primaryTag: formatTagLabel(listing.highlight) || "Property",
+          tags: [listingMode],
+          primaryTag: listingMode,
           badge: summary.matchScore ? `${summary.matchScore}%` : undefined,
           score: summary.matchScore ?? 0,
         };

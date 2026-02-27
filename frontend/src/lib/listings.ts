@@ -12,6 +12,7 @@ export type Listing = {
   stats: ListingStat[];
   address: string;
   highlight: string;
+  listingIntent?: "Rent" | "Shortlet";
   tag: string;
   alt: string;
   neighborhood: string;

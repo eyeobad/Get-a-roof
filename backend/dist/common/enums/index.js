@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VehiclePreference = exports.RouteAccessStatus = exports.MatchStatus = exports.PropertyType = exports.PropertyStatus = exports.VerificationStatus = exports.UserRole = void 0;
+exports.VehiclePreference = exports.RouteAccessStatus = exports.MatchStatus = exports.PropertyType = exports.ListingIntent = exports.PropertyStatus = exports.VerificationStatus = exports.UserRole = void 0;
 var UserRole;
 (function (UserRole) {
     UserRole["Tenant"] = "Tenant";
@@ -20,6 +20,11 @@ var PropertyStatus;
     PropertyStatus["Draft"] = "Draft";
     PropertyStatus["Listed"] = "Listed";
 })(PropertyStatus || (exports.PropertyStatus = PropertyStatus = {}));
+var ListingIntent;
+(function (ListingIntent) {
+    ListingIntent["Rent"] = "Rent";
+    ListingIntent["Shortlet"] = "Shortlet";
+})(ListingIntent || (exports.ListingIntent = ListingIntent = {}));
 var PropertyType;
 (function (PropertyType) {
     PropertyType["Apartment"] = "Apartment";

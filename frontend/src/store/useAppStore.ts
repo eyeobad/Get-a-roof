@@ -47,6 +47,7 @@ type LandlordDraft = {
     lng?: number;
   };
   propertyType?: string;
+  listingIntent?: "Rent" | "Shortlet";
   bedCount?: number;
   bathCount?: number;
   sqFt?: number;
@@ -169,6 +170,7 @@ type ApiProperty = {
   baths?: number;
   sqFt?: number;
   propertyType?: string;
+  listingIntent?: "Rent" | "Shortlet";
   type?: string;
   status?: string;
   description?: string;
@@ -242,6 +244,7 @@ type ExploreFilters = {
   budget?: number;
   distance?: number;
   propertyType?: string;
+  listingIntent?: "Rent" | "Shortlet" | "";
   toggles?: Record<string, boolean>;
   lat?: number;
   lng?: number;
@@ -571,6 +574,7 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
     ],
     address: address || property?.neighborhood || "",
     highlight: property?.propertyType ?? "Listing",
+    listingIntent: property?.listingIntent ?? "Rent",
     tag: property?.status ?? "Listing",
     alt: property?.propertyType ?? "Property",
     neighborhood: property?.neighborhood ?? property?.address?.city ?? "",
@@ -629,6 +633,7 @@ const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
   monthlyPrice: property?.monthlyPrice,
   address: property?.address,
   propertyType: property?.propertyType,
+  listingIntent: property?.listingIntent,
   bedCount: property?.bedCount,
   bathCount: property?.bathCount,
   sqFt: property?.sqFt,
@@ -648,6 +653,7 @@ const buildLandlordPayload = (draft: LandlordDraft) => {
   if (draft.images) payload.images = draft.images;
   if (draft.monthlyPrice !== undefined) payload.monthlyPrice = draft.monthlyPrice;
   if (draft.propertyType) payload.propertyType = draft.propertyType;
+  if (draft.listingIntent) payload.listingIntent = draft.listingIntent;
   if (draft.bedCount !== undefined) payload.bedCount = draft.bedCount;
   if (draft.bathCount !== undefined) payload.bathCount = draft.bathCount;
   if (draft.sqFt !== undefined) payload.sqFt = draft.sqFt;
@@ -1131,6 +1137,7 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance,
           propertyType: filters?.propertyType,
+          listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,
           lng: filters?.lng ?? state.userLocation?.lng,
           selfCompound: filters?.toggles?.selfCompound,
@@ -1169,6 +1176,7 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance,
           propertyType: filters?.propertyType,
+          listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,
           lng: filters?.lng ?? state.userLocation?.lng,
           selfCompound: filters?.toggles?.selfCompound,

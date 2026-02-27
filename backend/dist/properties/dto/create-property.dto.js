@@ -80,6 +80,11 @@ __decorate([
 ], CreatePropertyDto.prototype, "propertyType", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(enums_1.ListingIntent),
+    __metadata("design:type", String)
+], CreatePropertyDto.prototype, "listingIntent", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePropertyDto.prototype, "description", void 0);

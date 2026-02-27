@@ -191,6 +191,15 @@ let PropertiesController = class PropertiesController {
         if (query.petFriendly) {
             filters.petFriendly = query.petFriendly === "true";
         }
+        if (query.listingIntent) {
+            const normalizedIntent = query.listingIntent.trim().toLowerCase();
+            if (normalizedIntent === "shortlet") {
+                filters.listingIntent = enums_1.ListingIntent.Shortlet;
+            }
+            else if (normalizedIntent === "rent") {
+                filters.listingIntent = enums_1.ListingIntent.Rent;
+            }
+        }
         if (query.landlordId) {
             filters.landlordId = query.landlordId;
         }

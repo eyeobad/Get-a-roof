@@ -181,6 +181,10 @@ __decorate([
     __metadata("design:type", String)
 ], Property.prototype, "propertyType", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.ListingIntent, default: enums_1.ListingIntent.Rent }),
+    __metadata("design:type", String)
+], Property.prototype, "listingIntent", void 0);
+__decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], Property.prototype, "description", void 0);

@@ -17,6 +17,11 @@ export enum PropertyStatus {
   Listed = "Listed",
 }
 
+export enum ListingIntent {
+  Rent = "Rent",
+  Shortlet = "Shortlet",
+}
+
 export enum PropertyType {
   Apartment = "Apartment",
   House = "House",

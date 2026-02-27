@@ -271,7 +271,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id landlordId status moderationStatus moderationReason monthlyPrice propertyType bedCount bathCount address createdAt"
+          "_id landlordId status moderationStatus moderationReason monthlyPrice propertyType listingIntent bedCount bathCount address createdAt"
         )
         .lean(),
       this.propertyModel.countDocuments(filter),
@@ -317,7 +317,7 @@ export class AdminService {
     const updated = await this.propertyModel
       .findByIdAndUpdate(listingId, update, { new: true })
       .select(
-        "_id landlordId status moderationStatus moderationReason monthlyPrice propertyType bedCount bathCount address createdAt"
+        "_id landlordId status moderationStatus moderationReason monthlyPrice propertyType listingIntent bedCount bathCount address createdAt"
       )
       .lean();
     if (!updated) throw new NotFoundException("Listing not found");

@@ -28,22 +28,18 @@ type FilterModalProps = {
   isOpen: boolean;
   close: () => void;
   onApply: () => void;
-  filters: {
-    budget: number;
-    distance: number;
-    propertyType: string;
-    toggles: Record<string, boolean>;
-  };
-  setFilters: Dispatch<
-    SetStateAction<{
-      budget: number;
-      distance: number;
-      propertyType: string;
-      toggles: Record<string, boolean>;
-    }>
-  >;
+  filters: ExploreFilterState;
+  setFilters: Dispatch<SetStateAction<ExploreFilterState>>;
   onReset: () => void;
   toggleOptions: { label: string; key: string }[];
+};
+
+type ExploreFilterState = {
+  budget: number;
+  distance: number;
+  propertyType: string;
+  listingIntent: "" | "Rent" | "Shortlet";
+  toggles: Record<string, boolean>;
 };
 
 const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
@@ -63,11 +59,12 @@ export default function ExploreCards() {
     []
   );
 
-  const defaultFilters = useMemo(
+  const defaultFilters = useMemo<ExploreFilterState>(
     () => ({
       budget: 100000,
       distance: 15,
       propertyType: "",
+      listingIntent: "",
       toggles: toggleOptions.reduce<Record<string, boolean>>(
         (acc, option) => ({ ...acc, [option.key]: false }),
         {}
@@ -76,14 +73,16 @@ export default function ExploreCards() {
     [toggleOptions]
   );
 
-  const [filters, setFilters] = useState(defaultFilters);
-  const [draftFilters, setDraftFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState<ExploreFilterState>(defaultFilters);
+  const [draftFilters, setDraftFilters] = useState<ExploreFilterState>(defaultFilters);
+  const [cardImageIndexes, setCardImageIndexes] = useState<Record<string, number>>({});
 
   const hasActiveFilters = useMemo(() => {
     if (
       filters.budget !== defaultFilters.budget ||
       filters.distance !== defaultFilters.distance ||
-      filters.propertyType !== defaultFilters.propertyType
+      filters.propertyType !== defaultFilters.propertyType ||
+      filters.listingIntent !== defaultFilters.listingIntent
     ) {
       return true;
     }
@@ -119,6 +118,7 @@ export default function ExploreCards() {
       budget: filters.budget,
       distance: filters.distance,
       propertyType: filters.propertyType,
+      listingIntent: filters.listingIntent,
       toggles: filters.toggles,
     });
   };
@@ -155,6 +155,7 @@ export default function ExploreCards() {
       budget: filters.budget,
       distance: filters.distance,
       propertyType: filters.propertyType,
+      listingIntent: filters.listingIntent,
       toggles: filters.toggles,
     });
   }, [loadExploreListings, filters]);
@@ -188,12 +189,35 @@ export default function ExploreCards() {
     setIsSwipeAnimating(false);
   };
 
-  const cardBody = (card: Listing) => (
+  const resolveCardImages = (card: Listing) => {
+    const fromCollection = (card.images ?? []).filter(Boolean);
+    const allImages = fromCollection.length ? fromCollection : [card.image];
+    return allImages;
+  };
+
+  const setCardImageIndex = (cardId: string, nextIndex: number, total: number) => {
+    if (total <= 0) return;
+    const normalized = ((nextIndex % total) + total) % total;
+    setCardImageIndexes((prev) => ({
+      ...prev,
+      [cardId]: normalized,
+    }));
+  };
+
+  const cardBody = (card: Listing) => {
+    const intentLabel = card.listingIntent === "Shortlet" ? "SHORTLET" : "FOR RENT";
+    const images = resolveCardImages(card);
+    const activeImageIndex =
+      cardImageIndexes[card.id] !== undefined
+        ? Math.min(cardImageIndexes[card.id]!, images.length - 1)
+        : 0;
+    const activeImage = images[activeImageIndex] ?? card.image;
+    return (
     <>
-      <div className="relative h-[65%] w-full pointer-events-none">
+      <div className="relative h-[86%] md:h-[72%] w-full">
         <div className="absolute inset-0">
           <Image
-            src={card.image}
+            src={activeImage}
             alt={card.alt}
             fill
             sizes="(max-width:768px) 90vw, 640px"
@@ -201,45 +225,67 @@ export default function ExploreCards() {
           />
         </div>
 
+        {images.length > 1 && (
+          <>
+            <div className="absolute inset-x-0 top-4 z-20 flex items-center justify-center gap-1.5 px-8">
+              {images.map((_, index) => (
+                <button
+                  key={`${card.id}-dot-${index}`}
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setCardImageIndex(card.id, index, images.length);
+                  }}
+                  className={`h-1.5 rounded-full transition-all ${
+                    index === activeImageIndex ? "w-6 bg-white" : "w-2 bg-white/50"
+                  }`}
+                  aria-label={`Show photo ${index + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-bold tracking-wide shadow-sm">
           {card.tag}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-primary to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary to-transparent" />
       </div>
 
-      <div className="flex-1 bg-primary text-white px-6 py-5 flex flex-col justify-between gap-4 pointer-events-none">
-        <div className="flex flex-col gap-2 border-b border-white/10 pb-3">
+      <div className="flex-1 bg-primary text-white px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4 pointer-events-none">
+        <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
           <div className="flex items-end gap-2">
-            <h2 className="text-4xl font-bold tracking-tight">{card.price}</h2>
-            <span className="text-xl font-medium opacity-80 mb-1.5">{card.period}</span>
+            <h2 className="text-[2rem] md:text-4xl leading-none font-bold tracking-tight">{card.price}</h2>
+            <span className="text-base md:text-xl font-medium opacity-80 mb-0.5 md:mb-1.5">{card.period}</span>
           </div>
-          <p className="text-xs uppercase tracking-[0.35em] text-white/70">{card.highlight}</p>
+          <p className="text-[11px] md:text-xs uppercase tracking-[0.28em] md:tracking-[0.35em] text-white/70">{card.highlight}</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 py-2">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 py-1 md:py-2">
           {card.stats.map((stat) => (
             <div
               key={stat.label}
-              className="flex flex-col items-center justify-center bg-white/10 rounded-xl py-3 px-1 backdrop-blur-sm"
+              className="flex flex-col items-center justify-center bg-white/10 rounded-xl py-2 px-1 md:py-3 backdrop-blur-sm"
             >
-              <span className="material-symbols-outlined text-2xl mb-1">{stat.icon}</span>
-              <span className="text-lg font-bold">{stat.label}</span>
+              <span className="material-symbols-outlined text-lg md:text-2xl mb-0.5 md:mb-1">{stat.icon}</span>
+              <span className="text-sm md:text-lg font-bold">{stat.label}</span>
             </div>
           ))}
         </div>
 
-        <div className="flex items-start gap-3 mt-1">
-          <span className="material-symbols-outlined text-3xl mt-0.5 text-terracotta shrink-0">
+        <div className="flex items-start gap-2 md:gap-3">
+          <span className="material-symbols-outlined text-xl md:text-3xl mt-0.5 text-terracotta shrink-0">
             location_on
           </span>
 
           <div className="flex flex-col gap-1">
-            <p className="text-base font-semibold leading-snug opacity-95">{card.address}</p>
+            <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">{card.address}</p>
             <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
               <span className="material-symbols-outlined text-sm">villa</span>
               <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
-                {card.highlight}
+                {intentLabel}
               </span>
             </div>
           </div>
@@ -247,6 +293,7 @@ export default function ExploreCards() {
       </div>
     </>
   );
+  };
 
   return (
     <div className="min-h-screen bg-background-light text-[#0c141d] font-display transition-colors duration-200 overflow-hidden flex flex-col">
@@ -286,7 +333,7 @@ export default function ExploreCards() {
       <main className="flex-1 min-h-0 flex flex-col justify-center items-center relative w-full max-w-md mx-auto px-4 pb-2">
         <div className="absolute w-[90%] h-[80%] bg-white/50 rounded-[2.5rem] -z-10 translate-y-4 scale-95 shadow-sm border border-slate-200" />
 
-        <div className="relative w-full h-[min(62dvh,650px)] min-h-[420px] md:h-[650px]">
+        <div className="relative w-full h-[min(68dvh,680px)] min-h-[500px] md:h-[650px]">
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence>
               {visibleCards.map((card, index) => (
@@ -320,7 +367,7 @@ export default function ExploreCards() {
       </main>
 
       {/* Action Buttons */}
-      <div className="flex-none w-full max-w-md mx-auto px-6 pt-3 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
+      <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
           disabled={isSwipeAnimating || visibleCards.length === 0}
@@ -414,10 +461,10 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
       drag={isFront ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
       dragSnapToOrigin
-      dragElastic={0.12}
+      dragElastic={0.2}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
-      transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.9 }}
+      transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1.05 }}
       exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.2 } }}
     >
       <div className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y">
@@ -544,6 +591,29 @@ function FilterModal({
                       {option.label}
                     </option>
                   ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="material-symbols-outlined text-gray-500">expand_more</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-gray-900 block">Listing Intent</label>
+              <div className="relative">
+                <select
+                  value={filters.listingIntent}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      listingIntent: event.target.value as "" | "Rent" | "Shortlet",
+                    }))
+                  }
+                  className="w-full py-3.5 pl-4 pr-10 text-sm font-medium bg-gray-50 rounded-xl text-gray-900 focus:ring-2 focus:ring-active-blue focus:border-active-blue appearance-none transition-shadow"
+                >
+                  <option value="">All intents</option>
+                  <option value="Rent">For Rent</option>
+                  <option value="Shortlet">Shortlet</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <span className="material-symbols-outlined text-gray-500">expand_more</span>
