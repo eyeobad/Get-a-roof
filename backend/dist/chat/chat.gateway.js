@@ -74,10 +74,11 @@ let ChatGateway = class ChatGateway {
             this.server.to(receiverId).emit("conversation:update", message);
         }
     }
-    handleJoin(body, client) {
+    async handleJoin(body, client) {
         if (!body?.matchId) {
             throw new websockets_2.WsException("matchId is required");
         }
+        await this.assertParticipant(body.matchId, client);
         client.join(body.matchId);
         return { joined: body.matchId };
     }
@@ -89,6 +90,7 @@ let ChatGateway = class ChatGateway {
         if (!senderId) {
             throw new websockets_2.WsException("Unauthorized");
         }
+        await this.assertParticipant(body.matchId, client);
         const message = await this.chatService.createMessage({
             ...body,
             senderId,
@@ -130,6 +132,7 @@ let ChatGateway = class ChatGateway {
         if (!body?.matchId) {
             throw new websockets_2.WsException("matchId is required");
         }
+        await this.assertParticipant(body.matchId, client);
         const result = await this.chatService.markMatchRead(body.matchId, readerId);
         this.server.to(body.matchId).emit("messages:read", {
             matchId: body.matchId,
@@ -153,6 +156,25 @@ let ChatGateway = class ChatGateway {
         }
         return header;
     }
+    async assertParticipant(matchId, client) {
+        const senderId = client.data.user?.sub;
+        if (!senderId) {
+            throw new websockets_2.WsException("Unauthorized");
+        }
+        try {
+            const participants = await this.chatService.getParticipantIds(matchId);
+            const isParticipant = senderId === participants.tenantId || senderId === participants.landlordId;
+            if (!isParticipant) {
+                throw new websockets_2.WsException("Access denied");
+            }
+        }
+        catch (error) {
+            if (error instanceof websockets_2.WsException) {
+                throw error;
+            }
+            throw new websockets_2.WsException(error instanceof Error ? error.message : "Unable to validate participant");
+        }
+    }
 };
 exports.ChatGateway = ChatGateway;
 __decorate([
@@ -165,7 +187,7 @@ __decorate([
     __param(1, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, socket_io_1.Socket]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ChatGateway.prototype, "handleJoin", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)("sendMessage"),

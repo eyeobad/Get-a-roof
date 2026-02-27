@@ -295,7 +295,7 @@ type AppState = {
   sendPhoneOtp: (userId: string) => Promise<Record<string, unknown>>;
   verifyEmailOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
   verifyPhoneOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
-  requestPasswordReset: (email: string) => Promise<{ token?: string } | null>;
+  requestPasswordReset: (email: string) => Promise<{ sent?: boolean } | null>;
   resetPassword: (token: string, password: string) => Promise<Record<string, unknown>>;
   fetchUserProfile: () => Promise<ApiUser | null>;
   updateUser: (payload: Record<string, unknown>) => Promise<ApiUser | null>;
@@ -343,6 +343,7 @@ type AppState = {
   }) => Promise<void>;
   loadLandlordPropertyMatches: (propertyId: string) => Promise<void>;
   markLandlordPropertyMatchesSeen: (propertyId: string) => Promise<void>;
+  deleteLandlordProperty: (propertyId: string) => Promise<boolean>;
 };
 
 const listingMap: Record<string, Listing> = {};
@@ -845,31 +846,51 @@ export const useAppStore = create<AppState>()(
         });
       },
       sendEmailOtp: async (userId) => {
+        const state = get();
+        if (!state.authToken) {
+          throw new Error("Unauthorized");
+        }
         return apiFetch<Record<string, unknown>>(`/api/auth/send-email-otp`, {
           method: "POST",
           body: JSON.stringify({ userId }),
+          token: state.authToken,
         });
       },
       sendPhoneOtp: async (userId) => {
+        const state = get();
+        if (!state.authToken) {
+          throw new Error("Unauthorized");
+        }
         return apiFetch<Record<string, unknown>>(`/api/auth/send-phone-otp`, {
           method: "POST",
           body: JSON.stringify({ userId }),
+          token: state.authToken,
         });
       },
       verifyEmailOtp: async (userId, otp) => {
+        const state = get();
+        if (!state.authToken) {
+          throw new Error("Unauthorized");
+        }
         return apiFetch<Record<string, unknown>>(`/api/auth/verify-email-otp`, {
           method: "POST",
           body: JSON.stringify({ userId, otp }),
+          token: state.authToken,
         });
       },
       verifyPhoneOtp: async (userId, otp) => {
+        const state = get();
+        if (!state.authToken) {
+          throw new Error("Unauthorized");
+        }
         return apiFetch<Record<string, unknown>>(`/api/auth/verify-phone-otp`, {
           method: "POST",
           body: JSON.stringify({ userId, otp }),
+          token: state.authToken,
         });
       },
       requestPasswordReset: async (email) => {
-        return apiFetch<{ token?: string }>(`/api/auth/request-password-reset`, {
+        return apiFetch<{ sent?: boolean }>(`/api/auth/request-password-reset`, {
           method: "POST",
           body: JSON.stringify({ email }),
         });
@@ -1695,6 +1716,28 @@ export const useAppStore = create<AppState>()(
           return;
         }
       },
+      deleteLandlordProperty: async (propertyId) => {
+        const state = get();
+        if (!state.authToken || !state.userId || !propertyId) return false;
+        await apiFetch(`/api/landlord/${state.userId}/properties/${propertyId}`, {
+          method: "DELETE",
+          token: state.authToken,
+        });
+        set((prev) => {
+          const landlordMatchesByProperty = { ...prev.landlordMatchesByProperty };
+          delete landlordMatchesByProperty[propertyId];
+          return {
+            landlordProperties: prev.landlordProperties.filter(
+              (property) => property.id !== propertyId
+            ),
+            landlordPropertiesWithMatches: prev.landlordPropertiesWithMatches.filter(
+              (property) => property.id !== propertyId
+            ),
+            landlordMatchesByProperty,
+          };
+        });
+        return true;
+      },
     }),
     {
       name: "get-a-roof-store",
@@ -1711,9 +1754,8 @@ export const useAppStore = create<AppState>()(
         conversations: state.conversations,
         messagesByMatch: state.messagesByMatch,
         typingByMatch: state.typingByMatch,
-        authToken: state.authToken,
-        userId: state.userId,
-        user: state.user,
+        userId: null,
+        user: null,
         userLocation: state.userLocation,
         landlordDraft: state.landlordDraft,
         landlordProperties: state.landlordProperties,

@@ -118,4 +118,20 @@ export class MailService {
       html,
     });
   }
+
+  async sendPasswordResetLink(email: string, resetUrl: string) {
+    const html = `
+      <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+        <p>Hi there,</p>
+        <p>Use the secure link below to reset your Get a Roof password:</p>
+        <p><a href="${resetUrl}" style="color:#0a44b8;">Reset password</a></p>
+        <p>This link will expire in 1 hour.</p>
+      </div>
+    `;
+    await this.sendMail({
+      to: email,
+      subject: "Reset your Get a Roof password",
+      html,
+    });
+  }
 }

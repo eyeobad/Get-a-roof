@@ -15,7 +15,11 @@ import { MailModule } from "../mail/mail.module";
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>("JWT_SECRET") || "dev-secret",
+        secret:
+          configService.get<string>("JWT_SECRET") ||
+          (() => {
+            throw new Error("JWT_SECRET is required");
+          })(),
         signOptions: { expiresIn: "7d" },
       }),
     }),

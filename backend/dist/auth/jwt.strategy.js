@@ -20,14 +20,17 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: configService.get("JWT_SECRET") || "dev-secret",
+            secretOrKey: configService.get("JWT_SECRET") ||
+                (() => {
+                    throw new Error("JWT_SECRET is required");
+                })(),
         });
         this.usersService = usersService;
     }
     async validate(payload) {
         const userId = payload?.sub;
         if (!userId) {
-            throw new common_1.UnauthorizedException("Invalid token payload");
+            throw new UnauthorizedException("Invalid token payload");
         }
         try {
             const user = await this.usersService.findById(userId);
@@ -38,7 +41,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             };
         }
         catch {
-            throw new common_1.UnauthorizedException("Account no longer exists");
+            throw new UnauthorizedException("Account no longer exists");
         }
     }
 };

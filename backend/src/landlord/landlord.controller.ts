@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -91,6 +92,20 @@ export class LandlordController {
       throw new ForbiddenException("Access denied");
     }
     return this.landlordService.markPropertyMatchesSeen(id, propertyId);
+  }
+
+  @Delete(":id/properties/:propertyId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Landlord)
+  deleteProperty(
+    @Param("id") id: string,
+    @Param("propertyId") propertyId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.landlordService.deleteProperty(id, propertyId);
   }
 
   @Get(":id/tenants/:tenantId")

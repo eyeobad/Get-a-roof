@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify, decodeJwt } from "jose";
+import { jwtVerify } from "jose";
 
 const PUBLIC_FILE = /\.(.*)$/;
 const PUBLIC_ROUTES = [
@@ -13,7 +13,6 @@ const PUBLIC_ROUTES = [
 
 const SESSION_COOKIE = "gar_session";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const DEV_SECRET = "dev-secret";
 
 const LANDLORD_ONLY = [
   "/dashboard",
@@ -130,27 +129,16 @@ async function handleRoleRouting(request: NextRequest, token: string) {
 }
 
 async function resolveRole(token: string) {
-  const candidates = JWT_SECRET ? [JWT_SECRET] : [DEV_SECRET];
-  for (const candidate of candidates) {
-    try {
-      const secret = new TextEncoder().encode(candidate);
-      const { payload } = await jwtVerify(token, secret);
-      return extractRole(payload?.role);
-    } catch {
-      // try next secret
-    }
+  if (!JWT_SECRET) {
+    return null;
   }
-
-  if (!JWT_SECRET && process.env.NODE_ENV !== "production") {
-    try {
-      const payload = decodeJwt(token);
-      return extractRole(payload?.role);
-    } catch {
-      return null;
-    }
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    return extractRole(payload?.role);
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 function extractRole(rawRole: unknown) {

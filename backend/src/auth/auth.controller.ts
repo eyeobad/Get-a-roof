@@ -1,4 +1,12 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { Request } from "express";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
@@ -6,6 +14,7 @@ import { SendOtpDto } from "./dto/send-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 
 @Controller("api/auth")
 export class AuthController {
@@ -22,22 +31,38 @@ export class AuthController {
   }
 
   @Post("send-email-otp")
-  sendEmailOtp(@Body() dto: SendOtpDto) {
+  @UseGuards(JwtAuthGuard)
+  sendEmailOtp(@Body() dto: SendOtpDto, @Req() req: Request & { user?: any }) {
+    if (dto.userId !== req.user?.sub) {
+      throw new ForbiddenException("Access denied");
+    }
     return this.authService.sendEmailOtp(dto);
   }
 
   @Post("send-phone-otp")
-  sendPhoneOtp(@Body() dto: SendOtpDto) {
+  @UseGuards(JwtAuthGuard)
+  sendPhoneOtp(@Body() dto: SendOtpDto, @Req() req: Request & { user?: any }) {
+    if (dto.userId !== req.user?.sub) {
+      throw new ForbiddenException("Access denied");
+    }
     return this.authService.sendPhoneOtp(dto);
   }
 
   @Post("verify-email-otp")
-  verifyEmailOtp(@Body() dto: VerifyOtpDto) {
+  @UseGuards(JwtAuthGuard)
+  verifyEmailOtp(@Body() dto: VerifyOtpDto, @Req() req: Request & { user?: any }) {
+    if (dto.userId !== req.user?.sub) {
+      throw new ForbiddenException("Access denied");
+    }
     return this.authService.verifyEmailOtp(dto);
   }
 
   @Post("verify-phone-otp")
-  verifyPhoneOtp(@Body() dto: VerifyOtpDto) {
+  @UseGuards(JwtAuthGuard)
+  verifyPhoneOtp(@Body() dto: VerifyOtpDto, @Req() req: Request & { user?: any }) {
+    if (dto.userId !== req.user?.sub) {
+      throw new ForbiddenException("Access denied");
+    }
     return this.authService.verifyPhoneOtp(dto);
   }
 

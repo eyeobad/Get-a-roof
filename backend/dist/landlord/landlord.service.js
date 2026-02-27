@@ -69,6 +69,10 @@ let LandlordService = class LandlordService {
         await this.assertPropertyOwnership(landlordId, propertyId);
         return this.matchesService.markMatchesSeenForProperty(propertyId);
     }
+    async deleteProperty(landlordId, propertyId) {
+        await this.assertPropertyOwnership(landlordId, propertyId);
+        return this.propertiesService.deletePropertyForLandlord(landlordId, propertyId);
+    }
     async assertPropertyOwnership(landlordId, propertyId) {
         const property = await this.propertiesService.getProperty(propertyId);
         if (property.landlordId.toString() !== landlordId) {

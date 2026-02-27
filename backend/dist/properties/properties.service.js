@@ -26,6 +26,7 @@ const enums_1 = require("../common/enums");
 const property_utils_1 = require("../common/utils/property.utils");
 const appwrite_service_1 = require("../appwrite/appwrite.service");
 const user_schema_1 = require("../users/schemas/user.schema");
+const message_schema_1 = require("../chat/schemas/message.schema");
 const propertyImageMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -40,10 +41,11 @@ const propertyProofMimeTypes = new Set([
     "application/pdf",
 ]);
 let PropertiesService = class PropertiesService {
-    constructor(propertyModel, matchModel, userModel, usersService, appwriteStorage) {
+    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage) {
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.userModel = userModel;
+        this.messageModel = messageModel;
         this.usersService = usersService;
         this.appwriteStorage = appwriteStorage;
     }
@@ -219,6 +221,22 @@ let PropertiesService = class PropertiesService {
             query = query.sort({ updatedAt: -1 });
         }
         return query.exec();
+    }
+    async deletePropertyForLandlord(landlordId, propertyId) {
+        const property = await this.getProperty(propertyId);
+        if (property.landlordId.toString() !== landlordId) {
+            throw new common_1.NotFoundException("Property not found");
+        }
+        const matchIds = await this.matchModel
+            .find({ propertyId: property._id })
+            .distinct("_id")
+            .exec();
+        if (matchIds.length) {
+            await this.messageModel.deleteMany({ matchId: { $in: matchIds } });
+            await this.matchModel.deleteMany({ _id: { $in: matchIds } });
+        }
+        await this.propertyModel.deleteOne({ _id: property._id });
+        return { deleted: true };
     }
     normalizePropertyPayload(dto) {
         const normalized = { ...dto };
@@ -400,7 +418,9 @@ exports.PropertiesService = PropertiesService = __decorate([
     __param(0, (0, mongoose_1.InjectModel)(property_schema_1.Property.name)),
     __param(1, (0, mongoose_1.InjectModel)(match_schema_1.Match.name)),
     __param(2, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
+    __param(3, (0, mongoose_1.InjectModel)(message_schema_1.Message.name)),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
         users_service_1.UsersService,

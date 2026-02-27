@@ -22,6 +22,7 @@ const user_schema_1 = require("./schemas/user.schema");
 const property_schema_1 = require("../properties/schemas/property.schema");
 const match_schema_1 = require("../matches/schemas/match.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const enums_1 = require("../common/enums");
 const profileMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -56,6 +57,7 @@ let UsersService = class UsersService {
         const { password, ...rest } = dto;
         const created = new this.userModel({
             ...rest,
+            role: dto.role === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant,
             email,
             loginCredentials: {
                 passwordHash,
@@ -69,7 +71,7 @@ let UsersService = class UsersService {
             email,
             firstName: data.firstName,
             lastName: data.lastName,
-            role: data.role,
+            role: data.role === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant,
             loginCredentials: {
                 googleId: data.googleId,
             },
@@ -214,6 +216,7 @@ let UsersService = class UsersService {
         delete obj.phoneOtpAttempts;
         delete obj.passwordResetToken;
         delete obj.passwordResetExpiresAt;
+        delete obj.verificationDetails;
         return obj;
     }
 };

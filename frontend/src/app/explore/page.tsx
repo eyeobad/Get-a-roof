@@ -111,16 +111,16 @@ export default function ExploreCards() {
   }, [exploreQueue, listingsById]);
 
   const resetDeck = () => {
+    const next = {
+      ...defaultFilters,
+      toggles: { ...defaultFilters.toggles },
+    };
+    setDraftFilters(next);
+    setFilters(next);
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
-    void loadExploreListings({
-      budget: filters.budget,
-      distance: filters.distance,
-      propertyType: filters.propertyType,
-      listingIntent: filters.listingIntent,
-      toggles: filters.toggles,
-    });
+    void loadExploreListings(next);
   };
 
   const applyFilters = () => {

@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   Logger,
-  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -165,7 +164,7 @@ export class AuthService {
   async requestPasswordReset(dto: RequestPasswordResetDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
-      throw new NotFoundException("User not found");
+      return { sent: true };
     }
 
     const token = randomBytes(16).toString("hex");
@@ -173,7 +172,26 @@ export class AuthService {
     user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
     await user.save();
 
-    return { sent: true, token, expiresAt: user.passwordResetExpiresAt };
+    const baseUrl =
+      process.env.FRONTEND_URL?.trim() ||
+      process.env.APP_URL?.trim() ||
+      "http://localhost:3000";
+    const resetUrl = `${baseUrl.replace(/\/$/, "")}/auth/set-new-password#token=${encodeURIComponent(
+      token
+    )}`;
+
+    try {
+      await this.mailService.sendPasswordResetLink(user.email, resetUrl);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send password reset email to ${user.email}: ${(error as Error)?.message ?? "unknown error"}`
+      );
+      throw new ServiceUnavailableException(
+        "Unable to deliver reset email right now. Please try again shortly."
+      );
+    }
+
+    return { sent: true, expiresAt: user.passwordResetExpiresAt };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
@@ -220,6 +238,7 @@ export class AuthService {
       phoneOtpAttempts,
       passwordResetToken,
       passwordResetExpiresAt,
+      verificationDetails,
       ...safeUser
     } = user.toObject();
 

@@ -14,6 +14,7 @@ import { normalizePropertyType } from "../common/utils/property.utils";
 import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { Message, MessageDocument } from "../chat/schemas/message.schema";
 
 const propertyImageMimeTypes = new Set([
   "image/jpeg",
@@ -36,6 +37,7 @@ export class PropertiesService {
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly usersService: UsersService,
     private readonly appwriteStorage: AppwriteStorageService
   ) {}
@@ -253,6 +255,26 @@ export class PropertiesService {
       query = query.sort({ updatedAt: -1 });
     }
     return query.exec();
+  }
+
+  async deletePropertyForLandlord(landlordId: string, propertyId: string) {
+    const property = await this.getProperty(propertyId);
+    if (property.landlordId.toString() !== landlordId) {
+      throw new NotFoundException("Property not found");
+    }
+
+    const matchIds = await this.matchModel
+      .find({ propertyId: property._id })
+      .distinct("_id")
+      .exec();
+
+    if (matchIds.length) {
+      await this.messageModel.deleteMany({ matchId: { $in: matchIds } });
+      await this.matchModel.deleteMany({ _id: { $in: matchIds } });
+    }
+
+    await this.propertyModel.deleteOne({ _id: property._id });
+    return { deleted: true };
   }
 
   private normalizePropertyPayload<T extends CreatePropertyDto | UpdatePropertyDto>(

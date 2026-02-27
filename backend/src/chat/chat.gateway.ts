@@ -81,13 +81,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage("join")
-  handleJoin(
+  async handleJoin(
     @MessageBody() body: { matchId?: string },
     @ConnectedSocket() client: Socket
   ) {
     if (!body?.matchId) {
       throw new WsException("matchId is required");
     }
+    await this.assertParticipant(body.matchId, client);
     client.join(body.matchId);
     return { joined: body.matchId };
   }
@@ -105,6 +106,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!senderId) {
       throw new WsException("Unauthorized");
     }
+    await this.assertParticipant(body.matchId, client);
 
     const message = await this.chatService.createMessage({
       ...body,
@@ -163,6 +165,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!body?.matchId) {
       throw new WsException("matchId is required");
     }
+    await this.assertParticipant(body.matchId, client);
     const result = await this.chatService.markMatchRead(body.matchId, readerId);
     this.server.to(body.matchId).emit("messages:read", {
       matchId: body.matchId,
@@ -186,5 +189,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return token;
     }
     return header;
+  }
+
+  private async assertParticipant(matchId: string, client: Socket) {
+    const senderId = client.data.user?.sub;
+    if (!senderId) {
+      throw new WsException("Unauthorized");
+    }
+    try {
+      const participants = await this.chatService.getParticipantIds(matchId);
+      const isParticipant =
+        senderId === participants.tenantId || senderId === participants.landlordId;
+      if (!isParticipant) {
+        throw new WsException("Access denied");
+      }
+    } catch (error) {
+      if (error instanceof WsException) {
+        throw error;
+      }
+      throw new WsException(
+        error instanceof Error ? error.message : "Unable to validate participant"
+      );
+    }
   }
 }

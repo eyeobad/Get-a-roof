@@ -22,10 +22,12 @@ export default function ForgotPasswordPage() {
 
     try {
       setIsSubmitting(true);
-      const response = await requestPasswordReset(email.trim());
-      const token = response?.token ?? "";
-      const query = new URLSearchParams({ token, email });
-      router.push(`/auth/set-new-password?${query.toString()}`);
+      await requestPasswordReset(email.trim());
+      showToast({
+        title: "If this email exists, a reset link has been sent.",
+        variant: "success",
+      });
+      router.push("/login");
     } catch (err) {
       showToast({
         title: err instanceof Error ? err.message : "Request failed",

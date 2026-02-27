@@ -16,6 +16,7 @@ import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { Property, PropertyDocument } from "../properties/schemas/property.schema";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
+import { UserRole } from "../common/enums";
 
 const profileMimeTypes = new Set([
   "image/jpeg",
@@ -57,6 +58,7 @@ export class UsersService {
 
     const created = new this.userModel({
       ...rest,
+      role: dto.role === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant,
       email,
       loginCredentials: {
         passwordHash,
@@ -78,7 +80,7 @@ export class UsersService {
       email,
       firstName: data.firstName,
       lastName: data.lastName,
-      role: data.role,
+      role: data.role === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant,
       loginCredentials: {
         googleId: data.googleId,
       },
@@ -255,6 +257,7 @@ export class UsersService {
     delete obj.phoneOtpAttempts;
     delete obj.passwordResetToken;
     delete obj.passwordResetExpiresAt;
+    delete obj.verificationDetails;
     return obj;
   }
 }

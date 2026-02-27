@@ -22,6 +22,7 @@ const update_user_dto_1 = require("./dto/update-user.dto");
 const update_preferences_dto_1 = require("./dto/update-preferences.dto");
 const save_property_dto_1 = require("./dto/save-property.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
+const enums_1 = require("../common/enums");
 const profileImageMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -39,6 +40,12 @@ let UsersController = class UsersController {
         this.usersService = usersService;
     }
     create(dto) {
+        const requestedRole = dto.role;
+        if (requestedRole === enums_1.UserRole.Admin || requestedRole === enums_1.UserRole.Unassigned) {
+            throw new common_1.ForbiddenException("Invalid role");
+        }
+        dto.role =
+            requestedRole === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant;
         return this.usersService.createUser(dto).then((user) => this.usersService.sanitizeUser(user));
     }
     findOne(id, req) {
@@ -51,6 +58,9 @@ let UsersController = class UsersController {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
         }
+        delete dto.role;
+        delete dto.isVerified;
+        delete dto.verificationStatus;
         return this.usersService.updateUser(id, dto).then((user) => this.usersService.sanitizeUser(user));
     }
     updatePreferences(id, dto, req) {

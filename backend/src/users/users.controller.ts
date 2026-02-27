@@ -23,6 +23,7 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { SavePropertyDto } from "./dto/save-property.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { UserRole } from "../common/enums";
 
 const profileImageMimeTypes = new Set([
   "image/jpeg",
@@ -46,6 +47,12 @@ export class UsersController {
 
   @Post()
   create(@Body() dto: CreateUserDto) {
+    const requestedRole = dto.role;
+    if (requestedRole === UserRole.Admin || requestedRole === UserRole.Unassigned) {
+      throw new ForbiddenException("Invalid role");
+    }
+    dto.role =
+      requestedRole === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant;
     return this.usersService.createUser(dto).then((user) => this.usersService.sanitizeUser(user));
   }
 
@@ -68,6 +75,9 @@ export class UsersController {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
+    delete (dto as Partial<UpdateUserDto>).role;
+    delete (dto as Partial<UpdateUserDto>).isVerified;
+    delete (dto as Partial<UpdateUserDto>).verificationStatus;
     return this.usersService.updateUser(id, dto).then((user) => this.usersService.sanitizeUser(user));
   }
 

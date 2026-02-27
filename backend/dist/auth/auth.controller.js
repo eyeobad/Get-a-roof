@@ -21,6 +21,7 @@ const send_otp_dto_1 = require("./dto/send-otp.dto");
 const verify_otp_dto_1 = require("./dto/verify-otp.dto");
 const request_password_reset_dto_1 = require("./dto/request-password-reset.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
+const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
@@ -31,16 +32,28 @@ let AuthController = class AuthController {
     google(dto) {
         return this.authService.googleLogin(dto);
     }
-    sendEmailOtp(dto) {
+    sendEmailOtp(dto, req) {
+        if (dto.userId !== req.user?.sub) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
         return this.authService.sendEmailOtp(dto);
     }
-    sendPhoneOtp(dto) {
+    sendPhoneOtp(dto, req) {
+        if (dto.userId !== req.user?.sub) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
         return this.authService.sendPhoneOtp(dto);
     }
-    verifyEmailOtp(dto) {
+    verifyEmailOtp(dto, req) {
+        if (dto.userId !== req.user?.sub) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
         return this.authService.verifyEmailOtp(dto);
     }
-    verifyPhoneOtp(dto) {
+    verifyPhoneOtp(dto, req) {
+        if (dto.userId !== req.user?.sub) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
         return this.authService.verifyPhoneOtp(dto);
     }
     requestPasswordReset(dto) {
@@ -67,30 +80,38 @@ __decorate([
 ], AuthController.prototype, "google", null);
 __decorate([
     (0, common_1.Post)("send-email-otp"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto]),
+    __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "sendEmailOtp", null);
 __decorate([
     (0, common_1.Post)("send-phone-otp"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto]),
+    __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "sendPhoneOtp", null);
 __decorate([
     (0, common_1.Post)("verify-email-otp"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto]),
+    __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "verifyEmailOtp", null);
 __decorate([
     (0, common_1.Post)("verify-phone-otp"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto]),
+    __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "verifyPhoneOtp", null);
 __decorate([

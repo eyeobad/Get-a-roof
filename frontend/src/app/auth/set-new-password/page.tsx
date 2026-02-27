@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { showToast } from "@/lib/alerts";
@@ -9,7 +9,7 @@ function SetNewPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const resetPassword = useAppStore((state) => state.resetPassword);
-  const token = searchParams?.get("token") ?? "";
+  const [token, setToken] = useState("");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -17,6 +17,24 @@ function SetNewPasswordContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tokenFromQuery = searchParams?.get("token") ?? "";
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const tokenFromHash = hash.get("token") ?? "";
+    const existingSessionToken = window.sessionStorage.getItem("reset_token") ?? "";
+    const nextToken = tokenFromHash || tokenFromQuery || existingSessionToken;
+
+    if (nextToken) {
+      setToken(nextToken);
+      window.sessionStorage.setItem("reset_token", nextToken);
+    }
+
+    if (tokenFromQuery || tokenFromHash) {
+      window.history.replaceState({}, "", "/auth/set-new-password");
+    }
+  }, [searchParams]);
 
   const passwordMeetsRules = useMemo(() => {
     const p = password.trim();
@@ -37,6 +55,9 @@ function SetNewPasswordContent() {
     try {
       setIsSubmitting(true);
       await resetPassword(token, password);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("reset_token");
+      }
       router.push("/login");
     } catch (err) {
       showToast({

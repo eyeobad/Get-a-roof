@@ -53,6 +53,12 @@ let LandlordController = class LandlordController {
         }
         return this.landlordService.markPropertyMatchesSeen(id, propertyId);
     }
+    deleteProperty(id, propertyId, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.landlordService.deleteProperty(id, propertyId);
+    }
     getTenantProfile(id, tenantId, req) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
@@ -120,6 +126,17 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", void 0)
 ], LandlordController.prototype, "markPropertyMatchesSeen", null);
+__decorate([
+    (0, common_1.Delete)(":id/properties/:propertyId"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Param)("propertyId")),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], LandlordController.prototype, "deleteProperty", null);
 __decorate([
     (0, common_1.Get)(":id/tenants/:tenantId"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

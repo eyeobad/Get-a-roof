@@ -128,13 +128,24 @@ let AuthService = AuthService_1 = class AuthService {
     async requestPasswordReset(dto) {
         const user = await this.usersService.findByEmail(dto.email);
         if (!user) {
-            throw new common_1.NotFoundException("User not found");
+            return { sent: true };
         }
         const token = (0, crypto_1.randomBytes)(16).toString("hex");
         user.passwordResetToken = token;
         user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
         await user.save();
-        return { sent: true, token, expiresAt: user.passwordResetExpiresAt };
+        const baseUrl = process.env.FRONTEND_URL?.trim() ||
+            process.env.APP_URL?.trim() ||
+            "http://localhost:3000";
+        const resetUrl = `${baseUrl.replace(/\/$/, "")}/auth/set-new-password#token=${encodeURIComponent(token)}`;
+        try {
+            await this.mailService.sendPasswordResetLink(user.email, resetUrl);
+        }
+        catch (error) {
+            this.logger.error(`Failed to send password reset email to ${user.email}: ${error?.message ?? "unknown error"}`);
+            throw new common_1.ServiceUnavailableException("Unable to deliver reset email right now. Please try again shortly.");
+        }
+        return { sent: true, expiresAt: user.passwordResetExpiresAt };
     }
     async resetPassword(dto) {
         const user = await this.usersService.findByResetToken(dto.token);
@@ -162,7 +173,7 @@ let AuthService = AuthService_1 = class AuthService {
             role: user.role,
         };
         const accessToken = this.jwtService.sign(payload);
-        const { loginCredentials, emailOtp, emailOtpHash, emailOtpExpiresAt, emailOtpAttempts, phoneOtp, phoneOtpHash, phoneOtpExpiresAt, phoneOtpAttempts, passwordResetToken, passwordResetExpiresAt, ...safeUser } = user.toObject();
+        const { loginCredentials, emailOtp, emailOtpHash, emailOtpExpiresAt, emailOtpAttempts, phoneOtp, phoneOtpHash, phoneOtpExpiresAt, phoneOtpAttempts, passwordResetToken, passwordResetExpiresAt, verificationDetails, ...safeUser } = user.toObject();
         return {
             accessToken,
             user: safeUser,

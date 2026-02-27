@@ -6,6 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
+import { showToast } from "@/lib/alerts";
+import { useToastError } from "@/hooks/useToastError";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -69,11 +71,15 @@ function PropertyCard({
   onEdit,
   onMatches,
   onContinue,
+  onDelete,
+  isDeleting,
 }: {
   p: Property;
   onEdit: (id: string) => void;
   onMatches: (id: string) => void;
   onContinue: (id: string) => void;
+  onDelete: (id: string) => void;
+  isDeleting: boolean;
 }) {
   const isDraft = p.status === "Draft";
   const matchesLabel =
@@ -98,6 +104,17 @@ function PropertyCard({
         <div className="flex-1 flex flex-col justify-center gap-1.5">
           <div className="flex items-center justify-between">
             <StatusPill status={p.status} />
+            <button
+              type="button"
+              onClick={() => onDelete(p.id)}
+              disabled={isDeleting}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-red-600 hover:bg-red-50 disabled:opacity-50"
+              aria-label="Delete listing"
+            >
+              <span className="material-symbols-outlined text-[20px]" style={solidIconStyle}>
+                delete
+              </span>
+            </button>
           </div>
 
           <h2 className="text-[18px] font-bold text-gray-900 leading-tight">
@@ -207,6 +224,11 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
 
 function LandlordDashboardContent() {
   const [q, setQ] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteAt, setPendingDeleteAt] = useState(0);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  useToastError(error);
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
   const user = useAppStore((state) => state.user);
@@ -215,6 +237,7 @@ function LandlordDashboardContent() {
   const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
   const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
+  const deleteLandlordProperty = useAppStore((state) => state.deleteLandlordProperty);
 
   const mappedProperties: Property[] = useMemo(
     () =>
@@ -272,6 +295,35 @@ function LandlordDashboardContent() {
     router.push(`/dashboard/matches/${id}`);
   };
 
+  const onDelete = async (id: string) => {
+    const now = Date.now();
+    if (pendingDeleteId !== id || now - pendingDeleteAt > 5000) {
+      setPendingDeleteId(id);
+      setPendingDeleteAt(now);
+      showToast({
+        title: "Tap delete again to confirm",
+        text: "This listing and related matches/messages will be removed.",
+        variant: "info",
+      });
+      return;
+    }
+
+    setIsDeletingId(id);
+    setError(null);
+    try {
+      const ok = await deleteLandlordProperty(id);
+      if (ok) {
+        showToast({ title: "Listing deleted", variant: "success" });
+      }
+    } catch (err) {
+      setError(err);
+    } finally {
+      setPendingDeleteId(null);
+      setPendingDeleteAt(0);
+      setIsDeletingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f5f6f8] text-gray-900 pb-24">
       {/* Header */}
@@ -325,6 +377,8 @@ function LandlordDashboardContent() {
                 onEdit={onEdit}
                 onMatches={onMatches}
                 onContinue={onContinue}
+                onDelete={onDelete}
+                isDeleting={isDeletingId === p.id}
               />
             ))
           ) : authToken ? (
