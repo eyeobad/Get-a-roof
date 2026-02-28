@@ -39,14 +39,17 @@ let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
     }
-    create(dto) {
+    async create(dto) {
         const requestedRole = dto.role;
         if (requestedRole === enums_1.UserRole.Admin || requestedRole === enums_1.UserRole.Unassigned) {
             throw new common_1.ForbiddenException("Invalid role");
         }
         dto.role =
             requestedRole === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant;
-        return this.usersService.createUser(dto).then((user) => this.usersService.sanitizeUser(user));
+        if (dto.role === enums_1.UserRole.Landlord) {
+            await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
+        }
+        return this.usersService.createUser(dto);
     }
     findOne(id, req) {
         if (req.user?.sub !== id) {
@@ -119,7 +122,7 @@ __decorate([
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_user_dto_1.CreateUserDto]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], UsersController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(":id"),

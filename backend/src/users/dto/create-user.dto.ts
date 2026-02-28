@@ -39,6 +39,10 @@ export class CreateUserDto {
   @IsString()
   photoUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  recaptchaToken?: string;
+
   @IsNotEmpty()
   @IsString()
   @MinLength(8)

@@ -46,13 +46,16 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
+  async create(@Body() dto: CreateUserDto) {
     const requestedRole = dto.role;
     if (requestedRole === UserRole.Admin || requestedRole === UserRole.Unassigned) {
       throw new ForbiddenException("Invalid role");
     }
     dto.role =
       requestedRole === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant;
+    if (dto.role === UserRole.Landlord) {
+      await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
+    }
     return this.usersService.createUser(dto);
   }
 

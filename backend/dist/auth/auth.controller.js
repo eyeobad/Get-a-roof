@@ -38,6 +38,12 @@ let AuthController = class AuthController {
         }
         return this.authService.sendEmailOtp(dto);
     }
+    sendEmailOtpForVerification(dto) {
+        if (!dto.verificationToken) {
+            throw new common_1.ForbiddenException("Verification token is required");
+        }
+        return this.authService.sendEmailOtp(dto);
+    }
     sendPhoneOtp(dto, req) {
         if (dto.userId !== req.user?.sub) {
             throw new common_1.ForbiddenException("Access denied");
@@ -47,6 +53,12 @@ let AuthController = class AuthController {
     verifyEmailOtp(dto, req) {
         if (dto.userId !== req.user?.sub) {
             throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.authService.verifyEmailOtp(dto);
+    }
+    verifyEmailOtpForVerification(dto) {
+        if (!dto.verificationToken) {
+            throw new common_1.ForbiddenException("Verification token is required");
         }
         return this.authService.verifyEmailOtp(dto);
     }
@@ -88,6 +100,13 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "sendEmailOtp", null);
 __decorate([
+    (0, common_1.Post)("verification/send-email-otp"),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "sendEmailOtpForVerification", null);
+__decorate([
     (0, common_1.Post)("send-phone-otp"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
@@ -105,6 +124,13 @@ __decorate([
     __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto, Object]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "verifyEmailOtp", null);
+__decorate([
+    (0, common_1.Post)("verification/verify-email-otp"),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [verify_otp_dto_1.VerifyOtpDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "verifyEmailOtpForVerification", null);
 __decorate([
     (0, common_1.Post)("verify-phone-otp"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

@@ -23,6 +23,7 @@ const property_schema_1 = require("../properties/schemas/property.schema");
 const match_schema_1 = require("../matches/schemas/match.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
 const enums_1 = require("../common/enums");
+const crypto_1 = require("crypto");
 const profileMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -36,11 +37,26 @@ let UsersService = class UsersService {
         this.matchModel = matchModel;
         this.messageModel = messageModel;
         this.appwriteStorage = appwriteStorage;
+        this.signupVerificationTtlMs = 15 * 60 * 1000;
+        this.signupVerificationSecret = process.env.SIGNUP_VERIFICATION_SECRET ||
+            process.env.OTP_SECRET ||
+            process.env.JWT_SECRET ||
+            "dev-signup-verification-secret";
     }
     async createUser(dto) {
         const email = dto.email.toLowerCase();
         const existing = await this.userModel.findOne({ email }).exec();
         if (existing) {
+            if (!existing.emailVerified) {
+                const challenge = await this.createSignupVerificationChallenge(existing);
+                return {
+                    status: "PENDING_VERIFICATION",
+                    userId: existing.id,
+                    email: existing.email,
+                    verificationToken: challenge.token,
+                    verificationTokenExpiresAt: challenge.expiresAt,
+                };
+            }
             throw new common_1.ConflictException("Email already in use");
         }
         if (dto.phoneNumber) {
@@ -54,7 +70,7 @@ let UsersService = class UsersService {
         const passwordHash = dto.password
             ? await bcrypt.hash(dto.password, 10)
             : undefined;
-        const { password, ...rest } = dto;
+        const { password, recaptchaToken: _recaptchaToken, ...rest } = dto;
         const created = new this.userModel({
             ...rest,
             role: dto.role === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant,
@@ -63,7 +79,40 @@ let UsersService = class UsersService {
                 passwordHash,
             },
         });
-        return created.save();
+        const saved = await created.save();
+        const challenge = await this.createSignupVerificationChallenge(saved);
+        return {
+            status: "PENDING_VERIFICATION",
+            userId: saved.id,
+            email: saved.email,
+            verificationToken: challenge.token,
+            verificationTokenExpiresAt: challenge.expiresAt,
+        };
+    }
+    async assertRecaptchaToken(token) {
+        const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+        if (!secret) {
+            throw new common_1.ServiceUnavailableException("reCAPTCHA is not configured");
+        }
+        if (!token) {
+            throw new common_1.BadRequestException("Please complete reCAPTCHA verification");
+        }
+        const body = new URLSearchParams({
+            secret,
+            response: token,
+        });
+        const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+        });
+        if (!response.ok) {
+            throw new common_1.ServiceUnavailableException("Unable to validate reCAPTCHA");
+        }
+        const result = (await response.json());
+        if (!result.success) {
+            throw new common_1.BadRequestException("Invalid reCAPTCHA verification");
+        }
     }
     async createOAuthUser(data) {
         const email = data.email.toLowerCase();
@@ -214,10 +263,55 @@ let UsersService = class UsersService {
         delete obj.phoneOtpHash;
         delete obj.phoneOtpExpiresAt;
         delete obj.phoneOtpAttempts;
+        delete obj.signupVerificationTokenHash;
+        delete obj.signupVerificationTokenExpiresAt;
         delete obj.passwordResetToken;
         delete obj.passwordResetExpiresAt;
         delete obj.verificationDetails;
         return obj;
+    }
+    async createSignupVerificationChallenge(user) {
+        const token = (0, crypto_1.randomBytes)(24).toString("base64url");
+        const expiresAt = new Date(Date.now() + this.signupVerificationTtlMs);
+        user.signupVerificationTokenHash = this.hashSignupVerificationToken(token, user.id);
+        user.signupVerificationTokenExpiresAt = expiresAt;
+        await user.save();
+        return { token, expiresAt };
+    }
+    async validateSignupVerificationChallenge(userId, token) {
+        const user = await this.findById(userId);
+        if (!token || !user.signupVerificationTokenHash) {
+            throw new common_1.UnauthorizedException("Verification session expired. Sign up again.");
+        }
+        if (!user.signupVerificationTokenExpiresAt ||
+            user.signupVerificationTokenExpiresAt.getTime() < Date.now()) {
+            user.signupVerificationTokenHash = undefined;
+            user.signupVerificationTokenExpiresAt = undefined;
+            await user.save();
+            throw new common_1.UnauthorizedException("Verification session expired. Sign up again.");
+        }
+        const expected = this.hashSignupVerificationToken(token, user.id);
+        const isValid = this.secureCompare(user.signupVerificationTokenHash, expected);
+        if (!isValid) {
+            throw new common_1.UnauthorizedException("Invalid verification session.");
+        }
+        return user;
+    }
+    clearSignupVerificationChallenge(user) {
+        user.signupVerificationTokenHash = undefined;
+        user.signupVerificationTokenExpiresAt = undefined;
+    }
+    hashSignupVerificationToken(token, userId) {
+        return (0, crypto_1.createHmac)("sha256", this.signupVerificationSecret)
+            .update(`${userId}:${token}`)
+            .digest("hex");
+    }
+    secureCompare(a, b) {
+        const left = Buffer.from(a, "utf8");
+        const right = Buffer.from(b, "utf8");
+        if (left.length !== right.length)
+            return false;
+        return (0, crypto_1.timingSafeEqual)(left, right);
     }
 };
 exports.UsersService = UsersService;

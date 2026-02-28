@@ -308,6 +308,7 @@ type AppState = {
     email: string;
     phoneNumber?: string;
     password: string;
+    recaptchaToken?: string;
   }) => Promise<ApiUser | VerificationPendingResponse>;
   sendEmailOtp: (
     userId: string,

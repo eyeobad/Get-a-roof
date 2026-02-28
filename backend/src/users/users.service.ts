@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -73,7 +74,7 @@ export class UsersService {
     const passwordHash = dto.password
       ? await bcrypt.hash(dto.password, 10)
       : undefined;
-    const { password, ...rest } = dto;
+    const { password, recaptchaToken: _recaptchaToken, ...rest } = dto;
 
     const created = new this.userModel({
       ...rest,
@@ -93,6 +94,43 @@ export class UsersService {
       verificationToken: challenge.token,
       verificationTokenExpiresAt: challenge.expiresAt,
     };
+  }
+
+  async assertRecaptchaToken(token?: string) {
+    const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+    if (!secret) {
+      throw new ServiceUnavailableException("reCAPTCHA is not configured");
+    }
+    if (!token) {
+      throw new BadRequestException("Please complete reCAPTCHA verification");
+    }
+
+    const body = new URLSearchParams({
+      secret,
+      response: token,
+    });
+
+    const response = await fetch(
+      "https://www.google.com/recaptcha/api/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      }
+    );
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException("Unable to validate reCAPTCHA");
+    }
+
+    const result = (await response.json()) as {
+      success?: boolean;
+      "error-codes"?: string[];
+    };
+
+    if (!result.success) {
+      throw new BadRequestException("Invalid reCAPTCHA verification");
+    }
   }
 
   async createOAuthUser(data: {

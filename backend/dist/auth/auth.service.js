@@ -42,7 +42,27 @@ let AuthService = AuthService_1 = class AuthService {
                 : "Account suspended. Contact support.");
         }
         if (!user.emailVerified) {
-            throw new common_1.UnauthorizedException("Email not verified. Please verify your email before logging in.");
+            const challenge = await this.usersService.createSignupVerificationChallenge(user);
+            let otpSent = true;
+            try {
+                await this.sendEmailOtp({
+                    userId: user.id,
+                    verificationToken: challenge.token,
+                });
+            }
+            catch (error) {
+                otpSent = false;
+                this.logger.warn(`Unable to auto-send verification OTP for ${user.email}: ${error?.message ?? "unknown error"}`);
+            }
+            return {
+                status: "EMAIL_NOT_VERIFIED",
+                userId: user.id,
+                email: user.email,
+                verificationToken: challenge.token,
+                verificationTokenExpiresAt: challenge.expiresAt,
+                otpSent,
+                message: "Email not verified. Continue verification.",
+            };
         }
         return this.issueToken(user);
     }
@@ -78,6 +98,9 @@ let AuthService = AuthService_1 = class AuthService {
     }
     async sendEmailOtp(dto) {
         const user = await this.usersService.findById(dto.userId);
+        if (!user.emailVerified && dto.verificationToken) {
+            await this.usersService.validateSignupVerificationChallenge(dto.userId, dto.verificationToken);
+        }
         const otp = this.generateOtp();
         user.emailOtp = undefined;
         user.emailOtpHash = this.hashOtp(otp, user.id, "email");
@@ -104,13 +127,16 @@ let AuthService = AuthService_1 = class AuthService {
         return { sent: true, channel: "phone", expiresAt: user.phoneOtpExpiresAt };
     }
     async verifyEmailOtp(dto) {
-        const user = await this.usersService.findById(dto.userId);
+        const user = dto.verificationToken
+            ? await this.usersService.validateSignupVerificationChallenge(dto.userId, dto.verificationToken)
+            : await this.usersService.findById(dto.userId);
         await this.verifyOtpOrThrow(user, dto.otp, "email");
         user.emailVerified = true;
         user.emailOtpHash = undefined;
         user.emailOtp = undefined;
         user.emailOtpExpiresAt = undefined;
         user.emailOtpAttempts = 0;
+        this.usersService.clearSignupVerificationChallenge(user);
         await user.save();
         return { verified: true };
     }
