@@ -39,6 +39,14 @@ export class AuthController {
     return this.authService.sendEmailOtp(dto);
   }
 
+  @Post("verification/send-email-otp")
+  sendEmailOtpForVerification(@Body() dto: SendOtpDto) {
+    if (!dto.verificationToken) {
+      throw new ForbiddenException("Verification token is required");
+    }
+    return this.authService.sendEmailOtp(dto);
+  }
+
   @Post("send-phone-otp")
   @UseGuards(JwtAuthGuard)
   sendPhoneOtp(@Body() dto: SendOtpDto, @Req() req: Request & { user?: any }) {
@@ -53,6 +61,14 @@ export class AuthController {
   verifyEmailOtp(@Body() dto: VerifyOtpDto, @Req() req: Request & { user?: any }) {
     if (dto.userId !== req.user?.sub) {
       throw new ForbiddenException("Access denied");
+    }
+    return this.authService.verifyEmailOtp(dto);
+  }
+
+  @Post("verification/verify-email-otp")
+  verifyEmailOtpForVerification(@Body() dto: VerifyOtpDto) {
+    if (!dto.verificationToken) {
+      throw new ForbiddenException("Verification token is required");
     }
     return this.authService.verifyEmailOtp(dto);
   }

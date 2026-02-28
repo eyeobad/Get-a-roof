@@ -55,9 +55,30 @@ export class AuthService {
     }
 
     if (!user.emailVerified) {
-      throw new UnauthorizedException(
-        "Email not verified. Please verify your email before logging in."
+      const challenge = await this.usersService.createSignupVerificationChallenge(
+        user
       );
+      let otpSent = true;
+      try {
+        await this.sendEmailOtp({
+          userId: user.id,
+          verificationToken: challenge.token,
+        });
+      } catch (error) {
+        otpSent = false;
+        this.logger.warn(
+          `Unable to auto-send verification OTP for ${user.email}: ${(error as Error)?.message ?? "unknown error"}`
+        );
+      }
+      return {
+        status: "EMAIL_NOT_VERIFIED" as const,
+        userId: user.id,
+        email: user.email,
+        verificationToken: challenge.token,
+        verificationTokenExpiresAt: challenge.expiresAt,
+        otpSent,
+        message: "Email not verified. Continue verification.",
+      };
     }
 
     return this.issueToken(user);
@@ -101,6 +122,12 @@ export class AuthService {
 
   async sendEmailOtp(dto: SendOtpDto) {
     const user = await this.usersService.findById(dto.userId);
+    if (!user.emailVerified && dto.verificationToken) {
+      await this.usersService.validateSignupVerificationChallenge(
+        dto.userId,
+        dto.verificationToken
+      );
+    }
     const otp = this.generateOtp();
     user.emailOtp = undefined;
     user.emailOtpHash = this.hashOtp(otp, user.id, "email");
@@ -134,7 +161,12 @@ export class AuthService {
   }
 
   async verifyEmailOtp(dto: VerifyOtpDto) {
-    const user = await this.usersService.findById(dto.userId);
+    const user = dto.verificationToken
+      ? await this.usersService.validateSignupVerificationChallenge(
+          dto.userId,
+          dto.verificationToken
+        )
+      : await this.usersService.findById(dto.userId);
     await this.verifyOtpOrThrow(user, dto.otp, "email");
 
     user.emailVerified = true;
@@ -142,6 +174,7 @@ export class AuthService {
     user.emailOtp = undefined;
     user.emailOtpExpiresAt = undefined;
     user.emailOtpAttempts = 0;
+    this.usersService.clearSignupVerificationChallenge(user);
     await user.save();
 
     return { verified: true };

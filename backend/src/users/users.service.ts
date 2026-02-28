@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -17,6 +18,7 @@ import { Property, PropertyDocument } from "../properties/schemas/property.schem
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
 import { UserRole } from "../common/enums";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 
 const profileMimeTypes = new Set([
   "image/jpeg",
@@ -27,6 +29,13 @@ const profileMimeTypes = new Set([
 
 @Injectable()
 export class UsersService {
+  private readonly signupVerificationTtlMs = 15 * 60 * 1000;
+  private readonly signupVerificationSecret =
+    process.env.SIGNUP_VERIFICATION_SECRET ||
+    process.env.OTP_SECRET ||
+    process.env.JWT_SECRET ||
+    "dev-signup-verification-secret";
+
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
@@ -39,6 +48,16 @@ export class UsersService {
     const email = dto.email.toLowerCase();
     const existing = await this.userModel.findOne({ email }).exec();
     if (existing) {
+      if (!existing.emailVerified) {
+        const challenge = await this.createSignupVerificationChallenge(existing);
+        return {
+          status: "PENDING_VERIFICATION" as const,
+          userId: existing.id,
+          email: existing.email,
+          verificationToken: challenge.token,
+          verificationTokenExpiresAt: challenge.expiresAt,
+        };
+      }
       throw new ConflictException("Email already in use");
     }
 
@@ -65,7 +84,15 @@ export class UsersService {
       },
     });
 
-    return created.save();
+    const saved = await created.save();
+    const challenge = await this.createSignupVerificationChallenge(saved);
+    return {
+      status: "PENDING_VERIFICATION" as const,
+      userId: saved.id,
+      email: saved.email,
+      verificationToken: challenge.token,
+      verificationTokenExpiresAt: challenge.expiresAt,
+    };
   }
 
   async createOAuthUser(data: {
@@ -255,9 +282,63 @@ export class UsersService {
     delete obj.phoneOtpHash;
     delete obj.phoneOtpExpiresAt;
     delete obj.phoneOtpAttempts;
+    delete obj.signupVerificationTokenHash;
+    delete obj.signupVerificationTokenExpiresAt;
     delete obj.passwordResetToken;
     delete obj.passwordResetExpiresAt;
     delete obj.verificationDetails;
     return obj;
+  }
+
+  async createSignupVerificationChallenge(user: UserDocument) {
+    const token = randomBytes(24).toString("base64url");
+    const expiresAt = new Date(Date.now() + this.signupVerificationTtlMs);
+    user.signupVerificationTokenHash = this.hashSignupVerificationToken(
+      token,
+      user.id
+    );
+    user.signupVerificationTokenExpiresAt = expiresAt;
+    await user.save();
+    return { token, expiresAt };
+  }
+
+  async validateSignupVerificationChallenge(userId: string, token: string) {
+    const user = await this.findById(userId);
+    if (!token || !user.signupVerificationTokenHash) {
+      throw new UnauthorizedException("Verification session expired. Sign up again.");
+    }
+    if (
+      !user.signupVerificationTokenExpiresAt ||
+      user.signupVerificationTokenExpiresAt.getTime() < Date.now()
+    ) {
+      user.signupVerificationTokenHash = undefined;
+      user.signupVerificationTokenExpiresAt = undefined;
+      await user.save();
+      throw new UnauthorizedException("Verification session expired. Sign up again.");
+    }
+    const expected = this.hashSignupVerificationToken(token, user.id);
+    const isValid = this.secureCompare(user.signupVerificationTokenHash, expected);
+    if (!isValid) {
+      throw new UnauthorizedException("Invalid verification session.");
+    }
+    return user;
+  }
+
+  clearSignupVerificationChallenge(user: UserDocument) {
+    user.signupVerificationTokenHash = undefined;
+    user.signupVerificationTokenExpiresAt = undefined;
+  }
+
+  private hashSignupVerificationToken(token: string, userId: string) {
+    return createHmac("sha256", this.signupVerificationSecret)
+      .update(`${userId}:${token}`)
+      .digest("hex");
+  }
+
+  private secureCompare(a: string, b: string) {
+    const left = Buffer.from(a, "utf8");
+    const right = Buffer.from(b, "utf8");
+    if (left.length !== right.length) return false;
+    return timingSafeEqual(left, right);
   }
 }

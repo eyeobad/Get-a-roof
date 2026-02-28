@@ -11,7 +11,7 @@ const DIGITS = 6;
 function EmailVerificationContent() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const [values, setValues] = useState<string[]>(Array(DIGITS).fill(""));
-  const [timer, setTimer] = useState(59);
+  const [timer, setTimer] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,6 +19,8 @@ function EmailVerificationContent() {
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const userId = searchParams?.get("userId") ?? "";
   const email = searchParams?.get("email") ?? "user@example.com";
+  const verificationToken = searchParams?.get("verificationToken") ?? "";
+  const otpSent = searchParams?.get("otpSent") === "1";
   const role = searchParams?.get("role") ?? "";
   const nextParam = searchParams?.get("next") ?? "";
 
@@ -52,10 +54,38 @@ function EmailVerificationContent() {
   };
 
   useEffect(() => {
+    if (otpSent) {
+      setTimer(59);
+    }
+  }, [otpSent]);
+
+  useEffect(() => {
     if (timer === 0) return undefined;
     const timeout = setTimeout(() => setTimer((prev) => prev - 1), 1000);
     return () => clearTimeout(timeout);
   }, [timer]);
+
+  useEffect(() => {
+    if (!userId || !verificationToken || otpSent) return;
+    let mounted = true;
+    const bootstrapSend = async () => {
+      try {
+        await sendEmailOtp(userId, verificationToken);
+        if (mounted) {
+          setTimer(59);
+          showToast({ title: "Code sent", variant: "success" });
+        }
+      } catch {
+        if (mounted) {
+          setTimer(0);
+        }
+      }
+    };
+    void bootstrapSend();
+    return () => {
+      mounted = false;
+    };
+  }, [userId, verificationToken, otpSent, sendEmailOtp]);
 
   const otp = values.join("");
   const canSubmit = otp.length === DIGITS && !isSubmitting && !!userId;
@@ -64,7 +94,7 @@ function EmailVerificationContent() {
     if (!userId || !canSubmit) return;
     try {
       setIsSubmitting(true);
-      await verifyEmailOtp(userId, otp);
+      await verifyEmailOtp(userId, otp, verificationToken || undefined);
       showToast({ title: "Email verified", variant: "success" });
       const nextUrl = buildNextUrl(nextParam);
       if (nextUrl) {
@@ -88,7 +118,7 @@ function EmailVerificationContent() {
   const handleResend = async () => {
     if (!userId || timer > 0) return;
     try {
-      await sendEmailOtp(userId);
+      await sendEmailOtp(userId, verificationToken || undefined);
       setTimer(59);
       showToast({ title: "Code resent", variant: "success" });
     } catch (err) {

@@ -6,8 +6,13 @@ import { disconnectSocket, getSocket } from "@/lib/socket";
 
 export default function SocketBridge() {
   const authToken = useAppStore((state) => state.authToken);
+  const initSession = useAppStore((state) => state.initSession);
   const receiveMessage = useAppStore((state) => state.receiveMessage);
   const receiveTyping = useAppStore((state) => state.receiveTyping);
+
+  useEffect(() => {
+    void initSession();
+  }, [initSession]);
 
   useEffect(() => {
     if (!authToken) {

@@ -53,7 +53,7 @@ export class UsersController {
     }
     dto.role =
       requestedRole === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant;
-    return this.usersService.createUser(dto).then((user) => this.usersService.sanitizeUser(user));
+    return this.usersService.createUser(dto);
   }
 
   @Get(":id")

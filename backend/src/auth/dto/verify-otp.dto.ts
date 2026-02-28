@@ -1,4 +1,10 @@
-import { IsMongoId, IsString, Length } from "class-validator";
+import {
+  IsMongoId,
+  IsOptional,
+  IsString,
+  Length,
+  MinLength,
+} from "class-validator";
 
 export class VerifyOtpDto {
   @IsMongoId()
@@ -7,4 +13,9 @@ export class VerifyOtpDto {
   @IsString()
   @Length(4, 8)
   otp: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(10)
+  verificationToken?: string;
 }

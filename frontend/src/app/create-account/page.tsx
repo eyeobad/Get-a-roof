@@ -17,13 +17,13 @@ const roles = [
 
 export default function CreateAccountPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#F5F5DC] text-[#1A1A1A] font-display antialiased">
-      <div className="fixed inset-0 bg-gradient-to-b from-white/40 via-transparent to-transparent opacity-70 pointer-events-none" />
+    <div className="relative min-h-screen overflow-hidden bg-white text-[#1A1A1A] font-display antialiased">
+      <div className="fixed inset-0 bg-gradient-to-b from-[#f8fbff] via-white to-white opacity-80 pointer-events-none" />
       <div className="relative z-10 flex min-h-screen flex-col px-5 py-6">
         <div className="flex w-full max-w-lg items-center gap-3">
           <Link
             href="/"
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-[#dcd4c2] bg-white shadow-sm transition hover:bg-white/80"
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-[#dbe4f5] bg-white shadow-sm transition hover:bg-[#f7faff]"
             aria-label="Back"
           >
             <svg
@@ -57,21 +57,21 @@ export default function CreateAccountPage() {
                   <Link
                     key={role.title}
                     href={href}
-                    className="group flex w-full items-center justify-between rounded-[2rem] bg-[#0a44b8] px-4 py-3 text-left text-white shadow-[0_8px_30px_-4px_rgba(10,68,184,0.25)] transition hover:bg-[#0b4fc8]"
+                    className="group flex w-full items-center justify-between rounded-[2rem] border border-[#dbe4f5] bg-white px-4 py-3 text-left text-[#0c141d] shadow-[0_8px_24px_-10px_rgba(12,20,29,0.18)] transition hover:border-[#9cb9ec] hover:shadow-[0_12px_30px_-12px_rgba(10,68,184,0.28)]"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0a44b8]">
                         {role.icon}
                       </div>
                       <div>
-                        <p className="text-xl font-semibold">{role.title}</p>
-                        <p className="text-sm font-medium text-white/80">
+                        <p className="text-xl font-semibold text-[#0c141d]">{role.title}</p>
+                        <p className="text-sm font-medium text-[#4a5d78]">
                           {role.description}
                         </p>
                       </div>
                     </div>
                     <svg
-                      className="h-6 w-6 opacity-60 transition group-hover:opacity-100"
+                      className="h-6 w-6 text-[#0a44b8] opacity-60 transition group-hover:opacity-100"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -87,7 +87,7 @@ export default function CreateAccountPage() {
                 );
               })}
             </div>
-            <div className="mt-12 border-t border-[#dcd4c2] pt-6 text-center">
+            <div className="mt-12 border-t border-[#dbe4f5] pt-6 text-center">
               <p className="text-lg font-medium">
                 Already have an account?
                 <Link

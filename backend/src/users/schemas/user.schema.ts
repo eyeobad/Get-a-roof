@@ -184,6 +184,12 @@ export class User {
   phoneOtpAttempts?: number;
 
   @Prop()
+  signupVerificationTokenHash?: string;
+
+  @Prop()
+  signupVerificationTokenExpiresAt?: Date;
+
+  @Prop()
   passwordResetToken?: string;
 
   @Prop()

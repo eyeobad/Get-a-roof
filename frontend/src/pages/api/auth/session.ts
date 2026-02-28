@@ -33,6 +33,17 @@ const readToken = (req: NextApiRequest) => {
 };
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === "GET") {
+    const rawCookie = req.headers.cookie || "";
+    const token = rawCookie
+      .split(";")
+      .map((entry) => entry.trim())
+      .find((entry) => entry.startsWith(`${SESSION_COOKIE}=`))
+      ?.slice(`${SESSION_COOKIE}=`.length);
+    res.status(200).json({ token: token ? decodeURIComponent(token) : null });
+    return;
+  }
+
   if (req.method === "POST") {
     const token = readToken(req);
     if (!token) {
@@ -50,6 +61,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     return;
   }
 
-  res.setHeader("Allow", "POST, DELETE");
+  res.setHeader("Allow", "GET, POST, DELETE");
   res.status(405).json({ error: "Method not allowed" });
 }

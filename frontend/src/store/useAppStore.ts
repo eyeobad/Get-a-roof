@@ -143,8 +143,25 @@ type ApiUser = {
 };
 
 type ApiAuthResponse = {
-  accessToken: string;
-  user: ApiUser;
+  accessToken?: string;
+  user?: ApiUser;
+  status?: string;
+  userId?: string;
+  email?: string;
+  verificationToken?: string;
+  verificationTokenExpiresAt?: string;
+  otpSent?: boolean;
+  message?: string;
+};
+
+type VerificationPendingResponse = {
+  status: "PENDING_VERIFICATION" | "EMAIL_NOT_VERIFIED";
+  userId: string;
+  email?: string;
+  verificationToken: string;
+  verificationTokenExpiresAt?: string;
+  otpSent?: boolean;
+  message?: string;
 };
 
 type ApiProperty = {
@@ -274,6 +291,7 @@ type AppState = {
   setSelectedListingId: (id: string | null) => void;
   setSelectedThreadId: (id: string | null) => void;
   captureUserLocation: () => Promise<{ lat: number; lng: number } | null>;
+  initSession: () => Promise<void>;
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
   login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
@@ -283,17 +301,24 @@ type AppState = {
     email: string;
     phoneNumber?: string;
     password: string;
-  }) => Promise<ApiUser>;
+  }) => Promise<ApiUser | VerificationPendingResponse>;
   registerLandlord: (payload: {
     firstName?: string;
     lastName?: string;
     email: string;
     phoneNumber?: string;
     password: string;
-  }) => Promise<ApiUser>;
-  sendEmailOtp: (userId: string) => Promise<Record<string, unknown>>;
+  }) => Promise<ApiUser | VerificationPendingResponse>;
+  sendEmailOtp: (
+    userId: string,
+    verificationToken?: string
+  ) => Promise<Record<string, unknown>>;
   sendPhoneOtp: (userId: string) => Promise<Record<string, unknown>>;
-  verifyEmailOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
+  verifyEmailOtp: (
+    userId: string,
+    otp: string,
+    verificationToken?: string
+  ) => Promise<Record<string, unknown>>;
   verifyPhoneOtp: (userId: string, otp: string) => Promise<Record<string, unknown>>;
   requestPasswordReset: (email: string) => Promise<{ sent?: boolean } | null>;
   resetPassword: (token: string, password: string) => Promise<Record<string, unknown>>;
@@ -785,6 +810,17 @@ export const useAppStore = create<AppState>()(
           return null;
         }
       },
+      initSession: async () => {
+        const state = get();
+        if (state.authToken && state.userId) return;
+        type SessionPayload = { token?: string };
+        const session = await apiFetch<SessionPayload>(`/api/auth/session`);
+        const token = session?.token;
+        if (!token) return;
+        const userId = decodeJwtSub(token);
+        if (!userId) return;
+        set({ authToken: token, userId });
+      },
       setAuth: (token, userId) => set({ authToken: token, userId }),
       clearAuth: () => {
         set(
@@ -801,6 +837,10 @@ export const useAppStore = create<AppState>()(
           method: "POST",
           body: JSON.stringify({ email, password }),
         });
+
+        if (response?.status === "EMAIL_NOT_VERIFIED" && response?.userId) {
+          return response;
+        }
 
         if (!response?.accessToken || !response?.user) {
           return null;
@@ -834,19 +874,28 @@ export const useAppStore = create<AppState>()(
         return response;
       },
       registerTenant: async (payload) => {
-        return apiFetch<ApiUser>(`/api/users`, {
+        return apiFetch<ApiUser | VerificationPendingResponse>(`/api/users`, {
           method: "POST",
           body: JSON.stringify({ ...payload, role: "Tenant" }),
         });
       },
       registerLandlord: async (payload) => {
-        return apiFetch<ApiUser>(`/api/users`, {
+        return apiFetch<ApiUser | VerificationPendingResponse>(`/api/users`, {
           method: "POST",
           body: JSON.stringify({ ...payload, role: "Landlord" }),
         });
       },
-      sendEmailOtp: async (userId) => {
+      sendEmailOtp: async (userId, verificationToken) => {
         const state = get();
+        if (verificationToken) {
+          return apiFetch<Record<string, unknown>>(
+            `/api/auth/verification/send-email-otp`,
+            {
+              method: "POST",
+              body: JSON.stringify({ userId, verificationToken }),
+            }
+          );
+        }
         if (!state.authToken) {
           throw new Error("Unauthorized");
         }
@@ -867,8 +916,17 @@ export const useAppStore = create<AppState>()(
           token: state.authToken,
         });
       },
-      verifyEmailOtp: async (userId, otp) => {
+      verifyEmailOtp: async (userId, otp, verificationToken) => {
         const state = get();
+        if (verificationToken) {
+          return apiFetch<Record<string, unknown>>(
+            `/api/auth/verification/verify-email-otp`,
+            {
+              method: "POST",
+              body: JSON.stringify({ userId, otp, verificationToken }),
+            }
+          );
+        }
         if (!state.authToken) {
           throw new Error("Unauthorized");
         }
@@ -1754,8 +1812,9 @@ export const useAppStore = create<AppState>()(
         conversations: state.conversations,
         messagesByMatch: state.messagesByMatch,
         typingByMatch: state.typingByMatch,
-        userId: null,
-        user: null,
+        authToken: state.authToken,
+        userId: state.userId,
+        user: state.user,
         userLocation: state.userLocation,
         landlordDraft: state.landlordDraft,
         landlordProperties: state.landlordProperties,

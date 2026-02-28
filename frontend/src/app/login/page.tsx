@@ -28,6 +28,24 @@ export default function LoginPage() {
         showToast({ title: message, variant: "error" });
         return;
       }
+      if (result.status === "EMAIL_NOT_VERIFIED" && result.userId) {
+        const query = new URLSearchParams({
+          userId: result.userId,
+          email: result.email ?? email,
+          verificationToken: result.verificationToken ?? "",
+          otpSent: result.otpSent ? "1" : "0",
+        });
+        showToast({
+          title: "Verify your email to continue",
+          variant: "info",
+        });
+        router.push(`/auth/email-verification?${query.toString()}`);
+        return;
+      }
+      if (!result.user) {
+        showToast({ title: "Login failed.", variant: "error" });
+        return;
+      }
       const rawRole = result.user?.role;
       const roles = Array.isArray(rawRole)
         ? rawRole

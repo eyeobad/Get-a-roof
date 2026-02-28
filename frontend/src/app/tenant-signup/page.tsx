@@ -58,43 +58,48 @@ export default function TenantSignupPage() {
   try {
     clearAuth();
     setIsSubmitting(true);
-      const user = await registerTenant({
+      const result = await registerTenant({
         firstName: payload.firstName,
         lastName: payload.lastName,
         email: payload.email,
         phoneNumber: payload.phoneNumber,
         password: payload.password,
       });
-      const userId = user?.id || user?._id;
+      const isPending =
+        (result as { status?: string })?.status === "PENDING_VERIFICATION";
+      const userId = isPending
+        ? String((result as { userId?: string }).userId ?? "")
+        : ((result as { id?: string; _id?: string })?.id ||
+          (result as { id?: string; _id?: string })?._id);
+      const verificationToken = isPending
+        ? String(
+            (result as { verificationToken?: string }).verificationToken ?? ""
+          )
+        : "";
       if (!userId) {
         throw new Error("Unable to start verification. Please try again.");
       }
-
-      let otpSent = true;
-      try {
-        await sendEmailOtp(userId);
-      } catch {
-        otpSent = false;
+      let otpSent = false;
+      if (verificationToken) {
+        try {
+          await sendEmailOtp(userId, verificationToken);
+          otpSent = true;
+        } catch {
+          // resend is available on verification screen
+        }
       }
 
       const query = new URLSearchParams({
         userId,
         email: payload.email,
+        otpSent: otpSent ? "1" : "0",
+        ...(verificationToken ? { verificationToken } : {}),
       });
-
-      if (otpSent) {
-        showToast({
-          title: "Verification sent",
-          text: "Check your email for the next steps.",
-          variant: "success",
-        });
-      } else {
-        showToast({
-          title: "Account created",
-          text: "We could not send your OTP yet. Open verification and tap Resend.",
-          variant: "info",
-        });
-      }
+      showToast({
+        title: "Continue verification",
+        text: "We sent a verification code to your email.",
+        variant: "success",
+      });
 
       router.push(`/auth/email-verification?${query.toString()}`);
     } catch (err) {
