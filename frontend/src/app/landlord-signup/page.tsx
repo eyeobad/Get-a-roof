@@ -3,11 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
-import { getGoogleIdToken } from "@/lib/firebase";
+import { getGoogleIdToken, getRedirectResultToken } from "@/lib/firebase";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -37,20 +37,42 @@ export default function SignUpPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const completeGoogleSignup = useCallback(async (firebaseIdToken: string) => {
+    const result = await googleLogin(firebaseIdToken, "Landlord");
+    if (!result?.user) {
+      showToast({ title: "Google sign-up failed.", variant: "error" });
+      return;
+    }
+    captureUserLocation().catch(() => { });
+    router.push("/dashboard/properties");
+  }, [googleLogin, captureUserLocation, router]);
+
+  // Handle mobile Google redirect result on page load
+  useEffect(() => {
+    let mounted = true;
+    getRedirectResultToken().then(async (token) => {
+      if (!token || !mounted) return;
+      setIsSubmitting(true);
+      try {
+        await completeGoogleSignup(token);
+      } catch (err) {
+        if (!hasShownErrorToast(err)) {
+          showToast({ title: getApiErrorMessage(err), variant: "error" });
+        }
+      } finally {
+        if (mounted) setIsSubmitting(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, [completeGoogleSignup]);
+
   const handleGoogleSignup = async () => {
     if (isSubmitting) return;
     try {
       setIsSubmitting(true);
       const firebaseIdToken = await getGoogleIdToken();
-      const result = await googleLogin(firebaseIdToken, "Landlord");
-      if (!result?.user) {
-        showToast({ title: "Google sign-up failed.", variant: "error" });
-        return;
-      }
-      await captureUserLocation().catch(() => {
-        // Location is optional – continue without it
-      });
-      router.push("/dashboard/properties");
+      if (!firebaseIdToken) return; // mobile redirect
+      await completeGoogleSignup(firebaseIdToken);
     } catch (err) {
       if (!hasShownErrorToast(err)) {
         showToast({ title: getApiErrorMessage(err), variant: "error" });

@@ -129,8 +129,7 @@ const defaultProfile: ProfileState = {
   fullName: "",
   email: "",
   phone: "",
-  photoUrl:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P",
+  photoUrl: "",
   annualEarnings: 0,
   commuteRadius: 0,
   preferences: {},
@@ -175,6 +174,110 @@ const mapUserToProfile = (user: ApiUser | null | undefined): ProfileState => {
 };
 
 // --- Components ---
+
+function Shimmer({ className }: { className: string }) {
+  return <div className={`animate-pulse bg-slate-200 rounded ${className}`} />;
+}
+
+function AvatarCircle({ photoUrl, size }: { photoUrl: string; size: string }) {
+  if (photoUrl) {
+    return (
+      <div
+        className={`${size} rounded-full border-4 border-white bg-cover bg-center shadow-lg`}
+        style={{ backgroundImage: `url('${photoUrl}')` }}
+      />
+    );
+  }
+  return (
+    <div className={`${size} rounded-full border-4 border-white bg-slate-100 shadow-lg flex items-center justify-center`}>
+      <span className="material-symbols-outlined text-slate-400 text-[48px]">person</span>
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <>
+      {/* Mobile photo skeleton */}
+      <section className="flex flex-col items-center gap-4 lg:hidden">
+        <Shimmer className="h-32 w-32 rounded-full" />
+        <Shimmer className="h-4 w-24 rounded-full" />
+      </section>
+
+      {/* Contact skeleton */}
+      <section className="mt-6 space-y-5">
+        <Shimmer className="h-7 w-40 rounded-lg" />
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2">
+              <Shimmer className="h-3 w-20 rounded" />
+              <Shimmer className="h-12 w-full rounded-xl" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Preferences skeleton */}
+      <section className="mt-8 space-y-6 lg:hidden">
+        <Shimmer className="h-7 w-32 rounded-lg" />
+        <div className="grid grid-cols-1 gap-5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-3xl border border-slate-200 bg-white p-5">
+              <Shimmer className="h-5 w-24 rounded" />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[1, 2, 3].map((j) => (
+                  <Shimmer key={j} className="h-9 w-20 rounded-full" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Earnings skeleton */}
+      <section className="mt-8 space-y-5">
+        <Shimmer className="h-7 w-40 rounded-lg" />
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <Shimmer className="h-6 w-full rounded" />
+          <Shimmer className="mt-4 h-4 w-full rounded" />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function DesktopSidebarSkeleton() {
+  return (
+    <div className="sticky top-[76px] space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <Shimmer className="h-4 w-16 rounded" />
+          <Shimmer className="h-9 w-28 rounded-full" />
+        </div>
+        <div className="mt-5 flex flex-col items-center">
+          <Shimmer className="h-32 w-32 rounded-full" />
+          <Shimmer className="mt-4 h-5 w-36 rounded" />
+          <Shimmer className="mt-2 h-3 w-44 rounded" />
+          <Shimmer className="mt-1 h-3 w-28 rounded" />
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <Shimmer className="h-4 w-20 rounded" />
+          <Shimmer className="h-9 w-20 rounded-full" />
+        </div>
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center justify-between">
+              <Shimmer className="h-3 w-20 rounded" />
+              <Shimmer className="h-3 w-16 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ToggleRow({
   title,
@@ -497,47 +600,160 @@ export default function ProfilePage() {
         <div className="lg:grid lg:grid-cols-[380px_1fr] lg:gap-8 lg:py-6">
           {/* LEFT rail (desktop) */}
           <aside className="hidden lg:block">
-            <div className="sticky top-[76px] space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Profile</p>
-                  <button
-                    onClick={() => openModal("photo")}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">photo_camera</span>
-                    Edit Photo
-                  </button>
-                </div>
-
-                <div className="mt-5 flex flex-col items-center">
-                  <div className="relative">
-                    <div
-                      className="h-32 w-32 rounded-full border-4 border-white bg-cover bg-center shadow-lg"
-                      style={{ backgroundImage: `url('${profile.photoUrl}')` }}
-                    />
+            {isLoading ? <DesktopSidebarSkeleton /> : (
+              <div className="sticky top-[76px] space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Profile</p>
                     <button
                       onClick={() => openModal("photo")}
-                      className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
-                      aria-label="Edit photo"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                      <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                      Edit Photo
                     </button>
                   </div>
 
-                  <p className="mt-4 text-xl font-bold text-primary">{profile.fullName}</p>
-                  <p className="mt-1 text-sm text-slate-500">{profile.email}</p>
-                  <p className="text-sm text-slate-500">{profile.phone}</p>
+                  <div className="mt-5 flex flex-col items-center">
+                    <div className="relative">
+                      <AvatarCircle photoUrl={profile.photoUrl} size="h-32 w-32" />
+                      <button
+                        onClick={() => openModal("photo")}
+                        className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
+                        aria-label="Edit photo"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                    </div>
 
-                  <p className="mt-4 text-xs font-medium text-slate-500">
-                    Name and email are read-only. Phone can be added if missing.
-                  </p>
+                    <p className="mt-4 text-xl font-bold text-primary">{profile.fullName}</p>
+                    <p className="mt-1 text-sm text-slate-500">{profile.email}</p>
+                    <p className="text-sm text-slate-500">{profile.phone}</p>
+
+                    <p className="mt-4 text-xs font-medium text-slate-500">
+                      Name and email are read-only. Phone can be added if missing.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">My Profile</p>
+                    <button
+                      onClick={() => openModal("preferences")}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                      Edit
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {singleSelectSummary.map((row) => (
+                      <div key={row.key} className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-600">{row.title}</span>
+                        <span className="text-sm font-bold text-slate-900">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
+            )}
+          </aside>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          {/* MAIN content */}
+          <main className="flex-1 overflow-visible pb-28 pt-6 lg:pb-10 lg:pt-0">
+            {isLoading ? <ProfileSkeleton /> : (<>
+              {/* Mobile photo section */}
+              <section className="flex flex-col items-center gap-4 lg:hidden">
+                <div className="relative">
+                  <AvatarCircle photoUrl={profile.photoUrl} size="h-32 w-32" />
+                  <button
+                    onClick={() => openModal("photo")}
+                    className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
+                    aria-label="Edit photo"
+                  >
+                    <span className="material-symbols-outlined text-lg">edit</span>
+                  </button>
+                </div>
+                <button
+                  onClick={() => openModal("photo")}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  Update photo
+                </button>
+              </section>
+
+              <section className="mt-6 space-y-5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">My Profile</p>
+                  <h3 className="text-2xl font-bold text-primary">Contact Details</h3>
+                  {profile.phone ? (
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                      Read-only
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+                      Phone missing
+                    </span>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="space-y-4">
+                    {/* Full Name — always read-only */}
+                    {[
+                      { label: "Full Name", icon: "person", value: profile.fullName },
+                      { label: "Email", icon: "mail", value: profile.email },
+                    ].map((field) => (
+                      <div key={field.label} className="space-y-2">
+                        <label className="text-sm font-semibold text-slate-500">{field.label}</label>
+                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <span className="material-symbols-outlined text-slate-400 text-[20px]">
+                            {field.icon}
+                          </span>
+                          <input
+                            className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                            value={field.value}
+                            readOnly
+                          />
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Phone — editable when missing */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-slate-500">Phone Number</label>
+                      <div
+                        className={[
+                          "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
+                          profile.phone && hasServerPhone
+                            ? "border-slate-200 bg-slate-50"
+                            : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
+                        ].join(" ")}
+                      >
+                        <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
+                        <input
+                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                          value={profile.phone}
+                          readOnly={hasServerPhone}
+                          placeholder={hasServerPhone ? undefined : "Add phone number"}
+                          onChange={(e) =>
+                            setProfile((prev) => ({ ...prev, phone: e.target.value }))
+                          }
+                        />
+                        {!hasServerPhone && (
+                          <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
+                        )}
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* My Profile section (read view) - UPDATED: Hidden on Desktop */}
+              <section className="mt-8 space-y-6 lg:hidden">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-2xl font-bold text-primary">My Profile</h3>
                   <button
                     onClick={() => openModal("preferences")}
                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
@@ -547,251 +763,136 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                <div className="mt-4 space-y-3">
-                  {singleSelectSummary.map((row) => (
-                    <div key={row.key} className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-600">{row.title}</span>
-                      <span className="text-sm font-bold text-slate-900">{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          {/* MAIN content */}
-          <main className="flex-1 overflow-visible pb-28 pt-6 lg:pb-10 lg:pt-0">
-            {/* Mobile photo section */}
-            <section className="flex flex-col items-center gap-4 lg:hidden">
-              <div className="relative">
-                <div
-                  className="h-32 w-32 rounded-full border-4 border-white bg-cover bg-center shadow-lg"
-                  style={{ backgroundImage: `url('${profile.photoUrl}')` }}
-                />
-                <button
-                  onClick={() => openModal("photo")}
-                  className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
-                  aria-label="Edit photo"
-                >
-                  <span className="material-symbols-outlined text-lg">edit</span>
-                </button>
-              </div>
-              <button
-                onClick={() => openModal("photo")}
-                className="text-sm font-semibold text-primary hover:underline"
-              >
-                Update photo
-              </button>
-            </section>
-
-            <section className="mt-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-primary">Contact Details</h3>
-                {profile.phone ? (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                    Read-only
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-                    Phone missing
-                  </span>
-                )}
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="space-y-4">
-                  {/* Full Name — always read-only */}
-                  {[
-                    { label: "Full Name", icon: "person", value: profile.fullName },
-                    { label: "Email", icon: "mail", value: profile.email },
-                  ].map((field) => (
-                    <div key={field.label} className="space-y-2">
-                      <label className="text-sm font-semibold text-slate-500">{field.label}</label>
-                      <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <span className="material-symbols-outlined text-slate-400 text-[20px]">
-                          {field.icon}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {preferenceGroups.map((group) => (
+                    <div key={group.key} className="rounded-3xl border border-slate-200 bg-white p-5">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary">
+                          {group.icon || "star"}
                         </span>
-                        <input
-                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
-                          value={field.value}
-                          readOnly
-                        />
+                        <p className="text-lg font-bold text-primary">{group.title}</p>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {group.options.map((opt) => {
+                          const active = profile.preferences[group.key] === opt.label;
+                          return (
+                            <span
+                              key={opt.label}
+                              className={`rounded-full px-4 py-2 text-base font-semibold border transition-colors ${active
+                                ? "border-2 border-primary bg-blue-50 text-primary"
+                                : "border-slate-200 bg-white text-slate-600"
+                                }`}
+                            >
+                              {opt.label}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
+                </div>
+              </section>
 
-                  {/* Phone — editable when missing */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-500">Phone Number</label>
-                    <div
-                      className={[
-                        "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-                        profile.phone && hasServerPhone
-                          ? "border-slate-200 bg-slate-50"
-                          : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
-                      ].join(" ")}
-                    >
-                      <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
-                      <input
-                        className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                        value={profile.phone}
-                        readOnly={hasServerPhone}
-                        placeholder={hasServerPhone ? undefined : "Add phone number"}
-                        onChange={(e) =>
-                          setProfile((prev) => ({ ...prev, phone: e.target.value }))
-                        }
-                      />
-                      {!hasServerPhone && (
-                        <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
-                      )}
+              {/* Annual earnings */}
+              <section className="mt-8 space-y-5">
+                <h3 className="text-2xl font-bold text-primary">Annual Earnings</h3>
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
+                    <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                      ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <input
+                      type="range"
+                      min={1500000}
+                      max={20000000}
+                      step={50000}
+                      value={profile.annualEarnings}
+                      onChange={(e) =>
+                        setProfile((prev) => ({ ...prev, annualEarnings: Number(e.target.value) }))
+                      }
+                      className="w-full accent-primary"
+                    />
+                    <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
+                      <span>₦1.5m</span>
+                      <span>₦10m</span>
+                      <span>₦20m+</span>
                     </div>
-
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
 
-            {/* My Profile section (read view) - UPDATED: Hidden on Desktop */}
-            <section className="mt-8 space-y-6 lg:hidden">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-primary">My Profile</h3>
+              {/* Apartment Preference toggles - UPDATED WITH TOGGLE LOGIC */}
+              <section className="mt-8 space-y-3">
+                <h3 className="text-2xl font-bold text-primary">Apartment Preference</h3>
+
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  {apartmentChecks.map((check) => (
+                    <ToggleRow
+                      key={check.label}
+                      title={check.label}
+                      subtitle={check.description}
+                      checked={!!profile.apartmentPrefs[check.label]}
+                      onChange={() =>
+                        setProfile((p) => ({
+                          ...p,
+                          apartmentPrefs: {
+                            ...p.apartmentPrefs,
+                            [check.label]: !p.apartmentPrefs[check.label],
+                          },
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </section>
+
+              {/* Commute radius */}
+              <section className="mt-8 space-y-5">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold text-slate-900">Max Commute Radius</span>
+                    <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                      {profile.commuteRadius} mi
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <input
+                      type="range"
+                      min={0}
+                      max={50}
+                      value={profile.commuteRadius}
+                      onChange={(e) =>
+                        setProfile((prev) => ({ ...prev, commuteRadius: Number(e.target.value) }))
+                      }
+                      className="w-full accent-primary"
+                    />
+                    <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
+                      <span>0 mi</span>
+                      <span>25 mi</span>
+                      <span>50 mi</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-3 pt-4">
                 <button
-                  onClick={() => openModal("preferences")}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
+                  onClick={() => {
+                    setConfirmInput("");
+                    openModal("delete");
+                  }}
+                  className="w-full py-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 font-bold hover:bg-red-100 active:bg-red-200 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
-                  Edit
+                  Delete Account
                 </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {preferenceGroups.map((group) => (
-                  <div key={group.key} className="rounded-3xl border border-slate-200 bg-white p-5">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary">
-                        {group.icon || "star"}
-                      </span>
-                      <p className="text-lg font-bold text-primary">{group.title}</p>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {group.options.map((opt) => {
-                        const active = profile.preferences[group.key] === opt.label;
-                        return (
-                          <span
-                            key={opt.label}
-                            className={`rounded-full px-4 py-2 text-base font-semibold border transition-colors ${active
-                              ? "border-2 border-primary bg-blue-50 text-primary"
-                              : "border-slate-200 bg-white text-slate-600"
-                              }`}
-                          >
-                            {opt.label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Annual earnings */}
-            <section className="mt-8 space-y-5">
-              <h3 className="text-2xl font-bold text-primary">Annual Earnings</h3>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
-                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                    ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
-                  </span>
-                </div>
-
-                <div className="mt-4">
-                  <input
-                    type="range"
-                    min={1500000}
-                    max={20000000}
-                    step={50000}
-                    value={profile.annualEarnings}
-                    onChange={(e) =>
-                      setProfile((prev) => ({ ...prev, annualEarnings: Number(e.target.value) }))
-                    }
-                    className="w-full accent-primary"
-                  />
-                  <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                    <span>₦1.5m</span>
-                    <span>₦10m</span>
-                    <span>₦20m+</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Apartment Preference toggles - UPDATED WITH TOGGLE LOGIC */}
-            <section className="mt-8 space-y-3">
-              <h3 className="text-2xl font-bold text-primary">Apartment Preference</h3>
-
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                {apartmentChecks.map((check) => (
-                  <ToggleRow
-                    key={check.label}
-                    title={check.label}
-                    subtitle={check.description}
-                    checked={!!profile.apartmentPrefs[check.label]}
-                    onChange={() =>
-                      setProfile((p) => ({
-                        ...p,
-                        apartmentPrefs: {
-                          ...p.apartmentPrefs,
-                          [check.label]: !p.apartmentPrefs[check.label],
-                        },
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Commute radius */}
-            <section className="mt-8 space-y-5">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-slate-900">Max Commute Radius</span>
-                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                    {profile.commuteRadius} mi
-                  </span>
-                </div>
-
-                <div className="mt-4">
-                  <input
-                    type="range"
-                    min={0}
-                    max={50}
-                    value={profile.commuteRadius}
-                    onChange={(e) =>
-                      setProfile((prev) => ({ ...prev, commuteRadius: Number(e.target.value) }))
-                    }
-                    className="w-full accent-primary"
-                  />
-                  <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                    <span>0 mi</span>
-                    <span>25 mi</span>
-                    <span>50 mi</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-3 pt-4">
-              <button
-                onClick={() => {
-                  setConfirmInput("");
-                  openModal("delete");
-                }}
-                className="w-full py-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 font-bold hover:bg-red-100 active:bg-red-200 transition-colors"
-              >
-                Delete Account
-              </button>
-            </section>
+              </section>
+            </>)}
           </main>
         </div>
 

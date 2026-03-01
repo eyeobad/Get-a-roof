@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
-import { getGoogleIdToken } from "@/lib/firebase";
+import { getGoogleIdToken, getRedirectResultToken } from "@/lib/firebase";
 
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -148,27 +148,49 @@ export default function TenantSignupPage() {
     }
   };
 
+  const completeGoogleSignup = useCallback(async (firebaseIdToken: string) => {
+    const result = await googleLogin(firebaseIdToken, "Tenant");
+    if (!result?.user) {
+      showToast({ title: "Google sign-up failed.", variant: "error" });
+      return;
+    }
+    captureUserLocation().catch(() => { });
+    const tenantPreferences = (
+      result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+    )?.tenant;
+    const needsTenantOnboarding =
+      !tenantPreferences ||
+      !tenantPreferences.lookingFor ||
+      tenantPreferences.lookingFor.length === 0;
+    router.push(needsTenantOnboarding ? "/tenant-onboarding" : "/explore");
+  }, [googleLogin, captureUserLocation, router]);
+
+  // Handle mobile Google redirect result on page load
+  useEffect(() => {
+    let mounted = true;
+    getRedirectResultToken().then(async (token) => {
+      if (!token || !mounted) return;
+      setIsSubmitting(true);
+      try {
+        await completeGoogleSignup(token);
+      } catch (err) {
+        if (!hasShownErrorToast(err)) {
+          showToast({ title: getApiErrorMessage(err), variant: "error" });
+        }
+      } finally {
+        if (mounted) setIsSubmitting(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, [completeGoogleSignup]);
+
   const handleGoogleSignup = async () => {
     if (isSubmitting) return;
     try {
       setIsSubmitting(true);
       const firebaseIdToken = await getGoogleIdToken();
-      const result = await googleLogin(firebaseIdToken, "Tenant");
-      if (!result?.user) {
-        showToast({ title: "Google sign-up failed.", variant: "error" });
-        return;
-      }
-      await captureUserLocation().catch(() => {
-        // Location is optional – continue without it
-      });
-      const tenantPreferences = (
-        result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
-      )?.tenant;
-      const needsTenantOnboarding =
-        !tenantPreferences ||
-        !tenantPreferences.lookingFor ||
-        tenantPreferences.lookingFor.length === 0;
-      router.push(needsTenantOnboarding ? "/tenant-onboarding" : "/explore");
+      if (!firebaseIdToken) return; // mobile redirect
+      await completeGoogleSignup(firebaseIdToken);
     } catch (err) {
       if (!hasShownErrorToast(err)) {
         showToast({ title: getApiErrorMessage(err), variant: "error" });

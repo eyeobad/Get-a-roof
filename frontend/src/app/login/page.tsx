@@ -1,12 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
-import { getGoogleIdToken } from "@/lib/firebase";
+import { getGoogleIdToken, getRedirectResultToken } from "@/lib/firebase";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +18,62 @@ export default function LoginPage() {
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
+
+  const completeGoogleLogin = useCallback(async (firebaseIdToken: string) => {
+    const result = await googleLogin(firebaseIdToken);
+    if (!result?.user) {
+      showToast({ title: "Google sign-in failed.", variant: "error" });
+      return;
+    }
+    const rawRole = result.user.role;
+    const roles = Array.isArray(rawRole) ? rawRole : rawRole ? [rawRole] : [];
+    const isLandlord = roles.some(
+      (value) => value?.toString().toLowerCase() === "landlord"
+    );
+    const isAdmin = roles.some(
+      (value) => value?.toString().toLowerCase() === "admin"
+    );
+    const tenantPreferences = (
+      result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+    )?.tenant;
+    const needsTenantOnboarding =
+      !isLandlord &&
+      (!tenantPreferences ||
+        !tenantPreferences.lookingFor ||
+        tenantPreferences.lookingFor.length === 0);
+
+    if (!isAdmin && !isLandlord) {
+      captureUserLocation().catch(() => { });
+    }
+    if (isAdmin) {
+      router.push("/admin");
+    } else if (isLandlord) {
+      router.push("/dashboard/properties");
+    } else if (needsTenantOnboarding) {
+      router.push("/tenant-onboarding");
+    } else {
+      router.push("/explore");
+    }
+  }, [googleLogin, captureUserLocation, router]);
+
+  // Handle mobile Google redirect result on page load
+  useEffect(() => {
+    let mounted = true;
+    getRedirectResultToken().then(async (token) => {
+      if (!token || !mounted) return;
+      setIsSubmitting(true);
+      try {
+        await completeGoogleLogin(token);
+      } catch (err) {
+        if (!hasShownErrorToast(err)) {
+          showToast({ title: getApiErrorMessage(err), variant: "error" });
+        }
+      } finally {
+        if (mounted) setIsSubmitting(false);
+      }
+    });
+    return () => { mounted = false; };
+  }, [completeGoogleLogin]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,7 +125,7 @@ export default function LoginPage() {
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
       if (!isAdmin && !isLandlord) {
-        await captureUserLocation().catch(() => {
+        captureUserLocation().catch(() => {
           // Location is optional – continue without it
         });
       }
@@ -97,42 +153,10 @@ export default function LoginPage() {
     try {
       setIsSubmitting(true);
       const firebaseIdToken = await getGoogleIdToken();
-      const result = await googleLogin(firebaseIdToken);
-      if (!result?.user) {
-        showToast({ title: "Google sign-in failed.", variant: "error" });
-        return;
-      }
-      const rawRole = result.user.role;
-      const roles = Array.isArray(rawRole) ? rawRole : rawRole ? [rawRole] : [];
-      const isLandlord = roles.some(
-        (value) => value?.toString().toLowerCase() === "landlord"
-      );
-      const isAdmin = roles.some(
-        (value) => value?.toString().toLowerCase() === "admin"
-      );
-      const tenantPreferences = (
-        result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
-      )?.tenant;
-      const needsTenantOnboarding =
-        !isLandlord &&
-        (!tenantPreferences ||
-          !tenantPreferences.lookingFor ||
-          tenantPreferences.lookingFor.length === 0);
-
-      if (!isAdmin && !isLandlord) {
-        await captureUserLocation().catch(() => {
-          // Location is optional – continue without it
-        });
-      }
-      if (isAdmin) {
-        router.push("/admin");
-      } else if (isLandlord) {
-        router.push("/dashboard/properties");
-      } else if (needsTenantOnboarding) {
-        router.push("/tenant-onboarding");
-      } else {
-        router.push("/explore");
-      }
+      // On mobile, getGoogleIdToken triggers a redirect and returns null.
+      // The redirect result is handled by the useEffect above.
+      if (!firebaseIdToken) return;
+      await completeGoogleLogin(firebaseIdToken);
     } catch (err) {
       if (!hasShownErrorToast(err)) {
         showToast({ title: getApiErrorMessage(err), variant: "error" });
