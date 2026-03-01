@@ -275,6 +275,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile }));
+  const [hasServerPhone, setHasServerPhone] = useState(false);
 
   // ---- MODAL + DRAFT STATE ----
   const [activeModal, setActiveModal] = useState<ModalType>("none");
@@ -345,6 +346,7 @@ export default function ProfilePage() {
         const nextProfile = mapUserToProfile(user);
         setProfile(nextProfile);
         setDraft(nextProfile);
+        setHasServerPhone(!!user.phoneNumber);
       })
       .catch(() => {
         if (mounted) setProfile((prev) => ({ ...prev }));
@@ -623,7 +625,7 @@ export default function ProfilePage() {
                     <div
                       className={[
                         "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-                        profile.phone
+                        profile.phone && hasServerPhone
                           ? "border-slate-200 bg-slate-50"
                           : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
                       ].join(" ")}
@@ -632,21 +634,17 @@ export default function ProfilePage() {
                       <input
                         className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
                         value={profile.phone}
-                        readOnly={!!profile.phone}
-                        placeholder={profile.phone ? undefined : "Add phone number"}
+                        readOnly={hasServerPhone}
+                        placeholder={hasServerPhone ? undefined : "Add phone number"}
                         onChange={(e) =>
                           setProfile((prev) => ({ ...prev, phone: e.target.value }))
                         }
                       />
-                      {!profile.phone && (
+                      {!hasServerPhone && (
                         <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
                       )}
                     </div>
-                    {!profile.phone && (
-                      <p className="text-xs text-blue-500 font-medium ml-1">
-                        Add your phone number and tap Save Profile
-                      </p>
-                    )}
+
                   </div>
                 </div>
               </div>
@@ -835,16 +833,7 @@ export default function ProfilePage() {
         }
       >
         <div className="space-y-5">
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div
-              className="h-16 w-16 rounded-full border-2 border-white bg-cover bg-center shadow-sm"
-              style={{ backgroundImage: `url('${draft.photoUrl}')` }}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-slate-900">Preview</p>
-              <p className="truncate text-xs text-slate-500">{draft.photoUrl}</p>
-            </div>
-          </div>
+
 
 
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
