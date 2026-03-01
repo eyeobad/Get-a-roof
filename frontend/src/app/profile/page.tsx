@@ -268,12 +268,12 @@ export default function ProfilePage() {
   const clearAuth = useAppStore((state) => state.clearAuth);
   const uploadProfilePhoto = useAppStore((state) => state.uploadProfilePhoto);
   const deleteAccount = useAppStore((state) => state.deleteAccount);
-  
+
   const [confirmInput, setConfirmInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile }));
 
   // ---- MODAL + DRAFT STATE ----
@@ -404,6 +404,11 @@ export default function ProfilePage() {
     });
 
     try {
+      // If user added a phone number (e.g. Google signup had none), persist it
+      const storedPhone = profile.phone.trim();
+      if (storedPhone) {
+        await updateUser({ phoneNumber: storedPhone });
+      }
       await updatePreferences({ tenant: tenantPayload });
     } catch (err) {
       setSaveError(err);
@@ -523,7 +528,7 @@ export default function ProfilePage() {
                   <p className="text-sm text-slate-500">{profile.phone}</p>
 
                   <p className="mt-4 text-xs font-medium text-slate-500">
-                    Name, email and phone are read-only here.
+                    Name and email are read-only. Phone can be added if missing.
                   </p>
                 </div>
               </div>
@@ -577,20 +582,25 @@ export default function ProfilePage() {
               </button>
             </section>
 
-            {/* Contact section */}
             <section className="mt-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold text-primary">Contact Details</h3>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                  Read-only
-                </span>
+                {profile.phone ? (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                    Read-only
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+                    Phone missing
+                  </span>
+                )}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="space-y-4">
+                  {/* Full Name — always read-only */}
                   {[
                     { label: "Full Name", icon: "person", value: profile.fullName },
                     { label: "Email", icon: "mail", value: profile.email },
-                    { label: "Phone Number", icon: "phone", value: profile.phone },
                   ].map((field) => (
                     <div key={field.label} className="space-y-2">
                       <label className="text-sm font-semibold text-slate-500">{field.label}</label>
@@ -606,6 +616,38 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Phone — editable when missing */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-500">Phone Number</label>
+                    <div
+                      className={[
+                        "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
+                        profile.phone
+                          ? "border-slate-200 bg-slate-50"
+                          : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
+                      ].join(" ")}
+                    >
+                      <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
+                      <input
+                        className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                        value={profile.phone}
+                        readOnly={!!profile.phone}
+                        placeholder={profile.phone ? undefined : "Add phone number"}
+                        onChange={(e) =>
+                          setProfile((prev) => ({ ...prev, phone: e.target.value }))
+                        }
+                      />
+                      {!profile.phone && (
+                        <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
+                      )}
+                    </div>
+                    {!profile.phone && (
+                      <p className="text-xs text-blue-500 font-medium ml-1">
+                        Add your phone number and tap Save Profile
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -639,11 +681,10 @@ export default function ProfilePage() {
                         return (
                           <span
                             key={opt.label}
-                            className={`rounded-full px-4 py-2 text-base font-semibold border transition-colors ${
-                              active
-                                ? "border-2 border-primary bg-blue-50 text-primary"
-                                : "border-slate-200 bg-white text-slate-600"
-                            }`}
+                            className={`rounded-full px-4 py-2 text-base font-semibold border transition-colors ${active
+                              ? "border-2 border-primary bg-blue-50 text-primary"
+                              : "border-slate-200 bg-white text-slate-600"
+                              }`}
                           >
                             {opt.label}
                           </span>
@@ -661,9 +702,9 @@ export default function ProfilePage() {
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
-                      <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                        ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
-                      </span>
+                  <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                    ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
+                  </span>
                 </div>
 
                 <div className="mt-4">
@@ -690,7 +731,7 @@ export default function ProfilePage() {
             {/* Apartment Preference toggles - UPDATED WITH TOGGLE LOGIC */}
             <section className="mt-8 space-y-3">
               <h3 className="text-2xl font-bold text-primary">Apartment Preference</h3>
-              
+
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 {apartmentChecks.map((check) => (
                   <ToggleRow
@@ -805,20 +846,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-900">Image URL</label>
-            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
-              <span className="material-symbols-outlined text-slate-400">link</span>
-              <input
-                value={draft.photoUrl}
-                onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, photoUrl: event.target.value }))
-                }
-                className="w-full bg-transparent text-sm outline-none"
-                placeholder="Paste image URL"
-              />
-            </div>
-          </div>
 
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
             <button
@@ -895,11 +922,10 @@ export default function ProfilePage() {
                           preferences: { ...d.preferences, [group.key]: opt.label },
                         }))
                       }
-                      className={`rounded-full px-4 py-2 text-sm font-bold border transition-colors ${
-                        active
-                          ? "border-primary bg-blue-50 text-primary"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
+                      className={`rounded-full px-4 py-2 text-sm font-bold border transition-colors ${active
+                        ? "border-primary bg-blue-50 text-primary"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       {opt.label}
                     </button>
