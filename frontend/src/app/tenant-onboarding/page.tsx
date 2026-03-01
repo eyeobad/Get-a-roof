@@ -4,8 +4,27 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 
+const options = [
+  {
+    value: "NonOwnerOccupied",
+    label: "Non-owner occupied",
+    icon: "apartment",
+    accent: "text-primary",
+  },
+  { value: "SharedApartment", label: "Shared apartment", icon: "groups", accent: "text-primary" },
+  { value: "Shortlet", label: "Shortlet", icon: "luggage", accent: "text-orange-600" },
+  { value: "SelfCompound", label: "Self compound", icon: "fence", accent: "text-green-600" },
+  {
+    value: "SharedCompound",
+    label: "Shared compound",
+    icon: "holiday_village",
+    accent: "text-purple-600",
+    wide: true,
+  },
+];
+
 function TenantOnboardingContent() {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(1);
+  const [selectedValues, setSelectedValues] = useState<string[]>(["SharedApartment"]);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const authToken = useAppStore((state) => state.authToken);
@@ -13,19 +32,6 @@ function TenantOnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams?.get("returnTo") ?? "";
-
-  const options = [
-    { label: "Non-owner occupied", icon: "apartment", accent: "text-primary" },
-    { label: "Shared apartment", icon: "groups", accent: "text-primary" },
-    { label: "Shortlet", icon: "luggage", accent: "text-orange-600" },
-    { label: "Self compound", icon: "fence", accent: "text-green-600" },
-    {
-      label: "Shared compound",
-      icon: "holiday_village",
-      accent: "text-purple-600",
-      wide: true,
-    },
-  ];
 
   useEffect(() => {
     if (!authToken || !userId) return;
@@ -36,16 +42,14 @@ function TenantOnboardingContent() {
         const lookingFor = (
           user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
         )?.tenant?.lookingFor;
-        const selectedValue = lookingFor?.[0];
-        const valueToIndex: Record<string, number> = {
-          NonOwnerOccupied: 0,
-          SharedApartment: 1,
-          Shortlet: 2,
-          SelfCompound: 3,
-          SharedCompound: 4,
-        };
-        if (selectedValue && valueToIndex[selectedValue] !== undefined) {
-          setSelectedIndex(valueToIndex[selectedValue]);
+        if (Array.isArray(lookingFor)) {
+          const allowedValues = new Set(options.map((option) => option.value));
+          const nextSelections = lookingFor.filter((item) => allowedValues.has(item));
+          if (nextSelections.length) {
+            setSelectedValues(nextSelections);
+          } else {
+            setSelectedValues([]);
+          }
         }
       })
       .catch(() => {
@@ -57,24 +61,14 @@ function TenantOnboardingContent() {
     };
   }, [authToken, userId, fetchUserProfile]);
 
+  const toggleSelection = (value: string) => {
+    setSelectedValues((prev) =>
+      prev.includes(value) ? prev.filter((entry) => entry !== value) : [...prev, value]
+    );
+  };
+
   const handleNext = async () => {
-    if (selectedIndex === null) {
-      if (returnTo === "review") {
-        router.push("/tenant-onboarding/review");
-        return;
-      }
-      router.push("/tenant-onboarding/more-about-you");
-      return;
-    }
-    const label = options[selectedIndex]?.label;
-    const map: Record<string, string> = {
-      "Non-owner occupied": "NonOwnerOccupied",
-      "Shared apartment": "SharedApartment",
-      Shortlet: "Shortlet",
-      "Self compound": "SelfCompound",
-      "Shared compound": "SharedCompound",
-    };
-    const lookingFor = label && map[label] ? [map[label]] : [];
+    const lookingFor = selectedValues;
     await updatePreferences({ tenant: { lookingFor } });
     if (returnTo === "review") {
       router.push("/tenant-onboarding/review");
@@ -117,6 +111,7 @@ function TenantOnboardingContent() {
         <div className="flex items-center gap-2 py-3">
           <button
             type="button"
+            onClick={() => router.back()}
             aria-label="Go back"
             className="p-2 rounded-full text-text-main-light transition-colors duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:text-text-main-dark dark:hover:bg-gray-800 dark:focus:ring-offset-background-dark"
           >
@@ -130,20 +125,20 @@ function TenantOnboardingContent() {
               What are you looking for?
             </h1>
             <p className="text-lg leading-relaxed text-text-sub-light dark:text-text-sub-dark">
-              Select the type of living arrangement that suits your needs best. You can adjust this
-              later.
+              Select one or more living arrangements that suit your needs best. You can adjust this
+              later in profile settings.
             </p>
           </div>
 
           <div role="group" className="grid grid-cols-2 gap-4 mb-8">
-            {options.map((option, index) => {
-              const isSelected = selectedIndex === index;
+            {options.map((option) => {
+              const isSelected = selectedValues.includes(option.value);
 
               return (
                 <button
                   key={option.label}
                   type="button"
-                  onClick={() => setSelectedIndex(index)}
+                  onClick={() => toggleSelection(option.value)}
                   className={`
                     relative group flex rounded-2xl border-2 transition-all duration-200 outline-none
                     ${option.wide ? "col-span-2 flex-row justify-start gap-4 px-6 py-6" : "flex-col gap-3 px-6 py-6 h-40"}

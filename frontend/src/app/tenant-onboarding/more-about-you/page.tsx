@@ -34,7 +34,6 @@ const sections: readonly SectionConfig[] = [
     icon: "wc",
     buttonLabels: ["Male", "Female", "Prefer not to say"],
     primaryIndex: 2,
-    fullWidth: true,
   },
   {
     key: "employment",
@@ -63,7 +62,6 @@ const sections: readonly SectionConfig[] = [
     icon: "pets",
     buttonLabels: ["I have pets", "I don't have pets"],
     primaryIndex: 1,
-    fullWidth: true,
   },
   {
     key: "smoking",
@@ -108,7 +106,6 @@ const sections: readonly SectionConfig[] = [
     icon: "family_restroom",
     buttonLabels: ["I have children", "I don't have children", "Prefer not to say"],
     primaryIndex: 1,
-    fullWidth: true,
   },
 ];
 
