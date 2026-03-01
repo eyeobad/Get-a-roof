@@ -3,9 +3,11 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
+import { getGoogleIdToken } from "@/lib/firebase";
 
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -20,9 +22,12 @@ export default function TenantSignupPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const registerTenant = useAppStore((state) => state.registerTenant);
+  const googleLogin = useAppStore((state) => state.googleLogin);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
+  const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
 
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -59,12 +64,34 @@ export default function TenantSignupPage() {
     try {
       clearAuth();
       setIsSubmitting(true);
+
+      let recaptchaToken = "";
+      if (siteKey) {
+        const w = window as typeof window & {
+          grecaptcha?: {
+            ready: (cb: () => void) => void;
+            execute: (key: string, opts: { action: string }) => Promise<string>;
+          };
+        };
+        if (w.grecaptcha) {
+          recaptchaToken = await new Promise<string>((resolve, reject) => {
+            w.grecaptcha?.ready(() => {
+              w.grecaptcha
+                ?.execute(siteKey, { action: "tenant_signup" })
+                .then(resolve)
+                .catch(() => reject(new Error("reCAPTCHA failed")));
+            });
+          }).catch(() => "");
+        }
+      }
+
       const result = await registerTenant({
         firstName: payload.firstName,
         lastName: payload.lastName,
         email: payload.email,
         phoneNumber: payload.phoneNumber,
         password: payload.password,
+        recaptchaToken,
       });
       const isPending =
         (result as { status?: string })?.status === "PENDING_VERIFICATION";
@@ -74,8 +101,8 @@ export default function TenantSignupPage() {
           (result as { id?: string; _id?: string })?._id);
       const verificationToken = isPending
         ? String(
-            (result as { verificationToken?: string }).verificationToken ?? ""
-          )
+          (result as { verificationToken?: string }).verificationToken ?? ""
+        )
         : "";
       if (!userId) {
         throw new Error("Unable to start verification. Please try again.");
@@ -121,8 +148,44 @@ export default function TenantSignupPage() {
     }
   };
 
+  const handleGoogleSignup = async () => {
+    if (isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      const firebaseIdToken = await getGoogleIdToken();
+      const result = await googleLogin(firebaseIdToken, "Tenant");
+      if (!result?.user) {
+        showToast({ title: "Google sign-up failed.", variant: "error" });
+        return;
+      }
+      await captureUserLocation().catch(() => {
+        // Location is optional – continue without it
+      });
+      const tenantPreferences = (
+        result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+      )?.tenant;
+      const needsTenantOnboarding =
+        !tenantPreferences ||
+        !tenantPreferences.lookingFor ||
+        tenantPreferences.lookingFor.length === 0;
+      router.push(needsTenantOnboarding ? "/tenant-onboarding" : "/explore");
+    } catch (err) {
+      if (!hasShownErrorToast(err)) {
+        showToast({ title: getApiErrorMessage(err), variant: "error" });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen bg-white text-[#1A1A1A] font-display antialiased">
+      {siteKey ? (
+        <Script
+          src={`https://www.google.com/recaptcha/api.js?render=${siteKey}`}
+          strategy="afterInteractive"
+        />
+      ) : null}
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-8">
         <div className="flex flex-col items-center text-center space-y-4">
           <div className=" rounded-full 10 flex items-center justify-center">
@@ -332,6 +395,7 @@ export default function TenantSignupPage() {
         </div>
         <button
           type="button"
+          onClick={handleGoogleSignup}
           className="flex h-14 w-full items-center justify-center gap-3 rounded-[2rem] border border-gray-300 bg-white text-lg font-semibold text-[#1A1A1A] shadow-sm transition hover:bg-gray-50 active:scale-[0.98]"
         >
           <svg
@@ -357,7 +421,7 @@ export default function TenantSignupPage() {
               fill="#EA4335"
             />
           </svg>
-          Sign in with Google
+          Sign up with Google
         </button>
         <p className="mt-8 text-center text-lg text-gray-600">
           Already a member?

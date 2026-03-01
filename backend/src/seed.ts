@@ -9,6 +9,13 @@ import { Message, MessageSchema } from "./chat/schemas/message.schema";
 import { MatchStatus, PropertyStatus, PropertyType, UserRole } from "./common/enums";
 
 const seedTag = "seed:get-a-roof";
+const CLEAR_CONFIRM_TOKEN = "YES_DELETE_SEED";
+
+const hasArg = (name: string) => process.argv.includes(name);
+const readArgValue = (prefix: string) => {
+  const match = process.argv.find((arg) => arg.startsWith(`${prefix}=`));
+  return match ? match.slice(prefix.length + 1) : undefined;
+};
 
 const loadEnv = () => {
   const envPath = resolve(process.cwd(), ".env");
@@ -59,7 +66,22 @@ async function seed() {
   const tenantTwoEmail = "tenant2@getaroof.dev";
   const seedEmails = [landlordEmail, tenantEmail, tenantTwoEmail];
 
-  if (process.env.CLEAR_SEED === "true") {
+  // Safety hardening:
+  // destructive clear now requires explicit CLI flags, env vars are ignored.
+  // Example:
+  // npx ts-node src/seed.ts --clear-seed --confirm-clear=YES_DELETE_SEED
+  const clearRequested = hasArg("--clear-seed");
+  const clearConfirm = readArgValue("--confirm-clear");
+  const shouldClearSeed = clearRequested && clearConfirm === CLEAR_CONFIRM_TOKEN;
+
+  if (clearRequested && !shouldClearSeed) {
+    console.log(
+      `Clear requested but confirmation missing/invalid. Use --confirm-clear=${CLEAR_CONFIRM_TOKEN}`
+    );
+    return;
+  }
+
+  if (shouldClearSeed) {
     const seedUsers = await UserModel.find({ email: { $in: seedEmails } })
       .select("_id")
       .exec();

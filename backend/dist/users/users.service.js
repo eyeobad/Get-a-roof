@@ -91,6 +91,8 @@ let UsersService = class UsersService {
     }
     async assertRecaptchaToken(token) {
         const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+        const minScore = Number(process.env.RECAPTCHA_MIN_SCORE ?? "0.5");
+        const expectedAction = process.env.RECAPTCHA_EXPECTED_ACTION?.trim() || "landlord_signup";
         if (!secret) {
             throw new common_1.ServiceUnavailableException("reCAPTCHA is not configured");
         }
@@ -113,6 +115,14 @@ let UsersService = class UsersService {
         if (!result.success) {
             throw new common_1.BadRequestException("Invalid reCAPTCHA verification");
         }
+        if (typeof result.action === "string" &&
+            expectedAction &&
+            result.action !== expectedAction) {
+            throw new common_1.BadRequestException("Invalid reCAPTCHA action");
+        }
+        if (typeof result.score === "number" && result.score < minScore) {
+            throw new common_1.BadRequestException("reCAPTCHA score too low");
+        }
     }
     async createOAuthUser(data) {
         const email = data.email.toLowerCase();
@@ -130,8 +140,8 @@ let UsersService = class UsersService {
     async findByEmail(email) {
         return this.userModel.findOne({ email: email.toLowerCase() }).exec();
     }
-    async findByResetToken(token) {
-        return this.userModel.findOne({ passwordResetToken: token }).exec();
+    async findByResetTokenHash(tokenHash) {
+        return this.userModel.findOne({ passwordResetToken: tokenHash }).exec();
     }
     async findById(id) {
         const user = await this.userModel.findById(id).exec();

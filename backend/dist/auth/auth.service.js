@@ -17,6 +17,7 @@ const bcrypt = require("bcrypt");
 const crypto_1 = require("crypto");
 const users_service_1 = require("../users/users.service");
 const mail_service_1 = require("../mail/mail.service");
+const firebase_admin_1 = require("./firebase-admin");
 let AuthService = AuthService_1 = class AuthService {
     constructor(usersService, jwtService, mailService) {
         this.usersService = usersService;
@@ -67,7 +68,8 @@ let AuthService = AuthService_1 = class AuthService {
         return this.issueToken(user);
     }
     async googleLogin(dto) {
-        const email = dto.email.toLowerCase();
+        const payload = await this.resolveFirebaseIdentity(dto.firebaseIdToken);
+        const email = payload.email.toLowerCase();
         const existing = await this.usersService.findByEmail(email);
         if (existing) {
             if (existing.isSuspended) {
@@ -75,10 +77,10 @@ let AuthService = AuthService_1 = class AuthService {
                     ? `Account suspended: ${existing.suspensionReason}`
                     : "Account suspended. Contact support.");
             }
-            if (dto.googleId) {
+            if (payload.googleId) {
                 existing.loginCredentials = {
                     ...(existing.loginCredentials || {}),
-                    googleId: dto.googleId,
+                    googleId: payload.googleId,
                 };
             }
             existing.emailVerified = true;
@@ -87,14 +89,41 @@ let AuthService = AuthService_1 = class AuthService {
         }
         const created = await this.usersService.createOAuthUser({
             email,
-            firstName: dto.firstName,
-            lastName: dto.lastName,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
             role: dto.role,
-            googleId: dto.googleId,
+            googleId: payload.googleId,
         });
         created.emailVerified = true;
         await created.save();
         return this.issueToken(created);
+    }
+    async resolveFirebaseIdentity(firebaseIdToken) {
+        try {
+            const decoded = await (0, firebase_admin_1.getFirebaseAuth)().verifyIdToken(firebaseIdToken);
+            const email = decoded.email?.toLowerCase();
+            if (!email || !decoded.email_verified) {
+                throw new common_1.UnauthorizedException("Google account has no verified email");
+            }
+            const fullName = decoded.name?.trim() || "";
+            const nameParts = fullName ? fullName.split(/\s+/) : [];
+            const firstName = nameParts[0] || undefined;
+            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+            return {
+                email,
+                firstName,
+                lastName,
+                googleId: decoded.uid,
+            };
+        }
+        catch (error) {
+            const reason = error?.message ?? "unknown error";
+            this.logger.warn(`Firebase token verification failed: ${reason}`);
+            const message = process.env.NODE_ENV === "production"
+                ? "Invalid Google authentication token"
+                : `Invalid Google authentication token: ${reason}`;
+            throw new common_1.UnauthorizedException(message);
+        }
     }
     async sendEmailOtp(dto) {
         const user = await this.usersService.findById(dto.userId);
@@ -157,7 +186,7 @@ let AuthService = AuthService_1 = class AuthService {
             return { sent: true };
         }
         const token = (0, crypto_1.randomBytes)(16).toString("hex");
-        user.passwordResetToken = token;
+        user.passwordResetToken = this.hashPasswordResetToken(token);
         user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
         await user.save();
         const baseUrl = process.env.FRONTEND_URL?.trim() ||
@@ -174,7 +203,7 @@ let AuthService = AuthService_1 = class AuthService {
         return { sent: true, expiresAt: user.passwordResetExpiresAt };
     }
     async resetPassword(dto) {
-        const user = await this.usersService.findByResetToken(dto.token);
+        const user = await this.usersService.findByResetTokenHash(this.hashPasswordResetToken(dto.token));
         if (!user) {
             throw new common_1.BadRequestException("Invalid token");
         }
@@ -211,6 +240,11 @@ let AuthService = AuthService_1 = class AuthService {
     hashOtp(otp, userId, channel) {
         return (0, crypto_1.createHmac)("sha256", this.otpSecret)
             .update(`${channel}:${userId}:${otp}`)
+            .digest("hex");
+    }
+    hashPasswordResetToken(token) {
+        return (0, crypto_1.createHmac)("sha256", this.otpSecret)
+            .update(`reset:${token}`)
             .digest("hex");
     }
     secureCompare(a, b) {

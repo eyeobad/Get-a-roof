@@ -295,12 +295,17 @@ type AppState = {
   setAuth: (token: string, userId: string) => void;
   clearAuth: () => void;
   login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
+  googleLogin: (
+    firebaseIdToken: string,
+    role?: "Tenant" | "Landlord"
+  ) => Promise<ApiAuthResponse | null>;
   registerTenant: (payload: {
     firstName?: string;
     lastName?: string;
     email: string;
     phoneNumber?: string;
     password: string;
+    recaptchaToken?: string;
   }) => Promise<ApiUser | VerificationPendingResponse>;
   registerLandlord: (payload: {
     firstName?: string;
@@ -814,9 +819,19 @@ export const useAppStore = create<AppState>()(
       initSession: async () => {
         const state = get();
         if (state.authToken && state.userId) return;
-        type SessionPayload = { token?: string };
-        const session = await apiFetch<SessionPayload>(`/api/auth/session`);
-        const token = session?.token;
+        type SessionPayload = { token?: string | null };
+        let token: string | null = null;
+        try {
+          const response = await fetch("/api/auth/session", {
+            method: "GET",
+            cache: "no-store",
+          });
+          if (!response.ok) return;
+          const session = (await response.json()) as SessionPayload;
+          token = session?.token ?? null;
+        } catch {
+          return;
+        }
         if (!token) return;
         const userId = decodeJwtSub(token);
         if (!userId) return;
@@ -853,6 +868,43 @@ export const useAppStore = create<AppState>()(
           decodeJwtSub(response.accessToken);
         if (!userId) {
           throw new Error("Login succeeded but no user id was returned.");
+        }
+
+        const shouldReset = state.userId !== userId;
+        if (shouldReset) {
+          set(
+            buildSessionReset({
+              authToken: response.accessToken,
+              userId,
+              user: response.user,
+            })
+          );
+        } else {
+          set({ authToken: response.accessToken, userId, user: response.user });
+        }
+        await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: response.accessToken }),
+        });
+        return response;
+      },
+      googleLogin: async (firebaseIdToken, role) => {
+        const response = await apiFetch<ApiAuthResponse>(`/api/auth/google`, {
+          method: "POST",
+          body: JSON.stringify({ firebaseIdToken, role }),
+        });
+
+        if (!response?.accessToken || !response?.user) {
+          return null;
+        }
+
+        const state = get();
+        const userId =
+          toIdString(response.user.id ?? response.user._id) ||
+          decodeJwtSub(response.accessToken);
+        if (!userId) {
+          throw new Error("Google login succeeded but no user id was returned.");
         }
 
         const shouldReset = state.userId !== userId;
@@ -1275,8 +1327,8 @@ export const useAppStore = create<AppState>()(
           matched && matched.length
             ? matched
             : await apiFetch<ApiProperty[]>(`/api/properties/explore?${query}`, {
-                token: state.authToken,
-              });
+              token: state.authToken,
+            });
 
         const listings = (fallback ?? []).map(mapPropertyToListing);
         set((prev) => {
@@ -1421,12 +1473,12 @@ export const useAppStore = create<AppState>()(
           const updated = prev.conversations.map((conversation) =>
             conversation.id === matchId
               ? {
-                  ...conversation,
-                  preview: formatMessagePreview(nextMessage.content),
-                  time: nextTime,
-                  unread: false,
-                  unreadCount: 0,
-                }
+                ...conversation,
+                preview: formatMessagePreview(nextMessage.content),
+                time: nextTime,
+                unread: false,
+                unreadCount: 0,
+              }
               : conversation
           );
           const active = updated.find((conversation) => conversation.id === matchId);
@@ -1619,15 +1671,15 @@ export const useAppStore = create<AppState>()(
 
         const property = draft.id
           ? await apiFetch<ApiProperty>(`/api/properties/${draft.id}`, {
-              method: "PATCH",
-              body: JSON.stringify(requestPayload),
-              token: state.authToken,
-            })
+            method: "PATCH",
+            body: JSON.stringify(requestPayload),
+            token: state.authToken,
+          })
           : await apiFetch<ApiProperty>(`/api/properties`, {
-              method: "POST",
-              body: JSON.stringify(requestPayload),
-              token: state.authToken,
-            });
+            method: "POST",
+            body: JSON.stringify(requestPayload),
+            token: state.authToken,
+          });
 
         if (property) {
           const nextDraft = mapPropertyToLandlordDraft(property);
@@ -1693,8 +1745,7 @@ export const useAppStore = create<AppState>()(
         });
         try {
           const data = await apiFetch<ApiProperty[]>(
-            `/api/landlord/${state.userId}/properties-with-matches${
-              query ? `?${query}` : ""
+            `/api/landlord/${state.userId}/properties-with-matches${query ? `?${query}` : ""
             }`,
             { token: state.authToken }
           );
@@ -1725,15 +1776,15 @@ export const useAppStore = create<AppState>()(
             isNewForLandlord: match?.isNewForLandlord,
             tenant: match?.tenant
               ? {
-                  id: match.tenant?._id ?? match.tenant?.id,
-                  firstName: match.tenant?.firstName,
-                  lastName: match.tenant?.lastName,
-                  email: match.tenant?.email,
-                  phoneNumber: match.tenant?.phoneNumber,
-                  photoUrl: match.tenant?.photoUrl,
-                  isVerified: match.tenant?.isVerified,
-                  preferences: match.tenant?.preferences,
-                }
+                id: match.tenant?._id ?? match.tenant?.id,
+                firstName: match.tenant?.firstName,
+                lastName: match.tenant?.lastName,
+                email: match.tenant?.email,
+                phoneNumber: match.tenant?.phoneNumber,
+                photoUrl: match.tenant?.photoUrl,
+                isVerified: match.tenant?.isVerified,
+                preferences: match.tenant?.preferences,
+              }
               : undefined,
           }));
           set((prev) => ({

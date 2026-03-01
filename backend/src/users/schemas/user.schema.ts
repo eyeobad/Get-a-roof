@@ -197,6 +197,9 @@ export class User {
 
   @Prop({ type: [Types.ObjectId], ref: "Property", default: [] })
   savedProperties?: Types.ObjectId[];
+
+  @Prop({ default: 0 })
+  tokenVersion?: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

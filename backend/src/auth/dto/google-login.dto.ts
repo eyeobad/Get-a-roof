@@ -1,9 +1,19 @@
-import { IsEmail, IsEnum, IsOptional, IsString } from "class-validator";
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+} from "class-validator";
 import { UserRole } from "../../common/enums";
 
 export class GoogleLoginDto {
-  @IsEmail()
-  email: string;
+  @IsString()
+  @IsNotEmpty()
+  firebaseIdToken: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
 
   @IsOptional()
   @IsString()

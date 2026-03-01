@@ -21,25 +21,6 @@ export default function CreateAccountPage() {
       <div className="fixed inset-0 bg-gradient-to-b from-[#f8fbff] via-white to-white opacity-80 pointer-events-none" />
       <div className="relative z-10 flex min-h-screen flex-col px-5 py-6">
         <div className="flex w-full max-w-lg items-center gap-3">
-          <Link
-            href="/"
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-[#dbe4f5] bg-white shadow-sm transition hover:bg-[#f7faff]"
-            aria-label="Back"
-          >
-            <svg
-              className="h-6 w-6 text-[#1A1A1A]"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <path
-                d="M15 18l-6-6 6-6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </Link>
         </div>
         <main className="mt-8 flex flex-1 flex-col items-center justify-start px-2 text-center">
           <div className="w-full max-w-lg">

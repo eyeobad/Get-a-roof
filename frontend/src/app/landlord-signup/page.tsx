@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
+import { getGoogleIdToken } from "@/lib/firebase";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -23,29 +25,39 @@ export default function SignUpPage() {
     verifyPassword: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState("");
   const registerLandlord = useAppStore((state) => state.registerLandlord);
+  const googleLogin = useAppStore((state) => state.googleLogin);
+  const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const w = window as typeof window & {
-      onRecaptchaSolved?: (token: string) => void;
-      onRecaptchaExpired?: () => void;
-    };
-    w.onRecaptchaSolved = (token: string) => setRecaptchaToken(token);
-    w.onRecaptchaExpired = () => setRecaptchaToken("");
-    return () => {
-      delete w.onRecaptchaSolved;
-      delete w.onRecaptchaExpired;
-    };
-  }, []);
-
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleGoogleSignup = async () => {
+    if (isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      const firebaseIdToken = await getGoogleIdToken();
+      const result = await googleLogin(firebaseIdToken, "Landlord");
+      if (!result?.user) {
+        showToast({ title: "Google sign-up failed.", variant: "error" });
+        return;
+      }
+      await captureUserLocation().catch(() => {
+        // Location is optional – continue without it
+      });
+      router.push("/dashboard/properties");
+    } catch (err) {
+      if (!hasShownErrorToast(err)) {
+        showToast({ title: getApiErrorMessage(err), variant: "error" });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -76,8 +88,34 @@ export default function SignUpPage() {
       showToast({ title: "Passwords do not match.", variant: "error" });
       return;
     }
+    if (!siteKey) {
+      showToast({ title: "Missing reCAPTCHA site key configuration.", variant: "error" });
+      return;
+    }
+
+    const w = window as typeof window & {
+      grecaptcha?: {
+        ready: (callback: () => void) => void;
+        execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      };
+    };
+
+    if (!w.grecaptcha) {
+      showToast({ title: "reCAPTCHA is still loading. Please try again.", variant: "error" });
+      return;
+    }
+
+    const recaptchaToken = await new Promise<string>((resolve, reject) => {
+      w.grecaptcha?.ready(() => {
+        w.grecaptcha
+          ?.execute(siteKey, { action: "landlord_signup" })
+          .then(resolve)
+          .catch(() => reject(new Error("Unable to verify reCAPTCHA")));
+      });
+    }).catch(() => "");
+
     if (!recaptchaToken) {
-      showToast({ title: "Please complete reCAPTCHA verification.", variant: "error" });
+      showToast({ title: "reCAPTCHA verification failed. Please try again.", variant: "error" });
       return;
     }
 
@@ -100,8 +138,8 @@ export default function SignUpPage() {
           (result as { id?: string; _id?: string })?._id);
       const verificationToken = isPending
         ? String(
-            (result as { verificationToken?: string }).verificationToken ?? ""
-          )
+          (result as { verificationToken?: string }).verificationToken ?? ""
+        )
         : "";
       if (!userId) {
         throw new Error("Unable to start verification. Please try again.");
@@ -153,13 +191,22 @@ export default function SignUpPage() {
     <div className="min-h-screen bg-white flex justify-center">
       {siteKey ? (
         <Script
-          src="https://www.google.com/recaptcha/api.js"
+          src={`https://www.google.com/recaptcha/api.js?render=${siteKey}`}
           strategy="afterInteractive"
         />
       ) : null}
       <div className="w-full max-w-md px-6 py-8 flex flex-col min-h-screen font-display">
         {/* Header */}
         <header className="flex flex-col items-center mt-4 mb-8">
+          <div className="rounded-full flex items-center justify-center">
+            <Image
+              src="/logo2.svg"
+              alt="Get a Roof Logo"
+              width={204}
+              height={204}
+              className="object-contain"
+            />
+          </div>
           <h1 className="text-[#0a44b8] text-[32px] font-bold tracking-tight mb-2">
             Get A Roof
           </h1>
@@ -279,18 +326,9 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          {siteKey ? (
-            <div className="overflow-hidden rounded-xl border border-[#d7cee8] bg-white p-2">
-              <div
-                className="g-recaptcha"
-                data-sitekey={siteKey}
-                data-callback="onRecaptchaSolved"
-                data-expired-callback="onRecaptchaExpired"
-              />
-            </div>
-          ) : (
-            <p className="text-sm text-red-600">Missing reCAPTCHA site key configuration.</p>
-          )}
+          <p className="text-sm text-gray-500">
+            Protected by reCAPTCHA v3.
+          </p>
 
           {/* Submit */}
           <button
@@ -312,6 +350,8 @@ export default function SignUpPage() {
         {/* Google (INLINE SVG kept) */}
         <button
           type="button"
+          onClick={handleGoogleSignup}
+          disabled={isSubmitting}
           className="h-14 rounded-full border border-gray-300 bg-white flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 active:scale-[0.98]"
         >
           <svg
@@ -339,7 +379,7 @@ export default function SignUpPage() {
           </svg>
 
           <span className="text-[#1A1A1A] text-lg font-medium">
-            Sign in with Google
+            Sign up with Google
           </span>
         </button>
 

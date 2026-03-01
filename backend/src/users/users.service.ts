@@ -43,7 +43,7 @@ export class UsersService {
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly appwriteStorage: AppwriteStorageService
-  ) {}
+  ) { }
 
   async createUser(dto: CreateUserDto) {
     const email = dto.email.toLowerCase();
@@ -98,6 +98,13 @@ export class UsersService {
 
   async assertRecaptchaToken(token?: string) {
     const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+    const minScore = Number(process.env.RECAPTCHA_MIN_SCORE ?? "0.5");
+    const expectedActions = new Set(
+      (process.env.RECAPTCHA_EXPECTED_ACTION?.trim() || "landlord_signup,tenant_signup")
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean)
+    );
     if (!secret) {
       throw new ServiceUnavailableException("reCAPTCHA is not configured");
     }
@@ -125,11 +132,23 @@ export class UsersService {
 
     const result = (await response.json()) as {
       success?: boolean;
+      score?: number;
+      action?: string;
       "error-codes"?: string[];
     };
 
     if (!result.success) {
       throw new BadRequestException("Invalid reCAPTCHA verification");
+    }
+    if (
+      typeof result.action === "string" &&
+      expectedActions.size > 0 &&
+      !expectedActions.has(result.action)
+    ) {
+      throw new BadRequestException("Invalid reCAPTCHA action");
+    }
+    if (typeof result.score === "number" && result.score < minScore) {
+      throw new BadRequestException("reCAPTCHA score too low");
     }
   }
 
@@ -158,8 +177,8 @@ export class UsersService {
     return this.userModel.findOne({ email: email.toLowerCase() }).exec();
   }
 
-  async findByResetToken(token: string) {
-    return this.userModel.findOne({ passwordResetToken: token }).exec();
+  async findByResetTokenHash(tokenHash: string) {
+    return this.userModel.findOne({ passwordResetToken: tokenHash }).exec();
   }
 
   async findById(id: string) {

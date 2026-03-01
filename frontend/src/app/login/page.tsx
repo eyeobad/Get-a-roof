@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
+import { getGoogleIdToken } from "@/lib/firebase";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const login = useAppStore((state) => state.login);
+  const googleLogin = useAppStore((state) => state.googleLogin);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
@@ -50,8 +52,8 @@ export default function LoginPage() {
       const roles = Array.isArray(rawRole)
         ? rawRole
         : rawRole
-        ? [rawRole]
-        : [];
+          ? [rawRole]
+          : [];
       const isLandlord = roles.some(
         (value) => value?.toString().toLowerCase() === "landlord"
       );
@@ -67,15 +69,9 @@ export default function LoginPage() {
           !tenantPreferences.lookingFor ||
           tenantPreferences.lookingFor.length === 0);
       if (!isAdmin && !isLandlord) {
-        const location = await captureUserLocation();
-        if (!location) {
-          clearAuth();
-          showToast({
-            title: "Location access is required after sign in. Please enable location and try again.",
-            variant: "error",
-          });
-          return;
-        }
+        await captureUserLocation().catch(() => {
+          // Location is optional – continue without it
+        });
       }
       if (isAdmin) {
         router.push("/admin");
@@ -96,8 +92,58 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      const firebaseIdToken = await getGoogleIdToken();
+      const result = await googleLogin(firebaseIdToken);
+      if (!result?.user) {
+        showToast({ title: "Google sign-in failed.", variant: "error" });
+        return;
+      }
+      const rawRole = result.user.role;
+      const roles = Array.isArray(rawRole) ? rawRole : rawRole ? [rawRole] : [];
+      const isLandlord = roles.some(
+        (value) => value?.toString().toLowerCase() === "landlord"
+      );
+      const isAdmin = roles.some(
+        (value) => value?.toString().toLowerCase() === "admin"
+      );
+      const tenantPreferences = (
+        result.user.preferences as { tenant?: { lookingFor?: string[] } } | undefined
+      )?.tenant;
+      const needsTenantOnboarding =
+        !isLandlord &&
+        (!tenantPreferences ||
+          !tenantPreferences.lookingFor ||
+          tenantPreferences.lookingFor.length === 0);
+
+      if (!isAdmin && !isLandlord) {
+        await captureUserLocation().catch(() => {
+          // Location is optional – continue without it
+        });
+      }
+      if (isAdmin) {
+        router.push("/admin");
+      } else if (isLandlord) {
+        router.push("/dashboard/properties");
+      } else if (needsTenantOnboarding) {
+        router.push("/tenant-onboarding");
+      } else {
+        router.push("/explore");
+      }
+    } catch (err) {
+      if (!hasShownErrorToast(err)) {
+        showToast({ title: getApiErrorMessage(err), variant: "error" });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="relative min-h-screen bg-[#f5f6f8] text-[#1A1A1A] font-display antialiased">
+    <div className="relative min-h-screen bg-white text-[#1A1A1A] font-display antialiased">
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-8">
         <div className="flex flex-col items-center text-center space-y-4 mb-8">
           <div className=" rounded-full  flex items-center justify-center">
@@ -222,7 +268,11 @@ export default function LoginPage() {
           <span className="h-px flex-1 bg-gray-300" />
         </div>
 
-        <button className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-[1.75rem] border border-gray-300 bg-white text-base font-semibold text-[#1A1A1A] transition hover:bg-gray-50">
+        <button
+          type="button"
+          onClick={handleGoogleSignIn}
+          className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-[1.75rem] border border-gray-300 bg-white text-base font-semibold text-[#1A1A1A] transition hover:bg-gray-50"
+        >
           <svg
             className="h-6 w-6"
             viewBox="0 0 24 24"

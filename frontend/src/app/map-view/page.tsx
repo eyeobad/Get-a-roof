@@ -171,6 +171,15 @@ function EmptyState({
   );
 }
 
+function LoadingState({ label = "Loading properties..." }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center gap-3 p-6">
+      <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+      <p className="text-sm font-semibold text-slate-700">{label}</p>
+    </div>
+  );
+}
+
 function PropertyCard({
   item,
   onToggleSave,
@@ -607,9 +616,6 @@ function MapViewContent() {
   const requestedPropertyId = searchParams?.get("propertyId") ?? "";
   const mapMatches = useAppStore((state) => state.mapMatches);
   const listingsById = useAppStore((state) => state.listingsById);
-  const requestedListing = useAppStore((state) =>
-    requestedPropertyId ? state.listingsById[requestedPropertyId] : undefined
-  );
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
   const loadExploreListings = useAppStore((state) => state.loadExploreListings);
   const fetchPropertyById = useAppStore((state) => state.fetchPropertyById);
@@ -631,6 +637,8 @@ function MapViewContent() {
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   useToastError(mapError);
+  const [isBootstrappingPropertyView, setIsBootstrappingPropertyView] =
+    useState(false);
 
   useEffect(() => {
     if (authToken) {
@@ -640,15 +648,33 @@ function MapViewContent() {
   }, [authToken, loadMapMatches, captureUserLocation]);
 
   useEffect(() => {
-    if (!authToken || !requestedPropertyId) return;
-    void fetchPropertyById(requestedPropertyId, { force: true });
-  }, [authToken, requestedPropertyId, fetchPropertyById]);
-
-  useEffect(() => {
-    if (!authToken || !requestedPropertyId) return;
-    // Pull a broader pool so "similar properties" is not limited to current matched subset.
-    void loadExploreListings({ distance: 200 });
-  }, [authToken, requestedPropertyId, loadExploreListings]);
+    if (!authToken || !requestedPropertyId) {
+      setIsBootstrappingPropertyView(false);
+      return;
+    }
+    let cancelled = false;
+    setIsBootstrappingPropertyView(true);
+    (async () => {
+      await Promise.allSettled([
+        fetchPropertyById(requestedPropertyId, { force: true }),
+        loadMapMatches(),
+        // Pull a broader pool so "similar properties" is not limited to current matched subset.
+        loadExploreListings({ distance: 200 }),
+      ]);
+      if (!cancelled) {
+        setIsBootstrappingPropertyView(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authToken,
+    requestedPropertyId,
+    fetchPropertyById,
+    loadMapMatches,
+    loadExploreListings,
+  ]);
 
   useEffect(() => {
     if (!authToken || !requestedPropertyId) return;
@@ -697,7 +723,9 @@ function MapViewContent() {
     const sorted = randomizedSimilaritySort(others, requestedAnchor).slice(0, 24);
     return [requestedAnchor, ...sorted];
   }, [mapMatches, listingsById, requestedPropertyId]);
-  const showEmptyState = sourceListings.length === 0;
+  const showLoadingState =
+    isBootstrappingPropertyView && sourceListings.length === 0;
+  const showEmptyState = !showLoadingState && sourceListings.length === 0;
 
   const mapSourceListings = useMemo(() => {
     if (!requestedPropertyId) return sourceListings;
@@ -1051,6 +1079,14 @@ function MapViewContent() {
               </div>
             )}
 
+            {showLoadingState && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+                <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                  <LoadingState label="Loading similar properties..." />
+                </div>
+              </div>
+            )}
+
             {showEmptyState && (
               <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
                 <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
@@ -1147,7 +1183,9 @@ function MapViewContent() {
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto bg-background-light px-4 py-5 space-y-5">
-            {showEmptyState ? (
+            {showLoadingState ? (
+              <LoadingState label="Loading similar properties..." />
+            ) : showEmptyState ? (
               <EmptyState
                 title="No matches yet"
                 message="Like a few listings in Explore to see them here."
@@ -1190,7 +1228,9 @@ function MapViewContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
-            {showEmptyState ? (
+            {showLoadingState ? (
+              <LoadingState label="Loading similar properties..." />
+            ) : showEmptyState ? (
               <EmptyState
                 title="No matches yet"
                 message="Like a few listings in Explore to see your matches here."
@@ -1249,6 +1289,14 @@ function MapViewContent() {
               </span>
             </button>
           </div>
+
+          {showLoadingState && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
+              <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
+                <LoadingState label="Loading similar properties..." />
+              </div>
+            </div>
+          )}
 
           {showEmptyState && (
             <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">

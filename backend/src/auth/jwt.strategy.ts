@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
@@ -21,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub?: string; email?: string; role?: string | string[] }) {
+  async validate(payload: { sub?: string; email?: string; role?: string | string[]; tv?: number }) {
     const userId = payload?.sub;
     if (!userId) {
       throw new UnauthorizedException("Invalid token payload");
@@ -29,12 +29,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     try {
       const user = await this.usersService.findById(userId);
+
+      if (user.isSuspended) {
+        throw new UnauthorizedException("Account suspended");
+      }
+
+      if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+        throw new UnauthorizedException("Token revoked");
+      }
+
       return {
         sub: user.id,
         email: user.email,
         role: user.role,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException("Account no longer exists");
     }
   }

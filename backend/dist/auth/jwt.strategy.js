@@ -30,7 +30,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
     async validate(payload) {
         const userId = payload?.sub;
         if (!userId) {
-            throw new UnauthorizedException("Invalid token payload");
+            throw new common_1.UnauthorizedException("Invalid token payload");
         }
         try {
             const user = await this.usersService.findById(userId);
@@ -41,7 +41,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             };
         }
         catch {
-            throw new UnauthorizedException("Account no longer exists");
+            throw new common_1.UnauthorizedException("Account no longer exists");
         }
     }
 };

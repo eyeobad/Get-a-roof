@@ -16,6 +16,7 @@ import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { MailService } from "../mail/mail.service";
+import { getFirebaseAuth } from "./firebase-admin";
 
 @Injectable()
 export class AuthService {
@@ -29,7 +30,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService
-  ) {}
+  ) { }
 
   async login(dto: LoginDto) {
     const user = await this.usersService.findByEmail(dto.email);
@@ -85,7 +86,8 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleLoginDto) {
-    const email = dto.email.toLowerCase();
+    const payload = await this.resolveFirebaseIdentity(dto.firebaseIdToken);
+    const email = payload.email.toLowerCase();
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
       if (existing.isSuspended) {
@@ -95,10 +97,10 @@ export class AuthService {
             : "Account suspended. Contact support."
         );
       }
-      if (dto.googleId) {
+      if (payload.googleId) {
         existing.loginCredentials = {
           ...(existing.loginCredentials || {}),
-          googleId: dto.googleId,
+          googleId: payload.googleId,
         };
       }
       // Google accounts are already email-verified by provider.
@@ -109,15 +111,46 @@ export class AuthService {
 
     const created = await this.usersService.createOAuthUser({
       email,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
       role: dto.role,
-      googleId: dto.googleId,
+      googleId: payload.googleId,
     });
     created.emailVerified = true;
     await created.save();
 
     return this.issueToken(created);
+  }
+
+  private async resolveFirebaseIdentity(firebaseIdToken: string) {
+    try {
+      // Do not block login on token revocation checks here; accept valid Firebase ID token.
+      const decoded = await getFirebaseAuth().verifyIdToken(firebaseIdToken);
+      const email = decoded.email?.toLowerCase();
+      if (!email || !decoded.email_verified) {
+        throw new UnauthorizedException("Google account has no verified email");
+      }
+      const fullName = decoded.name?.trim() || "";
+      const nameParts = fullName ? fullName.split(/\s+/) : [];
+      const firstName = nameParts[0] || undefined;
+      const lastName =
+        nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+
+      return {
+        email,
+        firstName,
+        lastName,
+        googleId: decoded.uid,
+      };
+    } catch (error) {
+      const reason = (error as Error)?.message ?? "unknown error";
+      this.logger.warn(`Firebase token verification failed: ${reason}`);
+      const message =
+        process.env.NODE_ENV === "production"
+          ? "Invalid Google authentication token"
+          : `Invalid Google authentication token: ${reason}`;
+      throw new UnauthorizedException(message);
+    }
   }
 
   async sendEmailOtp(dto: SendOtpDto) {
@@ -163,9 +196,9 @@ export class AuthService {
   async verifyEmailOtp(dto: VerifyOtpDto) {
     const user = dto.verificationToken
       ? await this.usersService.validateSignupVerificationChallenge(
-          dto.userId,
-          dto.verificationToken
-        )
+        dto.userId,
+        dto.verificationToken
+      )
       : await this.usersService.findById(dto.userId);
     await this.verifyOtpOrThrow(user, dto.otp, "email");
 
@@ -201,7 +234,7 @@ export class AuthService {
     }
 
     const token = randomBytes(16).toString("hex");
-    user.passwordResetToken = token;
+    user.passwordResetToken = this.hashPasswordResetToken(token);
     user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
     await user.save();
 
@@ -228,7 +261,9 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const user = await this.usersService.findByResetToken(dto.token);
+    const user = await this.usersService.findByResetTokenHash(
+      this.hashPasswordResetToken(dto.token)
+    );
     if (!user) {
       throw new BadRequestException("Invalid token");
     }
@@ -256,6 +291,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      tv: user.tokenVersion ?? 0,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -288,6 +324,12 @@ export class AuthService {
   private hashOtp(otp: string, userId: string, channel: "email" | "phone") {
     return createHmac("sha256", this.otpSecret)
       .update(`${channel}:${userId}:${otp}`)
+      .digest("hex");
+  }
+
+  private hashPasswordResetToken(token: string) {
+    return createHmac("sha256", this.otpSecret)
+      .update(`reset:${token}`)
       .digest("hex");
   }
 
@@ -334,8 +376,8 @@ export class AuthService {
     const isValid = storedHash
       ? this.secureCompare(storedHash, expectedHash)
       : hasLegacyOtp
-      ? this.secureCompare(String(user[legacyField]), otp)
-      : false;
+        ? this.secureCompare(String(user[legacyField]), otp)
+        : false;
 
     if (!isValid) {
       const nextAttempts = attempts + 1;

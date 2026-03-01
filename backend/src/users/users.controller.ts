@@ -34,16 +34,16 @@ const profileImageMimeTypes = new Set([
 
 const createMimeTypeFilter =
   (allowedTypes: Set<string>) =>
-  (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
-    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
-      return cb(new BadRequestException("Unsupported file type"));
-    }
-    return cb(null, true);
-  };
+    (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
+      if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+        return cb(new BadRequestException("Unsupported file type"));
+      }
+      return cb(null, true);
+    };
 
 @Controller("api/users")
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   async create(@Body() dto: CreateUserDto) {
@@ -53,9 +53,7 @@ export class UsersController {
     }
     dto.role =
       requestedRole === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant;
-    if (dto.role === UserRole.Landlord) {
-      await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
-    }
+    await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
     return this.usersService.createUser(dto);
   }
 
