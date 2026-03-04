@@ -34,3 +34,8 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateMatchDto.prototype, "tenantLiked", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(enums_1.DismissReason),
+    __metadata("design:type", String)
+], CreateMatchDto.prototype, "dismissReason", void 0);

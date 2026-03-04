@@ -24,6 +24,7 @@
 14. [Environment Variables & Secrets](#14-environment-variables--secrets)
 15. [Frontend Session Management](#15-frontend-session-management)
 16. [Security Checklist for New Endpoints](#16-security-checklist-for-new-endpoints)
+17. [Match Algorithm & Scoring Engine](#17-match-algorithm--scoring-engine)
 
 ---
 
@@ -512,6 +513,14 @@ When adding a new backend endpoint, go through this checklist:
                         │  │  - Suspension check   │   │
                         │  │  - TokenVersion check │   │
                         │  └──────────┬───────────┘   │
+                        │             │               │
+                        │  ┌──────────▼───────────┐   │
+                        │  │  Match Engine         │   │
+                        │  │  - 5-dim scoring      │   │
+                        │  │  - State machine      │   │
+                        │  │  - Smart recycling    │   │
+                        │  │  - Pagination         │   │
+                        │  └──────────┬───────────┘   │
                         └────────────┼────────────────┘
                                      │
               ┌──────────────────────┼──────────────────────┐
@@ -523,3 +532,240 @@ When adding a new backend endpoint, go through this checklist:
    │   - Matches          │
    └─────────────────────┘
 ```
+
+---
+
+## 17. Match Algorithm & Scoring Engine
+
+This section documents the matching algorithm used to score tenant-property compatibility, the match status state machine, and the smart recycling system.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `backend/src/common/utils/match.utils.ts` | Core scoring engine — all score computations |
+| `backend/src/matches/matches.service.ts` | Match CRUD, state machine, recycling logic |
+| `backend/src/matches/matches.controller.ts` | REST endpoints |
+| `backend/src/matches/schemas/match.schema.ts` | MongoDB schema with indexes |
+| `backend/src/common/enums/index.ts` | `MatchStatus`, `DismissReason` enums |
+
+---
+
+### 17.1 Scoring Engine
+
+Every match is scored across **five weighted dimensions**:
+
+```
+matchScore = preferences × 0.30
+           + apartmentType × 0.20
+           + location × 0.25
+           + amenity × 0.10
+           + affordability × 0.15
+```
+
+Weights are configurable via the `DEFAULT_MATCH_WEIGHTS` constant in `match.utils.ts`.
+
+#### 17.1.1 Property Type Similarity
+
+| Scenario | Score |
+|----------|-------|
+| Exact type match (tenant wants Apartment, property is Apartment) | **100** |
+| Same similarity group (tenant wants Apartment, property is Studio) | **70** |
+| Different group entirely | **20** |
+| Property type unknown | **50** |
+
+**Similarity groups** (types within a group are treated as related):
+
+| Group | Types |
+|-------|-------|
+| Residential Small | Apartment, Studio, Loft |
+| Residential Large | House, Bungalow, Villa |
+| Multi-Unit | Duplex, Townhouse |
+| Premium | Condo, Penthouse |
+| Shared | SharedApartment, SharedCompound |
+| Compound | SelfCompound, NonOwnerOccupied |
+
+#### 17.1.2 Location Score
+
+Uses the **haversine formula** to calculate the great-circle distance (in km) between the tenant's address and the property. Scored in gradient tiers relative to the tenant's `maxCommuteRadius`:
+
+| Distance (% of max radius) | Score |
+|-----------------------------|-------|
+| ≤ 25% | **100** — very close |
+| ≤ 50% | **85** |
+| ≤ 75% | **65** |
+| ≤ 100% | **40** — at the edge |
+| ≤ 150% | **20** — slightly beyond |
+| > 150% | **10** — far |
+| No coordinates available | **50** — neutral (no penalty) |
+
+Default max radius: 20 km if tenant has not specified `maxCommuteRadius`.
+
+#### 17.1.3 Amenity Overlap
+
+Compares the tenant's `desiredAmenities` list against the property's `amenities` array:
+
+```
+amenityScore = (matching amenities / total desired amenities) × 100
+```
+
+| Scenario | Score |
+|----------|-------|
+| Tenant has no amenity preferences | **100** (no penalty) |
+| Property lists no amenities | **30** |
+| All desired amenities present | **100** |
+| Partial overlap | Proportional (e.g., 3 of 5 = 60) |
+
+#### 17.1.4 Affordability Gradient
+
+Based on the **rent-to-income ratio** (monthly rent ÷ (annual earnings / 12 / 3)):
+
+| Ratio of rent to affordable threshold | Score | Meaning |
+|---------------------------------------|-------|---------|
+| ≤ 80% | **100** | Comfortably affordable |
+| ≤ 100% | **80** | Affordable |
+| ≤ 120% | **50** | Stretch |
+| ≤ 150% | **20** | Difficult |
+| > 150% | **0** | Unaffordable |
+| No income/price data | **50** | Neutral |
+
+#### 17.1.5 Landlord Tenant-Requirement Matching
+
+Compares landlord's `idealTenantPreferences` against the tenant's profile across: `employmentStatus`, `maritalStatus`, `vehicles`, `smokingHabits`, `drinkingHabits`, `religionPreference`, `educationLevel`, `socialHabits`, `hasChildren`. Also checks income range and pet compatibility.
+
+Score = `(matched criteria / considered criteria) × 100`. If no requirements are set, defaults to 100%.
+
+---
+
+### 17.2 Match Status State Machine
+
+Matches follow a strict state machine. Invalid transitions are rejected with `400 Bad Request`.
+
+```
+                    ┌─────────────────┐
+                    │   TenantLiked   │
+                    └──┬──────┬───┬──┘
+                       │      │   │
+         ┌─────────────▼──┐   │   │
+         │ LandlordQualified│   │   │
+         └──┬─────────────┘   │   │
+            │                 │   │
+    ┌───────▼──────┐         │   │
+    │ ChatInitiated │◄────────┘   │
+    └──────┬───────┘              │
+           │                      │
+    ┌──────▼──────────────────────▼──┐
+    │           Dismissed            │
+    │   (Soft → recyclable)          │
+    │   (Hard → permanent block)     │
+    └────────────┬──────────────────┘
+                 │ recycle (Soft only)
+                 ▼
+           TenantLiked (recycled)
+```
+
+| From | Allowed Destinations |
+|------|---------------------|
+| `TenantLiked` | `LandlordQualified`, `ChatInitiated`, `Dismissed` |
+| `LandlordQualified` | `ChatInitiated`, `Dismissed` |
+| `ChatInitiated` | `Dismissed` |
+| `Dismissed` | `TenantLiked` (recycling path only) |
+
+**Auto-qualification**: If a tenant likes a property and the `matchScore ≥ 70`, the status is automatically set to `LandlordQualified` (skipping the landlord review step).
+
+---
+
+### 17.3 Smart Recycling (Loop Logic)
+
+When a tenant runs out of new properties to swipe, dismissed listings can be recycled:
+
+#### Dismiss Types
+
+| Type | Enum | Behaviour |
+|------|------|-----------|
+| **Soft dismiss** | `DismissReason.Soft` | Recyclable after a 14-day cooldown |
+| **Hard block** | `DismissReason.Hard` | Permanently excluded — never re-shown |
+
+Default dismiss is `Soft` unless the tenant explicitly calls the hard-block endpoint.
+
+#### Recycling Priority Queue
+
+Recyclable matches (soft-dismissed, past cooldown) are sorted by:
+
+1. **Tier 1**: Property was updated by the landlord after the tenant dismissed it (price drop, new photos, etc.)
+2. **Tier 2**: Unchanged properties past cooldown period
+
+Within each tier, matches are sorted by `matchScore` descending.
+
+#### Recycling Flow
+
+```
+Tenant dismisses property → dismissedAt = now, dismissReason = Soft
+  ... 14+ days pass ...
+GET /api/matches/tenant/recycled → returns recyclable matches
+  → Tenant decides to re-like
+POST /api/matches/:id/recycle → status → TenantLiked, recycleCount++
+```
+
+Each match tracks `recycleCount` to monitor how many times it has been re-shown.
+
+---
+
+### 17.4 Match Schema (MongoDB)
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `tenantId` | ObjectId | Tenant who swiped |
+| `propertyId` | ObjectId | Property that was swiped |
+| `status` | MatchStatus | Current state (see state machine) |
+| `matchScore` | Number | Composite weighted score (0–100) |
+| `preferencesMatchPercentage` | Number | Landlord requirement match % |
+| `apartmentPreferenceMatchPercentage` | Number | Property type match % |
+| `locationScore` | Number | Geo proximity score (0–100) |
+| `amenityScore` | Number | Amenity overlap score (0–100) |
+| `affordabilityScore` | Number | Rent-to-income affordability (0–100) |
+| `dismissedAt` | Date | When the match was dismissed |
+| `dismissReason` | DismissReason | Soft (recyclable) or Hard (permanent) |
+| `recycleCount` | Number | How many times this match was recycled |
+| `landlordSeenAt` | Date | Last time the landlord viewed this match |
+
+**Indexes:**
+
+| Index | Purpose |
+|-------|---------|
+| `{ tenantId: 1, propertyId: 1 }` (unique) | Prevents duplicate matches; enables fast lookups |
+| `{ tenantId: 1, status: 1, updatedAt: -1 }` | Tenant match listings |
+| `{ propertyId: 1, status: 1, updatedAt: -1 }` | Landlord match listings |
+| `{ status: 1, dismissReason: 1, dismissedAt: 1 }` | Recycling queries |
+
+---
+
+### 17.5 API Endpoints
+
+| Method | Path | Auth | Role | Description |
+|--------|------|------|------|-------------|
+| `POST` | `/api/matches` | JWT | Tenant | Create/upsert a match (like or soft-dismiss) |
+| `GET` | `/api/matches/tenant?page=1&limit=20` | JWT | Tenant | Paginated active matches with properties & messages |
+| `GET` | `/api/matches/tenant/recycled?page=1&limit=20` | JWT | Tenant | Recyclable dismissed matches past cooldown |
+| `POST` | `/api/matches/:id/recycle` | JWT | Tenant | Re-activate a soft-dismissed match |
+| `POST` | `/api/matches/:id/hard-block` | JWT | Tenant | Permanently block a property |
+| `PATCH` | `/api/matches/:id` | JWT | Landlord | Update match status (must own the property) |
+
+All list endpoints support **pagination** (`?page=1&limit=20`, max 100 per page).
+
+---
+
+### 17.6 Database Query Optimisation
+
+All match queries use **native ObjectId comparisons** (not `$toString`/`$expr`), which allows MongoDB to fully utilise the compound indexes defined above. This is critical for query performance at scale.
+
+**Before** (slow — full collection scan):
+```javascript
+$expr: { $eq: [{ $toString: "$propertyId" }, propertyIdString] }
+```
+
+**After** (fast — uses index):
+```javascript
+{ propertyId: new Types.ObjectId(propertyId) }
+```
+

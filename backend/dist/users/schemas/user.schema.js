@@ -262,6 +262,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: [mongoose_2.Types.ObjectId], ref: "Property", default: [] }),
     __metadata("design:type", Array)
 ], User.prototype, "savedProperties", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "tokenVersion", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], User);

@@ -273,6 +273,7 @@ type AppState = {
   likedIds: string[];
   passedIds: string[];
   matchSummaries: MatchSummary[];
+  recycledMatchSummaries: MatchSummary[];
   mapMatches: Listing[];
   selectedListingId: string | null;
   threadsById: Record<string, Thread>;
@@ -338,7 +339,11 @@ type AppState = {
   deleteAccount: () => Promise<boolean>;
   likeListing: (listingId: string) => Promise<void>;
   unlikeListing: (listingId: string) => Promise<void>;
-  createMatchForListing: (listingId: string, tenantLiked: boolean) => Promise<void>;
+  createMatchForListing: (
+    listingId: string,
+    tenantLiked: boolean,
+    dismissReason?: "Soft" | "Hard"
+  ) => Promise<void>;
   toggleLikeListing: (listingId: string) => Promise<void>;
   passListing: (listingId: string) => Promise<void>;
   advanceQueue: () => void;
@@ -346,8 +351,11 @@ type AppState = {
   ensureMatchForListing: (listingId: string) => Promise<void>;
   ensureThreadForListing: (listingId: string) => Promise<string | null>;
   loadExploreListings: (filters?: ExploreFilters) => Promise<void>;
+  loadRecycledIntoExplore: () => Promise<boolean>;
   loadMapMatches: (filters?: ExploreFilters) => Promise<void>;
   loadMatches: () => Promise<void>;
+  loadRecycledMatches: () => Promise<void>;
+  recycleMatch: (matchId: string) => Promise<void>;
   loadConversations: (options?: { limit?: number; offset?: number }) => Promise<void>;
   loadMessagesForMatch: (matchId: string, options?: { limit?: number; before?: string }) => Promise<void>;
   sendMessage: (matchId: string, receiverId: string, content: string) => Promise<void>;
@@ -778,6 +786,7 @@ export const useAppStore = create<AppState>()(
       likedIds: [],
       passedIds: [],
       matchSummaries: [],
+      recycledMatchSummaries: [],
       mapMatches: [],
       selectedListingId: initialQueue[0] ?? null,
       threadsById: {},
@@ -1108,13 +1117,17 @@ export const useAppStore = create<AppState>()(
           throw error;
         }
       },
-      createMatchForListing: async (listingId, tenantLiked) => {
+      createMatchForListing: async (listingId, tenantLiked, dismissReason) => {
         const state = get();
         if (!state.authToken || !isMongoId(listingId)) return;
         try {
           await apiFetch(`/api/matches`, {
             method: "POST",
-            body: JSON.stringify({ propertyId: listingId, tenantLiked }),
+            body: JSON.stringify({
+              propertyId: listingId,
+              tenantLiked,
+              ...(dismissReason ? { dismissReason } : {}),
+            }),
             token: state.authToken,
           });
           await get().loadMatches();
@@ -1165,7 +1178,7 @@ export const useAppStore = create<AppState>()(
             }
           }
 
-          await get().createMatchForListing(listingId, false);
+          await get().createMatchForListing(listingId, false, "Soft");
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -1187,7 +1200,7 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          await get().createMatchForListing(listingId, false);
+          await get().createMatchForListing(listingId, false, "Soft");
         }
       },
       advanceQueue: () =>
@@ -1204,6 +1217,7 @@ export const useAppStore = create<AppState>()(
           likedIds: [],
           passedIds: [],
           matchSummaries: [],
+          recycledMatchSummaries: [],
           selectedListingId: Object.keys(state.listingsById)[0] ?? null,
           threadsById: {},
           selectedThreadId: null,
@@ -1296,6 +1310,74 @@ export const useAppStore = create<AppState>()(
           selectedListingId: queue[0] ?? null,
         });
       },
+      loadRecycledIntoExplore: async () => {
+        const state = get();
+        if (!state.authToken) return false;
+        const data = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
+          `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
+          {
+            token: state.authToken,
+          }
+        );
+        const matches = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.items)
+            ? data.items
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+        if (matches.length === 0) return false;
+
+        const recyclableMatches = matches.filter((match) => {
+          const matchId = toIdString(match._id) || toIdString(match.id);
+          return Boolean(matchId && isMongoId(matchId));
+        });
+
+        await Promise.all(
+          recyclableMatches.map((match) => {
+            const matchId = toIdString(match._id) || toIdString(match.id);
+            return apiFetch(`/api/matches/${matchId}/recycle`, {
+              method: "POST",
+              token: state.authToken,
+            }).catch(() => null);
+          })
+        );
+
+        const refreshed = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
+          `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
+          {
+            token: state.authToken,
+          }
+        );
+        const refreshedMatches = Array.isArray(refreshed)
+          ? refreshed
+          : Array.isArray(refreshed?.items)
+            ? refreshed.items
+            : Array.isArray(refreshed?.data)
+              ? refreshed.data
+              : [];
+
+        const sourceMatches = refreshedMatches.length > 0 ? refreshedMatches : matches;
+
+        const listings = sourceMatches
+          .map((match) => (match.property ? mapPropertyToListing(match.property) : null))
+          .filter((listing): listing is Listing => Boolean(listing));
+
+        if (listings.length === 0) return false;
+
+        const nextMap = listings.reduce<Record<string, Listing>>((acc, listing) => {
+          acc[listing.id] = listing;
+          return acc;
+        }, {});
+        const queue = listings.map((listing) => listing.id);
+
+        set({
+          listingsById: { ...get().listingsById, ...nextMap },
+          exploreQueue: queue,
+          selectedListingId: queue[0] ?? null,
+        });
+        return true;
+      },
       loadMapMatches: async (filters) => {
         const state = get();
         if (!state.authToken) {
@@ -1371,6 +1453,55 @@ export const useAppStore = create<AppState>()(
         });
 
         set({ matchSummaries: summaries });
+      },
+      loadRecycledMatches: async () => {
+        const state = get();
+        if (!state.authToken) return;
+        const data = await apiFetch<ApiMatch[]>(`/api/matches/tenant/recycled`, {
+          token: state.authToken,
+        });
+
+        const summaries = (data ?? []).map((match) => {
+          const listing = match.property ? mapPropertyToListing(match.property) : null;
+          if (listing) {
+            set((prev) => ({
+              listingsById: { ...prev.listingsById, [listing.id]: listing },
+            }));
+          }
+          const listingId = listing?.id ?? toIdString(match.propertyId);
+          if (listingId && !state.listingsById[listingId]) {
+            void get().fetchPropertyById(listingId);
+          }
+          return {
+            id: toIdString(match._id ?? match.id),
+            listingId,
+            status: match.status,
+            matchScore: match.matchScore,
+            lastMessage: formatMessagePreview(match.lastMessage?.content),
+            lastMessageAt: match.lastMessage?.timestamp,
+            unreadCount: match.unreadCount ?? 0,
+            landlordReplied: Boolean(match.landlordReplied),
+            routeAccessStatus: match.routeAccessStatus ?? "None",
+          } as MatchSummary;
+        });
+
+        set({ recycledMatchSummaries: summaries });
+      },
+      recycleMatch: async (matchId: string) => {
+        const state = get();
+        if (!state.authToken) return;
+        await apiFetch(`/api/matches/${matchId}/recycle`, {
+          method: "POST",
+          token: state.authToken,
+        });
+        // Move recycled match from recycled list back to active
+        const recycled = state.recycledMatchSummaries.find((m) => m.id === matchId);
+        set((prev) => ({
+          recycledMatchSummaries: prev.recycledMatchSummaries.filter((m) => m.id !== matchId),
+          matchSummaries: recycled
+            ? [{ ...recycled, status: "TenantLiked" as MatchStatus }, ...prev.matchSummaries]
+            : prev.matchSummaries,
+        }));
       },
       loadConversations: async (options) => {
         const state = get();

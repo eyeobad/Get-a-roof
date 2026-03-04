@@ -48,6 +48,11 @@ export enum MatchStatus {
   Dismissed = "Dismissed",
 }
 
+export enum DismissReason {
+  Soft = "Soft",
+  Hard = "Hard",
+}
+
 export enum RouteAccessStatus {
   None = "None",
   Pending = "Pending",

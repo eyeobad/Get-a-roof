@@ -29,8 +29,21 @@ let MatchesController = class MatchesController {
         dto.tenantId = req.user?.sub;
         return this.matchesService.createMatch(dto);
     }
-    getTenantMatches(req) {
-        return this.matchesService.getTenantMatches(req.user?.sub);
+    getTenantMatches(req, page, limit) {
+        return this.matchesService.getTenantMatches(req.user?.sub, { page, limit });
+    }
+    getRecycledMatches(req, page, limit, cooldownDays) {
+        return this.matchesService.getRecyclableMatches(req.user?.sub, {
+            page,
+            limit,
+            cooldownDays,
+        });
+    }
+    recycleMatch(id, req) {
+        return this.matchesService.recycleDismissedMatch(id, req.user?.sub);
+    }
+    hardBlock(id, req) {
+        return this.matchesService.hardBlockMatch(id, req.user?.sub);
     }
     update(id, dto, req) {
         return this.matchesService.updateMatchForLandlord(id, dto, req.user?.sub);
@@ -52,10 +65,44 @@ __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
     __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)("page", new common_1.DefaultValuePipe(1), common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)("limit", new common_1.DefaultValuePipe(20), common_1.ParseIntPipe)),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Number, Number]),
     __metadata("design:returntype", void 0)
 ], MatchesController.prototype, "getTenantMatches", null);
+__decorate([
+    (0, common_1.Get)("tenant/recycled"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)("page", new common_1.DefaultValuePipe(1), common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)("limit", new common_1.DefaultValuePipe(20), common_1.ParseIntPipe)),
+    __param(3, (0, common_1.Query)("cooldownDays", new common_1.DefaultValuePipe(14), common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Number, Number, Number]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "getRecycledMatches", null);
+__decorate([
+    (0, common_1.Post)(":id/recycle"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "recycleMatch", null);
+__decorate([
+    (0, common_1.Post)(":id/hard-block"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "hardBlock", null);
 __decorate([
     (0, common_1.Patch)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

@@ -1,5 +1,5 @@
 import { IsEnum, IsMongoId, IsOptional, IsBoolean } from "class-validator";
-import { MatchStatus } from "../../common/enums";
+import { DismissReason, MatchStatus } from "../../common/enums";
 
 export class CreateMatchDto {
   @IsOptional()
@@ -16,4 +16,8 @@ export class CreateMatchDto {
   @IsOptional()
   @IsBoolean()
   tenantLiked?: boolean;
+
+  @IsOptional()
+  @IsEnum(DismissReason)
+  dismissReason?: DismissReason;
 }

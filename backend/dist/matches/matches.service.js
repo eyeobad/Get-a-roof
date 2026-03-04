@@ -22,6 +22,31 @@ const users_service_1 = require("../users/users.service");
 const properties_service_1 = require("../properties/properties.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const DEFAULT_PAGE_LIMIT = 20;
+const RECYCLE_COOLDOWN_DAYS = 14;
+const VALID_TRANSITIONS = {
+    [enums_1.MatchStatus.TenantLiked]: [
+        enums_1.MatchStatus.LandlordQualified,
+        enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Dismissed,
+    ],
+    [enums_1.MatchStatus.LandlordQualified]: [
+        enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Dismissed,
+    ],
+    [enums_1.MatchStatus.ChatInitiated]: [enums_1.MatchStatus.Dismissed],
+    [enums_1.MatchStatus.Dismissed]: [enums_1.MatchStatus.TenantLiked],
+};
+function toObjectId(id) {
+    if (id instanceof mongoose_2.Types.ObjectId)
+        return id;
+    return new mongoose_2.Types.ObjectId(id);
+}
+function paginationStages(page = 1, limit = DEFAULT_PAGE_LIMIT) {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+    return [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }];
+}
 let MatchesService = class MatchesService {
     constructor(matchModel, messageModel, usersService, propertiesService) {
         this.matchModel = matchModel;
@@ -33,53 +58,83 @@ let MatchesService = class MatchesService {
         if (!dto.tenantId) {
             throw new common_1.BadRequestException("tenantId is required");
         }
-        const tenant = await this.usersService.findById(dto.tenantId);
-        const property = await this.propertiesService.getProperty(dto.propertyId);
+        const [tenant, property] = await Promise.all([
+            this.usersService.findById(dto.tenantId),
+            this.propertiesService.getProperty(dto.propertyId),
+        ]);
+        const tenantPrefs = tenant.preferences?.tenant;
         const matchInput = {
             propertyType: property.propertyType,
             monthlyPrice: property.monthlyPrice,
             petFriendly: property.petFriendly,
             landlordRequirements: property.landlordRequirements,
+            amenities: property.amenities,
+            lat: property.address?.lat,
+            lng: property.address?.lng,
         };
-        const matchScoreData = (0, match_utils_1.computeMatchScore)(tenant.preferences?.tenant, matchInput);
-        const baseStatus = dto.tenantLiked === false ? enums_1.MatchStatus.Dismissed : enums_1.MatchStatus.TenantLiked;
+        const matchScoreData = (0, match_utils_1.computeMatchScore)({
+            ...tenantPrefs,
+            lat: tenant.address?.lat,
+            lng: tenant.address?.lng,
+        }, matchInput);
+        const isDismiss = dto.tenantLiked === false;
+        const baseStatus = isDismiss
+            ? enums_1.MatchStatus.Dismissed
+            : enums_1.MatchStatus.TenantLiked;
         const computedStatus = dto.status ||
             (baseStatus === enums_1.MatchStatus.TenantLiked && matchScoreData.matchScore >= 70
                 ? enums_1.MatchStatus.LandlordQualified
                 : baseStatus);
+        const tenantOid = toObjectId(dto.tenantId);
+        const propertyOid = toObjectId(dto.propertyId);
         const existing = await this.matchModel
-            .findOne({ tenantId: dto.tenantId, propertyId: dto.propertyId })
+            .findOne({ tenantId: tenantOid, propertyId: propertyOid })
             .exec();
         if (existing) {
             existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
-            existing.status = this.mergeMatchStatus(existing.status, computedStatus);
+            existing.status = this.validateTransition(existing.status, computedStatus);
             existing.matchScore = matchScoreData.matchScore;
             existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
             existing.apartmentPreferenceMatchPercentage =
                 matchScoreData.apartmentPreferenceMatchPercentage;
+            existing.locationScore = matchScoreData.locationScore;
+            existing.amenityScore = matchScoreData.amenityScore;
+            existing.affordabilityScore = matchScoreData.affordabilityScore;
             existing.timestamp = new Date();
+            if (isDismiss) {
+                existing.dismissedAt = new Date();
+                existing.dismissReason = dto.dismissReason ?? enums_1.DismissReason.Soft;
+            }
             return existing.save();
         }
         const created = new this.matchModel({
-            tenantId: dto.tenantId,
-            propertyId: dto.propertyId,
+            tenantId: tenantOid,
+            propertyId: propertyOid,
             status: computedStatus,
             tenantLiked: dto.tenantLiked,
             matchScore: matchScoreData.matchScore,
             preferencesMatchPercentage: matchScoreData.preferencesMatchPercentage,
             apartmentPreferenceMatchPercentage: matchScoreData.apartmentPreferenceMatchPercentage,
+            locationScore: matchScoreData.locationScore,
+            amenityScore: matchScoreData.amenityScore,
+            affordabilityScore: matchScoreData.affordabilityScore,
             timestamp: new Date(),
+            dismissedAt: isDismiss ? new Date() : undefined,
+            dismissReason: isDismiss
+                ? dto.dismissReason ?? enums_1.DismissReason.Soft
+                : undefined,
         });
         return created.save();
     }
     async updateMatch(id, dto) {
-        const updated = await this.matchModel
-            .findByIdAndUpdate(id, dto, { new: true })
-            .exec();
-        if (!updated) {
+        const match = await this.matchModel.findById(id).exec();
+        if (!match) {
             throw new common_1.NotFoundException("Match not found");
         }
-        return updated;
+        if (dto.status) {
+            match.status = this.validateTransition(match.status, dto.status);
+        }
+        return match.save();
     }
     async updateMatchForLandlord(id, dto, landlordId) {
         const match = await this.matchModel.findById(id).exec();
@@ -90,34 +145,139 @@ let MatchesService = class MatchesService {
         if (property.landlordId.toString() !== landlordId) {
             throw new common_1.ForbiddenException("Access denied");
         }
-        match.status = dto.status ?? match.status;
+        if (dto.status) {
+            match.status = this.validateTransition(match.status, dto.status);
+        }
         match.landlordSeenAt = new Date();
+        return match.save();
+    }
+    async hardBlockMatch(matchId, tenantId) {
+        const match = await this.matchModel.findById(matchId).exec();
+        if (!match) {
+            throw new common_1.NotFoundException("Match not found");
+        }
+        if (match.tenantId.toString() !== tenantId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        match.status = enums_1.MatchStatus.Dismissed;
+        match.dismissReason = enums_1.DismissReason.Hard;
+        match.dismissedAt = new Date();
+        return match.save();
+    }
+    async getRecyclableMatches(tenantId, options) {
+        const cooldownDays = options?.cooldownDays ?? RECYCLE_COOLDOWN_DAYS;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - cooldownDays);
+        const tenantOid = toObjectId(tenantId);
+        const pipeline = [
+            {
+                $match: {
+                    tenantId: tenantOid,
+                    status: enums_1.MatchStatus.Dismissed,
+                    dismissReason: { $ne: enums_1.DismissReason.Hard },
+                    dismissedAt: { $lte: cutoff },
+                },
+            },
+            {
+                $lookup: {
+                    from: "properties",
+                    localField: "propertyId",
+                    foreignField: "_id",
+                    as: "property",
+                },
+            },
+            { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    propertyUpdatedAfterDismiss: {
+                        $cond: [
+                            { $gt: ["$property.updatedAt", "$dismissedAt"] },
+                            true,
+                            false,
+                        ],
+                    },
+                    recyclePriority: {
+                        $cond: [
+                            { $gt: ["$property.updatedAt", "$dismissedAt"] },
+                            1,
+                            2,
+                        ],
+                    },
+                },
+            },
+            { $sort: { recyclePriority: 1, matchScore: -1 } },
+            ...paginationStages(options?.page, options?.limit),
+            {
+                $project: {
+                    _id: 1,
+                    propertyId: 1,
+                    tenantId: 1,
+                    status: 1,
+                    matchScore: 1,
+                    dismissedAt: 1,
+                    recycleCount: 1,
+                    propertyUpdatedAfterDismiss: 1,
+                    property: {
+                        _id: "$property._id",
+                        address: "$property.address",
+                        monthlyPrice: "$property.monthlyPrice",
+                        propertyType: "$property.propertyType",
+                        listingIntent: "$property.listingIntent",
+                        bedCount: "$property.bedCount",
+                        bathCount: "$property.bathCount",
+                        images: "$property.images",
+                        amenities: "$property.amenities",
+                        neighborhood: "$property.neighborhood",
+                        updatedAt: "$property.updatedAt",
+                    },
+                },
+            },
+        ];
+        return this.matchModel.aggregate(pipeline).exec();
+    }
+    async recycleDismissedMatch(matchId, tenantId) {
+        const match = await this.matchModel.findById(matchId).exec();
+        if (!match) {
+            throw new common_1.NotFoundException("Match not found");
+        }
+        if (match.tenantId.toString() !== tenantId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        if (match.status !== enums_1.MatchStatus.Dismissed) {
+            throw new common_1.BadRequestException("Match is not dismissed");
+        }
+        if (match.dismissReason === enums_1.DismissReason.Hard) {
+            throw new common_1.BadRequestException("This match is permanently blocked");
+        }
+        match.status = enums_1.MatchStatus.TenantLiked;
+        match.dismissedAt = undefined;
+        match.dismissReason = undefined;
+        match.recycleCount = (match.recycleCount ?? 0) + 1;
+        match.tenantLiked = true;
+        match.timestamp = new Date();
         return match.save();
     }
     async findByProperty(propertyId) {
         return this.matchModel
-            .find({ propertyId, status: { $ne: enums_1.MatchStatus.Dismissed } })
+            .find({
+            propertyId: toObjectId(propertyId),
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+        })
             .exec();
     }
     async countByProperty(propertyId) {
-        const propertyIdString = propertyId?.toString?.() ?? propertyId;
         return this.matchModel
             .countDocuments({
+            propertyId: toObjectId(propertyId),
             status: { $ne: enums_1.MatchStatus.Dismissed },
-            $expr: {
-                $eq: [{ $toString: "$propertyId" }, propertyIdString],
-            },
         })
             .exec();
     }
     async countNewByProperty(propertyId) {
-        const propertyIdString = propertyId?.toString?.() ?? propertyId;
         return this.matchModel
             .countDocuments({
+            propertyId: toObjectId(propertyId),
             status: { $ne: enums_1.MatchStatus.Dismissed },
-            $expr: {
-                $eq: [{ $toString: "$propertyId" }, propertyIdString],
-            },
             $or: [
                 { landlordSeenAt: { $exists: false } },
                 { landlordSeenAt: null },
@@ -127,40 +287,29 @@ let MatchesService = class MatchesService {
             .exec();
     }
     async getMatchCountsByPropertyIds(propertyIds) {
-        if (!propertyIds.length) {
+        if (!propertyIds.length)
             return [];
-        }
-        const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
+        const oids = propertyIds.map(toObjectId);
         const pipeline = [
             {
                 $match: {
+                    propertyId: { $in: oids },
                     status: { $ne: enums_1.MatchStatus.Dismissed },
-                    $expr: {
-                        $in: [{ $toString: "$propertyId" }, idStrings],
-                    },
                 },
             },
-            {
-                $group: {
-                    _id: "$propertyId",
-                    count: { $sum: 1 },
-                },
-            },
+            { $group: { _id: "$propertyId", count: { $sum: 1 } } },
         ];
         return this.matchModel.aggregate(pipeline).exec();
     }
     async getNewMatchCountsByPropertyIds(propertyIds) {
-        if (!propertyIds.length) {
+        if (!propertyIds.length)
             return [];
-        }
-        const idStrings = propertyIds.map((id) => id?.toString?.() ?? id);
+        const oids = propertyIds.map(toObjectId);
         const pipeline = [
             {
                 $match: {
+                    propertyId: { $in: oids },
                     status: { $ne: enums_1.MatchStatus.Dismissed },
-                    $expr: {
-                        $in: [{ $toString: "$propertyId" }, idStrings],
-                    },
                     $or: [
                         { landlordSeenAt: { $exists: false } },
                         { landlordSeenAt: null },
@@ -168,28 +317,20 @@ let MatchesService = class MatchesService {
                     ],
                 },
             },
-            {
-                $group: {
-                    _id: "$propertyId",
-                    count: { $sum: 1 },
-                },
-            },
+            { $group: { _id: "$propertyId", count: { $sum: 1 } } },
         ];
         return this.matchModel.aggregate(pipeline).exec();
     }
     async findPropertyIdsWithMatches(landlordPropertyIds) {
-        if (!landlordPropertyIds.length) {
+        if (!landlordPropertyIds.length)
             return [];
-        }
-        const idStrings = landlordPropertyIds.map((id) => id?.toString?.() ?? id);
+        const oids = landlordPropertyIds.map(toObjectId);
         const results = await this.matchModel
             .aggregate([
             {
                 $match: {
+                    propertyId: { $in: oids },
                     status: { $ne: enums_1.MatchStatus.Dismissed },
-                    $expr: {
-                        $in: [{ $toString: "$propertyId" }, idStrings],
-                    },
                 },
             },
             { $group: { _id: "$propertyId" } },
@@ -197,42 +338,20 @@ let MatchesService = class MatchesService {
             .exec();
         return results.map((item) => item._id);
     }
-    async getPropertyMatchesWithTenant(propertyId) {
-        const propertyIdString = propertyId?.toString?.() ?? propertyId;
+    async getPropertyMatchesWithTenant(propertyId, options) {
+        const propertyOid = toObjectId(propertyId);
         const pipeline = [
             {
                 $match: {
+                    propertyId: propertyOid,
                     status: { $ne: enums_1.MatchStatus.Dismissed },
-                    $expr: {
-                        $eq: [{ $toString: "$propertyId" }, propertyIdString],
-                    },
                 },
             },
             {
                 $lookup: {
                     from: "users",
-                    let: { tenantId: "$tenantId" },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: [{ $toString: "$_id" }, { $toString: "$$tenantId" }],
-                                },
-                            },
-                        },
-                        {
-                            $project: {
-                                _id: 1,
-                                firstName: 1,
-                                lastName: 1,
-                                email: 1,
-                                phoneNumber: 1,
-                                photoUrl: 1,
-                                isVerified: 1,
-                                preferences: 1,
-                            },
-                        },
-                    ],
+                    localField: "tenantId",
+                    foreignField: "_id",
                     as: "tenant",
                 },
             },
@@ -246,6 +365,9 @@ let MatchesService = class MatchesService {
                     matchScore: 1,
                     preferencesMatchPercentage: 1,
                     apartmentPreferenceMatchPercentage: 1,
+                    locationScore: 1,
+                    amenityScore: 1,
+                    affordabilityScore: 1,
                     tenantLiked: 1,
                     timestamp: 1,
                     createdAt: 1,
@@ -280,56 +402,45 @@ let MatchesService = class MatchesService {
                     },
                 },
             },
-            { $sort: { updatedAt: -1 } },
+            { $sort: { matchScore: -1, updatedAt: -1 } },
+            ...paginationStages(options?.page, options?.limit),
         ];
         return this.matchModel.aggregate(pipeline).exec();
     }
     async markMatchesSeenForProperty(propertyId) {
         const now = new Date();
-        await this.matchModel.updateMany({ propertyId, status: { $ne: enums_1.MatchStatus.Dismissed } }, { $set: { landlordSeenAt: now } });
+        await this.matchModel.updateMany({ propertyId: toObjectId(propertyId), status: { $ne: enums_1.MatchStatus.Dismissed } }, { $set: { landlordSeenAt: now } });
         return { propertyId, seenAt: now.toISOString() };
     }
     async landlordHasTenantMatch(landlordPropertyIds, tenantId) {
-        if (!landlordPropertyIds.length) {
+        if (!landlordPropertyIds.length)
             return false;
-        }
-        const idStrings = landlordPropertyIds.map((id) => id?.toString?.() ?? id);
+        const oids = landlordPropertyIds.map(toObjectId);
+        const tenantOid = toObjectId(tenantId);
         const exists = await this.matchModel.exists({
+            propertyId: { $in: oids },
+            tenantId: tenantOid,
             status: { $ne: enums_1.MatchStatus.Dismissed },
-            $expr: {
-                $and: [
-                    { $in: [{ $toString: "$propertyId" }, idStrings] },
-                    { $eq: [{ $toString: "$tenantId" }, tenantId] },
-                ],
-            },
         });
         return Boolean(exists);
     }
-    async getTenantMatches(tenantId) {
+    async getTenantMatches(tenantId, options) {
         if (!mongoose_2.Types.ObjectId.isValid(tenantId)) {
             throw new common_1.BadRequestException("Invalid tenantId");
         }
-        const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
+        const tenantOid = toObjectId(tenantId);
         const pipeline = [
             {
                 $match: {
+                    tenantId: tenantOid,
                     status: { $ne: enums_1.MatchStatus.Dismissed },
-                    $or: [{ tenantId: tenantObjectId }, { tenantId }],
                 },
             },
             {
                 $lookup: {
                     from: "properties",
-                    let: { propId: "$propertyId" },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: [{ $toString: "$_id" }, { $toString: "$$propId" }],
-                                },
-                            },
-                        },
-                    ],
+                    localField: "propertyId",
+                    foreignField: "_id",
                     as: "property",
                 },
             },
@@ -346,7 +457,7 @@ let MatchesService = class MatchesService {
                         {
                             $match: {
                                 $expr: {
-                                    $eq: [{ $toString: "$matchId" }, { $toString: "$$matchId" }],
+                                    $eq: ["$matchId", "$$matchId"],
                                 },
                             },
                         },
@@ -418,30 +529,20 @@ let MatchesService = class MatchesService {
                     },
                 },
             },
-            {
-                $project: {
-                    messageMeta: 0,
-                },
-            },
+            { $project: { messageMeta: 0 } },
             { $sort: { updatedAt: -1 } },
+            ...paginationStages(options?.page, options?.limit),
         ];
         return this.matchModel.aggregate(pipeline).exec();
     }
-    mergeMatchStatus(current, incoming) {
-        if (incoming === enums_1.MatchStatus.Dismissed) {
-            return enums_1.MatchStatus.Dismissed;
+    validateTransition(current, incoming) {
+        if (current === incoming)
+            return incoming;
+        const allowed = VALID_TRANSITIONS[current];
+        if (!allowed || !allowed.includes(incoming)) {
+            throw new common_1.BadRequestException(`Invalid status transition: ${current} → ${incoming}`);
         }
-        if (current === enums_1.MatchStatus.ChatInitiated) {
-            return enums_1.MatchStatus.ChatInitiated;
-        }
-        if (incoming === enums_1.MatchStatus.ChatInitiated) {
-            return enums_1.MatchStatus.ChatInitiated;
-        }
-        if (current === enums_1.MatchStatus.LandlordQualified ||
-            incoming === enums_1.MatchStatus.LandlordQualified) {
-            return enums_1.MatchStatus.LandlordQualified;
-        }
-        return enums_1.MatchStatus.TenantLiked;
+        return incoming;
     }
 };
 exports.MatchesService = MatchesService;

@@ -4,6 +4,7 @@ import Image from "next/image";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -97,9 +98,14 @@ export default function ExploreCards() {
   const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
   const loadExploreListings = useAppStore((state) => state.loadExploreListings);
+  const loadRecycledIntoExplore = useAppStore(
+    (state) => state.loadRecycledIntoExplore
+  );
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
+  const [recycleAttempted, setRecycleAttempted] = useState(false);
+  const isRecyclingDeckRef = useRef(false);
 
   const controls = useAnimation();
 
@@ -118,6 +124,7 @@ export default function ExploreCards() {
     setDraftFilters(next);
     setFilters(next);
     setCardImageIndexes({});
+    setRecycleAttempted(false);
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
@@ -130,6 +137,7 @@ export default function ExploreCards() {
       toggles: { ...draftFilters.toggles },
     };
     setFilters(nextFilters);
+    setRecycleAttempted(false);
     resetExploreQueue();
     void loadExploreListings(nextFilters);
     setFiltersOpen(false);
@@ -142,6 +150,7 @@ export default function ExploreCards() {
     };
     setDraftFilters(next);
     setFilters(next);
+    setRecycleAttempted(false);
     resetExploreQueue();
     void loadExploreListings(next);
     setFiltersOpen(false);
@@ -160,6 +169,27 @@ export default function ExploreCards() {
       toggles: filters.toggles,
     });
   }, [loadExploreListings, filters]);
+
+  useEffect(() => {
+    if (exploreQueue.length !== 0) return;
+    if (isRecyclingDeckRef.current || recycleAttempted) return;
+
+    let active = true;
+    isRecyclingDeckRef.current = true;
+
+    void loadRecycledIntoExplore()
+      .then((restored) => {
+        if (!active) return;
+        if (!restored) setRecycleAttempted(true);
+      })
+      .finally(() => {
+        if (active) isRecyclingDeckRef.current = false;
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [exploreQueue.length, recycleAttempted, loadRecycledIntoExplore]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (isSwipeAnimating || visibleCards.length === 0) return;
@@ -352,7 +382,7 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {exploreQueue.length === 0 && (
+        {exploreQueue.length === 0 && recycleAttempted && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>

@@ -34,13 +34,21 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         }
         try {
             const user = await this.usersService.findById(userId);
+            if (user.isSuspended) {
+                throw new common_1.UnauthorizedException("Account suspended");
+            }
+            if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+                throw new common_1.UnauthorizedException("Token revoked");
+            }
             return {
                 sub: user.id,
                 email: user.email,
                 role: user.role,
             };
         }
-        catch {
+        catch (error) {
+            if (error instanceof common_1.UnauthorizedException)
+                throw error;
             throw new common_1.UnauthorizedException("Account no longer exists");
         }
     }

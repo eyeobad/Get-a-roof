@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VehiclePreference = exports.RouteAccessStatus = exports.MatchStatus = exports.PropertyType = exports.ListingIntent = exports.PropertyStatus = exports.VerificationStatus = exports.UserRole = void 0;
+exports.VehiclePreference = exports.RouteAccessStatus = exports.DismissReason = exports.MatchStatus = exports.PropertyType = exports.ListingIntent = exports.PropertyStatus = exports.VerificationStatus = exports.UserRole = void 0;
 var UserRole;
 (function (UserRole) {
     UserRole["Tenant"] = "Tenant";
@@ -51,6 +51,11 @@ var MatchStatus;
     MatchStatus["ChatInitiated"] = "ChatInitiated";
     MatchStatus["Dismissed"] = "Dismissed";
 })(MatchStatus || (exports.MatchStatus = MatchStatus = {}));
+var DismissReason;
+(function (DismissReason) {
+    DismissReason["Soft"] = "Soft";
+    DismissReason["Hard"] = "Hard";
+})(DismissReason || (exports.DismissReason = DismissReason = {}));
 var RouteAccessStatus;
 (function (RouteAccessStatus) {
     RouteAccessStatus["None"] = "None";

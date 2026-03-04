@@ -46,9 +46,7 @@ let UsersController = class UsersController {
         }
         dto.role =
             requestedRole === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant;
-        if (dto.role === enums_1.UserRole.Landlord) {
-            await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
-        }
+        await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
         return this.usersService.createUser(dto);
     }
     findOne(id, req) {

@@ -92,7 +92,10 @@ let UsersService = class UsersService {
     async assertRecaptchaToken(token) {
         const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
         const minScore = Number(process.env.RECAPTCHA_MIN_SCORE ?? "0.5");
-        const expectedAction = process.env.RECAPTCHA_EXPECTED_ACTION?.trim() || "landlord_signup";
+        const expectedActions = new Set((process.env.RECAPTCHA_EXPECTED_ACTION?.trim() || "landlord_signup,tenant_signup")
+            .split(",")
+            .map((a) => a.trim())
+            .filter(Boolean));
         if (!secret) {
             throw new common_1.ServiceUnavailableException("reCAPTCHA is not configured");
         }
@@ -116,8 +119,8 @@ let UsersService = class UsersService {
             throw new common_1.BadRequestException("Invalid reCAPTCHA verification");
         }
         if (typeof result.action === "string" &&
-            expectedAction &&
-            result.action !== expectedAction) {
+            expectedActions.size > 0 &&
+            !expectedActions.has(result.action)) {
             throw new common_1.BadRequestException("Invalid reCAPTCHA action");
         }
         if (typeof result.score === "number" && result.score < minScore) {

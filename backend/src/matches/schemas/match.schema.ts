@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument, Types } from "mongoose";
-import { MatchStatus, RouteAccessStatus } from "../../common/enums";
+import { DismissReason, MatchStatus, RouteAccessStatus } from "../../common/enums";
 
 export type MatchDocument = HydratedDocument<Match>;
 
@@ -24,6 +24,15 @@ export class Match {
   @Prop()
   apartmentPreferenceMatchPercentage?: number;
 
+  @Prop()
+  locationScore?: number;
+
+  @Prop()
+  amenityScore?: number;
+
+  @Prop()
+  affordabilityScore?: number;
+
   @Prop({ default: false })
   tenantLiked?: boolean;
 
@@ -32,6 +41,15 @@ export class Match {
 
   @Prop()
   landlordSeenAt?: Date;
+
+  @Prop()
+  dismissedAt?: Date;
+
+  @Prop({ type: String, enum: DismissReason })
+  dismissReason?: DismissReason;
+
+  @Prop({ default: 0 })
+  recycleCount?: number;
 
   @Prop({
     type: String,
@@ -57,6 +75,7 @@ export class Match {
 }
 
 export const MatchSchema = SchemaFactory.createForClass(Match);
+MatchSchema.index({ tenantId: 1, propertyId: 1 }, { unique: true });
 MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
-MatchSchema.index({ propertyId: 1, tenantId: 1 });
+MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });

@@ -79,6 +79,7 @@ let AuthController = class AuthController {
 exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)("login"),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [login_dto_1.LoginDto]),
@@ -94,6 +95,7 @@ __decorate([
 ], AuthController.prototype, "google", null);
 __decorate([
     (0, common_1.Post)("send-email-otp"),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -103,6 +105,7 @@ __decorate([
 ], AuthController.prototype, "sendEmailOtp", null);
 __decorate([
     (0, common_1.Post)("verification/send-email-otp"),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [send_otp_dto_1.SendOtpDto]),
@@ -110,6 +113,7 @@ __decorate([
 ], AuthController.prototype, "sendEmailOtpForVerification", null);
 __decorate([
     (0, common_1.Post)("send-phone-otp"),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -144,6 +148,7 @@ __decorate([
 ], AuthController.prototype, "verifyPhoneOtp", null);
 __decorate([
     (0, common_1.Post)("request-password-reset"),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [request_password_reset_dto_1.RequestPasswordResetDto]),
@@ -151,6 +156,7 @@ __decorate([
 ], AuthController.prototype, "requestPasswordReset", null);
 __decorate([
     (0, common_1.Post)("reset-password"),
+    (0, throttler_1.Throttle)({ default: { limit: 5, ttl: 60_000 } }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [reset_password_dto_1.ResetPasswordDto]),

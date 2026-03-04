@@ -270,12 +270,25 @@ let PropertiesService = class PropertiesService {
                 monthlyPrice: plain.monthlyPrice,
                 petFriendly: plain.petFriendly,
                 landlordRequirements: plain.landlordRequirements,
+                amenities: plain.amenities,
+                lat: plain.address?.lat,
+                lng: plain.address?.lng,
             };
-            const match = tenantPreferences
-                ? (0, match_utils_1.computeMatchScore)(tenantPreferences, matchInput)
+            const tenantInput = tenantPreferences
+                ? {
+                    ...tenantPreferences,
+                    lat: baseCoords?.lat ?? tenantPreferences.lat,
+                    lng: baseCoords?.lng ?? tenantPreferences.lng,
+                }
+                : undefined;
+            const match = tenantInput
+                ? (0, match_utils_1.computeMatchScore)(tenantInput, matchInput)
                 : {
                     preferencesMatchPercentage: 0,
                     apartmentPreferenceMatchPercentage: 0,
+                    locationScore: 0,
+                    amenityScore: 0,
+                    affordabilityScore: 0,
                     matchScore: 0,
                 };
             let distanceKm;
@@ -308,17 +321,12 @@ let PropertiesService = class PropertiesService {
         return filtered;
     }
     async getTenantMatchPropertyIds(tenantId, includeDismissed) {
-        if (!tenantId) {
+        if (!tenantId || !mongoose_2.Types.ObjectId.isValid(tenantId)) {
             return [];
         }
-        const filter = {};
-        if (mongoose_2.Types.ObjectId.isValid(tenantId)) {
-            const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
-            filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
-        }
-        else {
-            filter.tenantId = tenantId;
-        }
+        const filter = {
+            tenantId: new mongoose_2.Types.ObjectId(tenantId),
+        };
         if (!includeDismissed) {
             filter.status = { $ne: enums_1.MatchStatus.Dismissed };
         }
@@ -326,28 +334,22 @@ let PropertiesService = class PropertiesService {
     }
     async getTenantRouteAccessMap(tenantId, propertyIds) {
         const map = new Map();
-        if (!tenantId || !propertyIds.length)
+        if (!tenantId || !mongoose_2.Types.ObjectId.isValid(tenantId) || !propertyIds.length)
             return map;
-        const normalizedPropertyIds = propertyIds
-            .map((id) => id?.toString?.() ?? String(id))
+        const oids = propertyIds
+            .map((id) => {
+            const s = id?.toString?.() ?? String(id);
+            return mongoose_2.Types.ObjectId.isValid(s) ? new mongoose_2.Types.ObjectId(s) : null;
+        })
             .filter(Boolean);
-        if (!normalizedPropertyIds.length)
+        if (!oids.length)
             return map;
-        const filter = {
-            status: { $ne: enums_1.MatchStatus.Dismissed },
-            $expr: {
-                $in: [{ $toString: "$propertyId" }, normalizedPropertyIds],
-            },
-        };
-        if (mongoose_2.Types.ObjectId.isValid(tenantId)) {
-            const tenantObjectId = new mongoose_2.Types.ObjectId(tenantId);
-            filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
-        }
-        else {
-            filter.tenantId = tenantId;
-        }
         const matches = await this.matchModel
-            .find(filter)
+            .find({
+            tenantId: new mongoose_2.Types.ObjectId(tenantId),
+            propertyId: { $in: oids },
+            status: { $ne: enums_1.MatchStatus.Dismissed },
+        })
             .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
             .lean()
             .exec();

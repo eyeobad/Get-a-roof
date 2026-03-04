@@ -40,7 +40,7 @@ export class PropertiesService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly usersService: UsersService,
     private readonly appwriteStorage: AppwriteStorageService
-  ) {}
+  ) { }
 
   async createProperty(dto: CreatePropertyDto) {
     if (!dto.landlordId || !Types.ObjectId.isValid(dto.landlordId)) {
@@ -328,15 +328,29 @@ export class PropertiesService {
         monthlyPrice: plain.monthlyPrice,
         petFriendly: plain.petFriendly,
         landlordRequirements: plain.landlordRequirements,
+        amenities: plain.amenities,
+        lat: plain.address?.lat,
+        lng: plain.address?.lng,
       };
 
-      const match = tenantPreferences
-        ? computeMatchScore(tenantPreferences, matchInput)
+      const tenantInput = tenantPreferences
+        ? {
+          ...tenantPreferences,
+          lat: baseCoords?.lat ?? tenantPreferences.lat,
+          lng: baseCoords?.lng ?? tenantPreferences.lng,
+        }
+        : undefined;
+
+      const match = tenantInput
+        ? computeMatchScore(tenantInput, matchInput)
         : {
-            preferencesMatchPercentage: 0,
-            apartmentPreferenceMatchPercentage: 0,
-            matchScore: 0,
-          };
+          preferencesMatchPercentage: 0,
+          apartmentPreferenceMatchPercentage: 0,
+          locationScore: 0,
+          amenityScore: 0,
+          affordabilityScore: 0,
+          matchScore: 0,
+        };
 
       let distanceKm: number | undefined;
       if (
@@ -382,16 +396,12 @@ export class PropertiesService {
   }
 
   private async getTenantMatchPropertyIds(tenantId?: string, includeDismissed?: boolean) {
-    if (!tenantId) {
+    if (!tenantId || !Types.ObjectId.isValid(tenantId)) {
       return [];
     }
-    const filter: Record<string, unknown> = {};
-    if (Types.ObjectId.isValid(tenantId)) {
-      const tenantObjectId = new Types.ObjectId(tenantId);
-      filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
-    } else {
-      filter.tenantId = tenantId;
-    }
+    const filter: Record<string, unknown> = {
+      tenantId: new Types.ObjectId(tenantId),
+    };
     if (!includeDismissed) {
       filter.status = { $ne: MatchStatus.Dismissed };
     }
@@ -411,28 +421,22 @@ export class PropertiesService {
         routeAccessExpiresAt?: Date;
       }
     >();
-    if (!tenantId || !propertyIds.length) return map;
+    if (!tenantId || !Types.ObjectId.isValid(tenantId) || !propertyIds.length) return map;
 
-    const normalizedPropertyIds = propertyIds
-      .map((id) => id?.toString?.() ?? String(id))
-      .filter(Boolean);
-    if (!normalizedPropertyIds.length) return map;
-
-    const filter: Record<string, unknown> = {
-      status: { $ne: MatchStatus.Dismissed },
-      $expr: {
-        $in: [{ $toString: "$propertyId" }, normalizedPropertyIds],
-      },
-    };
-    if (Types.ObjectId.isValid(tenantId)) {
-      const tenantObjectId = new Types.ObjectId(tenantId);
-      filter.$or = [{ tenantId }, { tenantId: tenantObjectId }];
-    } else {
-      filter.tenantId = tenantId;
-    }
+    const oids = propertyIds
+      .map((id) => {
+        const s = id?.toString?.() ?? String(id);
+        return Types.ObjectId.isValid(s) ? new Types.ObjectId(s) : null;
+      })
+      .filter(Boolean) as Types.ObjectId[];
+    if (!oids.length) return map;
 
     const matches = await this.matchModel
-      .find(filter)
+      .find({
+        tenantId: new Types.ObjectId(tenantId),
+        propertyId: { $in: oids },
+        status: { $ne: MatchStatus.Dismissed },
+      })
       .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
       .lean()
       .exec();

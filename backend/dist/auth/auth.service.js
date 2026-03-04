@@ -226,6 +226,7 @@ let AuthService = AuthService_1 = class AuthService {
             sub: user.id,
             email: user.email,
             role: user.role,
+            tv: user.tokenVersion ?? 0,
         };
         const accessToken = this.jwtService.sign(payload);
         const { loginCredentials, emailOtp, emailOtpHash, emailOtpExpiresAt, emailOtpAttempts, phoneOtp, phoneOtpHash, phoneOtpExpiresAt, phoneOtpAttempts, passwordResetToken, passwordResetExpiresAt, verificationDetails, ...safeUser } = user.toObject();

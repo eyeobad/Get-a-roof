@@ -41,6 +41,18 @@ __decorate([
     __metadata("design:type", Number)
 ], Match.prototype, "apartmentPreferenceMatchPercentage", void 0);
 __decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Match.prototype, "locationScore", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Match.prototype, "amenityScore", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Match.prototype, "affordabilityScore", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Match.prototype, "tenantLiked", void 0);
@@ -52,6 +64,18 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], Match.prototype, "landlordSeenAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Match.prototype, "dismissedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: String, enum: enums_1.DismissReason }),
+    __metadata("design:type", String)
+], Match.prototype, "dismissReason", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Match.prototype, "recycleCount", void 0);
 __decorate([
     (0, mongoose_1.Prop)({
         type: String,
@@ -84,6 +108,7 @@ exports.Match = Match = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Match);
 exports.MatchSchema = mongoose_1.SchemaFactory.createForClass(Match);
+exports.MatchSchema.index({ tenantId: 1, propertyId: 1 }, { unique: true });
 exports.MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 exports.MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
-exports.MatchSchema.index({ propertyId: 1, tenantId: 1 });
+exports.MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });
