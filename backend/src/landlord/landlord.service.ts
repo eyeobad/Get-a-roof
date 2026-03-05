@@ -244,9 +244,12 @@ export class LandlordService {
       return [userId];
     }
 
-    const orgAgentIds = ((user as any)?.orgProfile?.agentIds ?? []).map((id: any) =>
-      id.toString()
-    );
+    const agents = await this.usersService.getOrgAgents(userId);
+    const orgAgentIds = agents
+      .map((agent) => (agent as any)?.id ?? (agent as any)?._id)
+      .map((id) => (id ? String(id) : ""))
+      .filter(Boolean);
+
     return [userId, ...orgAgentIds];
   }
 

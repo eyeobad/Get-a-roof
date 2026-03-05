@@ -161,7 +161,11 @@ let LandlordService = class LandlordService {
         if (user.role !== enums_1.UserRole.Organisation) {
             return [userId];
         }
-        const orgAgentIds = (user?.orgProfile?.agentIds ?? []).map((id) => id.toString());
+        const agents = await this.usersService.getOrgAgents(userId);
+        const orgAgentIds = agents
+            .map((agent) => agent?.id ?? agent?._id)
+            .map((id) => (id ? String(id) : ""))
+            .filter(Boolean);
         return [userId, ...orgAgentIds];
     }
     mapPropertySummary(property, matchCount, newCount) {

@@ -615,12 +615,24 @@ export class UsersService {
       throw new ForbiddenException("Not an organisation");
     }
 
-    const agentIds = org.orgProfile?.agentIds ?? [];
-    if (agentIds.length === 0) return [];
-
-    const agents = await this.userModel
-      .find({ _id: { $in: agentIds } })
+    const indexedAgentIds = (org.orgProfile?.agentIds ?? []).map((id) =>
+      id.toString()
+    );
+    const linkedAgents = await this.userModel
+      .find({ agentOrgId: new Types.ObjectId(orgId) })
       .exec();
+
+    const linkedIdSet = new Set(linkedAgents.map((agent) => agent.id));
+    const missingIndexedIds = indexedAgentIds.filter((id) => !linkedIdSet.has(id));
+    let indexedAgents = [] as UserDocument[];
+    if (missingIndexedIds.length) {
+      indexedAgents = await this.userModel
+        .find({ _id: { $in: missingIndexedIds } })
+        .exec();
+    }
+
+    const agents = [...linkedAgents, ...indexedAgents];
+    if (!agents.length) return [];
 
     return agents.map((agent) => this.sanitizeUser(agent));
   }
