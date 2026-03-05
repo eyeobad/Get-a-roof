@@ -3,6 +3,7 @@ import { PropertiesService } from "../properties/properties.service";
 import { MatchesService } from "../matches/matches.service";
 import { UsersService } from "../users/users.service";
 import { PropertyDocument } from "../properties/schemas/property.schema";
+import { UserRole } from "../common/enums";
 
 @Injectable()
 export class LandlordService {
@@ -16,10 +17,13 @@ export class LandlordService {
     landlordId: string,
     options?: { q?: string; status?: string; sort?: string }
   ) {
-    const properties = await this.propertiesService.getLandlordProperties(
-      landlordId,
-      options
+    const memberIds = await this.getOrgMemberIds(landlordId);
+    const groupedProperties = await Promise.all(
+      memberIds.map((memberId) =>
+        this.propertiesService.getLandlordProperties(memberId, options)
+      )
     );
+    const properties = groupedProperties.flat();
     const propertyIds = properties.map((property) => property.id);
     const counts = await this.matchesService.getMatchCountsByPropertyIds(
       propertyIds
@@ -54,10 +58,13 @@ export class LandlordService {
     landlordId: string,
     options?: { q?: string; status?: string; sort?: string }
   ) {
-    const properties = await this.propertiesService.getLandlordProperties(
-      landlordId,
-      options
+    const memberIds = await this.getOrgMemberIds(landlordId);
+    const groupedProperties = await Promise.all(
+      memberIds.map((memberId) =>
+        this.propertiesService.getLandlordProperties(memberId, options)
+      )
     );
+    const properties = groupedProperties.flat();
     const propertyIds = properties.map((property) => property.id);
     if (!propertyIds.length) {
       return [];
@@ -100,10 +107,13 @@ export class LandlordService {
   }
 
   async getTenantProfile(landlordId: string, tenantId: string) {
-    const properties = await this.propertiesService.getLandlordProperties(
-      landlordId
+    const memberIds = await this.getOrgMemberIds(landlordId);
+    const groupedProperties = await Promise.all(
+      memberIds.map((memberId) =>
+        this.propertiesService.getLandlordProperties(memberId)
+      )
     );
-    const propertyIds = properties.map((property) => property.id);
+    const propertyIds = groupedProperties.flat().map((property) => property.id);
     const hasMatch = await this.matchesService.landlordHasTenantMatch(
       propertyIds,
       tenantId
@@ -125,11 +135,119 @@ export class LandlordService {
     return this.propertiesService.deletePropertyForLandlord(landlordId, propertyId);
   }
 
+  async getOrgStats(orgId: string) {
+    const org = await this.usersService.findById(orgId);
+    const agentIds: string[] =
+      (org as any)?.orgProfile?.agentIds?.map((id: any) => id.toString()) ?? [];
+
+    const allMemberIds = [orgId, ...agentIds];
+
+    const agents = agentIds.length
+      ? await Promise.all(
+          agentIds.map(async (id) => {
+            try {
+              const agent = await this.usersService.findById(id);
+              return {
+                agentId: id,
+                name:
+                  [agent.firstName, agent.lastName].filter(Boolean).join(" ") ||
+                  agent.email ||
+                  "Agent",
+                email: agent.email ?? "",
+              };
+            } catch {
+              return { agentId: id, name: "Unknown", email: "" };
+            }
+          })
+        )
+      : [];
+
+    const listingsByMember = await Promise.all(
+      allMemberIds.map(async (memberId) => {
+        const props = await this.propertiesService.getLandlordProperties(memberId);
+        return { memberId, count: props.length };
+      })
+    );
+
+    const totalListings = listingsByMember.reduce((sum, m) => sum + m.count, 0);
+
+    const allProps = await Promise.all(
+      allMemberIds.map((id) => this.propertiesService.getLandlordProperties(id))
+    );
+    const allPropertyIds = allProps
+      .flat()
+      .map((p: any) => p.id ?? p._id?.toString())
+      .filter(Boolean);
+
+    const totalMatchCounts = allPropertyIds.length
+      ? await this.matchesService.getMatchCountsByPropertyIds(allPropertyIds)
+      : [];
+    const totalMatches = totalMatchCounts.reduce(
+      (sum: number, item: any) => sum + (item.count ?? 0),
+      0
+    );
+
+    const listingsByAgent = agents.map((agent) => {
+      const entry = listingsByMember.find((m) => m.memberId === agent.agentId);
+      return { ...agent, count: entry?.count ?? 0 };
+    });
+
+    const now = new Date();
+    const matchesByMonth: { month: string; count: number }[] = [];
+    const monthKeyToIndex = new Map<string, number>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleString("en", { month: "short" });
+      monthKeyToIndex.set(key, matchesByMonth.length);
+      matchesByMonth.push({ month: label, count: 0 });
+    }
+
+    if (allPropertyIds.length) {
+      const grouped = await this.matchesService.getMatchesByMonthForPropertyIds(
+        allPropertyIds,
+        6
+      );
+      for (const row of grouped) {
+        const index = monthKeyToIndex.get(row.monthKey);
+        if (index === undefined) continue;
+        matchesByMonth[index].count = row.count;
+      }
+    }
+
+    return {
+      totalListings,
+      totalMatches,
+      activeAgents: agentIds.length,
+      listingsByAgent,
+      matchesByMonth,
+      ownerListingCount:
+        listingsByMember.find((m) => m.memberId === orgId)?.count ?? 0,
+    };
+  }
+
   private async assertPropertyOwnership(landlordId: string, propertyId: string) {
     const property = await this.propertiesService.getProperty(propertyId);
-    if (property.landlordId.toString() !== landlordId) {
+    if (property.landlordId.toString() === landlordId) {
+      return;
+    }
+
+    const memberIds = await this.getOrgMemberIds(landlordId);
+    if (!memberIds.includes(property.landlordId.toString())) {
       throw new ForbiddenException("Access denied");
     }
+  }
+
+  private async getOrgMemberIds(userId: string): Promise<string[]> {
+    const user = await this.usersService.findById(userId);
+    if (user.role !== UserRole.Organisation) {
+      return [userId];
+    }
+
+    const orgAgentIds = ((user as any)?.orgProfile?.agentIds ?? []).map((id: any) =>
+      id.toString()
+    );
+    return [userId, ...orgAgentIds];
   }
 
   private mapPropertySummary(
@@ -143,15 +261,10 @@ export class LandlordService {
       plain.address?.city,
       plain.address?.state,
     ].filter(Boolean);
-    const title =
-      addressParts.join(", ") ||
-      plain.neighborhood ||
-      "Untitled property";
+    const title = addressParts.join(", ") || plain.neighborhood || "Untitled property";
     const area =
       plain.neighborhood ||
-      [plain.address?.city, plain.address?.state]
-        .filter(Boolean)
-        .join(", ");
+      [plain.address?.city, plain.address?.state].filter(Boolean).join(", ");
 
     return {
       ...plain,

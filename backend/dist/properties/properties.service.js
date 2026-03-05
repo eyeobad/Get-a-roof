@@ -54,8 +54,8 @@ let PropertiesService = class PropertiesService {
             throw new common_1.BadRequestException("Invalid landlordId");
         }
         const landlord = await this.userModel.findById(dto.landlordId).select("role").lean();
-        if (!landlord || landlord.role !== enums_1.UserRole.Landlord) {
-            throw new common_1.BadRequestException("Property must be tied to a valid landlord account");
+        if (!landlord || (landlord.role !== enums_1.UserRole.Landlord && landlord.role !== enums_1.UserRole.Organisation)) {
+            throw new common_1.BadRequestException("Property must be tied to a valid landlord or organisation account");
         }
         const normalized = this.normalizePropertyPayload(dto);
         const created = new this.propertyModel(normalized);
@@ -392,7 +392,7 @@ let PropertiesService = class PropertiesService {
         if (!landlordIds.length)
             return [];
         const validLandlords = await this.userModel
-            .find({ _id: { $in: landlordIds }, role: enums_1.UserRole.Landlord })
+            .find({ _id: { $in: landlordIds }, role: { $in: [enums_1.UserRole.Landlord, enums_1.UserRole.Organisation] } })
             .select("_id")
             .lean();
         const validSet = new Set(validLandlords.map((user) => user._id.toString()));

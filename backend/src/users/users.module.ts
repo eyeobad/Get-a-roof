@@ -7,6 +7,7 @@ import { AppwriteModule } from "../appwrite/appwrite.module";
 import { Property, PropertySchema } from "../properties/schemas/property.schema";
 import { Match, MatchSchema } from "../matches/schemas/match.schema";
 import { Message, MessageSchema } from "../chat/schemas/message.schema";
+import { MailModule } from "../mail/mail.module";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { Message, MessageSchema } from "../chat/schemas/message.schema";
       { name: Message.name, schema: MessageSchema },
     ]),
     AppwriteModule,
+    MailModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

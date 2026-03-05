@@ -225,7 +225,7 @@ exports.PropertiesController = PropertiesController;
 __decorate([
     (0, common_1.Post)("upload-image"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord, enums_2.UserRole.Organisation),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("file", {
         storage: multer.memoryStorage(),
         limits: { fileSize: 10 * 1024 * 1024 },
@@ -239,7 +239,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)("upload-proof"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord, enums_2.UserRole.Organisation),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("file", {
         storage: multer.memoryStorage(),
         limits: { fileSize: 10 * 1024 * 1024 },
@@ -253,7 +253,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord, enums_2.UserRole.Organisation),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -263,7 +263,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_2.UserRole.Landlord, enums_2.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Req)()),

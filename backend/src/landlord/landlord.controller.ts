@@ -18,11 +18,24 @@ import { UserRole } from "../common/enums";
 
 @Controller("api/landlord")
 export class LandlordController {
-  constructor(private readonly landlordService: LandlordService) {}
+  constructor(private readonly landlordService: LandlordService) { }
+
+  @Get(":id/org-stats")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Organisation)
+  getOrgStats(
+    @Param("id") id: string,
+    @Req() req: Request & { user?: any },
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.landlordService.getOrgStats(id);
+  }
 
   @Get(":id/properties")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   getProperties(
     @Param("id") id: string,
     @Req() req: Request & { user?: any },
@@ -38,7 +51,7 @@ export class LandlordController {
 
   @Get(":id/properties/:propertyId/new-matches-count")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   getNewMatchesCount(
     @Param("id") id: string,
     @Param("propertyId") propertyId: string,
@@ -52,7 +65,7 @@ export class LandlordController {
 
   @Get(":id/properties-with-matches")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   getPropertiesWithMatches(
     @Param("id") id: string,
     @Req() req: Request & { user?: any },
@@ -68,7 +81,7 @@ export class LandlordController {
 
   @Get(":id/properties/:propertyId/matches")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   getPropertyMatches(
     @Param("id") id: string,
     @Param("propertyId") propertyId: string,
@@ -82,7 +95,7 @@ export class LandlordController {
 
   @Patch(":id/properties/:propertyId/mark-seen")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   markPropertyMatchesSeen(
     @Param("id") id: string,
     @Param("propertyId") propertyId: string,
@@ -96,7 +109,7 @@ export class LandlordController {
 
   @Delete(":id/properties/:propertyId")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   deleteProperty(
     @Param("id") id: string,
     @Param("propertyId") propertyId: string,
@@ -110,7 +123,7 @@ export class LandlordController {
 
   @Get(":id/tenants/:tenantId")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   getTenantProfile(
     @Param("id") id: string,
     @Param("tenantId") tenantId: string,

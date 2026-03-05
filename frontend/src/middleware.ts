@@ -7,6 +7,8 @@ const PUBLIC_ROUTES = [
   "/admin/login",
   "/tenant-signup",
   "/landlord-signup",
+  "/org-signup",
+  "/agent-invite",
   "/create-account",
   "/auth",
 ];
@@ -34,7 +36,7 @@ const TENANT_ONLY = [
   "/profile",
   "/property-details",
   "/tenant-onboarding",
-  
+
 ];
 
 const ADMIN_ONLY = ["/admin"];
@@ -88,7 +90,7 @@ async function handleRoleRouting(request: NextRequest, token: string) {
     return response;
   }
 
-  const isLandlord = role === "landlord";
+  const isLandlord = role === "landlord" || role === "organisation";
   const isTenant = role === "tenant";
   const isAdmin = role === "admin";
   const isLandlordRoute = LANDLORD_ONLY.some(
@@ -148,6 +150,7 @@ function extractRole(rawRole: unknown) {
     .filter(Boolean);
   if (normalized.includes("admin")) return "admin";
   if (normalized.includes("landlord")) return "landlord";
+  if (normalized.includes("organisation")) return "organisation";
   if (normalized.includes("tenant")) return "tenant";
   return null;
 }

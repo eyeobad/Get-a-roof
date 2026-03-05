@@ -139,6 +139,28 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Object }),
     __metadata("design:type", Object)
 ], Preferences.prototype, "landlord", void 0);
+class OrgProfile {
+}
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], OrgProfile.prototype, "orgName", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], OrgProfile.prototype, "logoUrl", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], OrgProfile.prototype, "registrationNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], OrgProfile.prototype, "website", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [mongoose_2.Types.ObjectId], ref: "User", default: [] }),
+    __metadata("design:type", Array)
+], OrgProfile.prototype, "agentIds", void 0);
 let User = class User {
 };
 exports.User = User;
@@ -190,6 +212,26 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Preferences }),
     __metadata("design:type", Preferences)
 ], User.prototype, "preferences", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: OrgProfile }),
+    __metadata("design:type", OrgProfile)
+], User.prototype, "orgProfile", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: "User" }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], User.prototype, "agentOrgId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], User.prototype, "agentInviteTokenHash", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ lowercase: true, trim: true }),
+    __metadata("design:type", String)
+], User.prototype, "agentInviteEmail", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], User.prototype, "agentInviteTokenExpiresAt", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)

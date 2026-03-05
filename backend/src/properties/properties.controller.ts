@@ -45,20 +45,20 @@ const proofMimeTypes = new Set([
 
 const createMimeTypeFilter =
   (allowedTypes: Set<string>) =>
-  (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
-    if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
-      return cb(new BadRequestException("Unsupported file type"));
-    }
-    return cb(null, true);
-  };
+    (_req: Request, file: express.Multer.File, cb: multer.FileFilterCallback) => {
+      if (!file?.mimetype || !allowedTypes.has(file.mimetype)) {
+        return cb(new BadRequestException("Unsupported file type"));
+      }
+      return cb(null, true);
+    };
 
 @Controller("api/properties")
 export class PropertiesController {
-  constructor(private readonly propertiesService: PropertiesService) {}
+  constructor(private readonly propertiesService: PropertiesService) { }
 
   @Post("upload-image")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: multer.memoryStorage(),
@@ -72,7 +72,7 @@ export class PropertiesController {
 
   @Post("upload-proof")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   @UseInterceptors(
     FileInterceptor("file", {
       storage: multer.memoryStorage(),
@@ -86,7 +86,7 @@ export class PropertiesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   create(@Body() dto: CreatePropertyDto, @Req() req: Request & { user?: any }) {
     dto.landlordId = req.user?.sub;
     return this.propertiesService.createProperty(dto);
@@ -94,7 +94,7 @@ export class PropertiesController {
 
   @Patch(":id")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   async update(
     @Param("id") id: string,
     @Body() dto: UpdatePropertyDto,

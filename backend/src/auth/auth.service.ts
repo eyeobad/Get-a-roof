@@ -287,12 +287,16 @@ export class AuthService {
   }
 
   private issueToken(user: any) {
-    const payload = {
+    const payload: Record<string, unknown> = {
       sub: user.id,
       email: user.email,
       role: user.role,
       tv: user.tokenVersion ?? 0,
     };
+
+    if (user.agentOrgId) {
+      payload.orgId = user.agentOrgId.toString();
+    }
 
     const accessToken = this.jwtService.sign(payload);
     const {

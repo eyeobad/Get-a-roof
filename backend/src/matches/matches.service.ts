@@ -187,7 +187,13 @@ export class MatchesService {
     const property = await this.propertiesService.getProperty(
       match.propertyId.toString()
     );
-    if (property.landlordId.toString() !== landlordId) {
+    const propLandlordId = property.landlordId.toString();
+    const isDirectOwner = propLandlordId === landlordId;
+    const isAgent = !isDirectOwner
+      ? await this.isOrgAgentOf(landlordId, propLandlordId)
+      : false;
+
+    if (!isDirectOwner && !isAgent) {
       throw new ForbiddenException("Access denied");
     }
 
@@ -196,6 +202,13 @@ export class MatchesService {
     }
     match.landlordSeenAt = new Date();
     return match.save();
+  }
+
+  /** Check if userId is an agent belonging to the org identified by orgOwnerId */
+  private async isOrgAgentOf(userId: string, orgOwnerId: string): Promise<boolean> {
+    const user = await this.usersService.findById(userId);
+    if (!user?.agentOrgId) return false;
+    return user.agentOrgId.toString() === orgOwnerId;
   }
 
   // -----------------------------------------------------------------------
@@ -398,6 +411,44 @@ export class MatchesService {
     ];
 
     return this.matchModel.aggregate(pipeline).exec();
+  }
+
+  async getMatchesByMonthForPropertyIds(
+    propertyIds: string[],
+    monthsBack = 6
+  ): Promise<Array<{ monthKey: string; count: number }>> {
+    if (!propertyIds.length) return [];
+
+    const oids = propertyIds.map(toObjectId);
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    start.setMonth(start.getMonth() - Math.max(0, monthsBack - 1));
+
+    const pipeline: PipelineStage[] = [
+      {
+        $match: {
+          propertyId: { $in: oids },
+          createdAt: { $gte: start },
+          status: { $ne: MatchStatus.Dismissed },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m", date: "$createdAt" },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ];
+
+    const rows = await this.matchModel.aggregate(pipeline).exec();
+    return rows.map((row: { _id: string; count: number }) => ({
+      monthKey: row._id,
+      count: row.count ?? 0,
+    }));
   }
 
   async findPropertyIdsWithMatches(landlordPropertyIds: string[]) {

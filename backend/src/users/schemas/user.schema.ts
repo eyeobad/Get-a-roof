@@ -106,6 +106,23 @@ class Preferences {
   landlord?: Record<string, unknown>;
 }
 
+class OrgProfile {
+  @Prop({ required: true })
+  orgName: string;
+
+  @Prop()
+  logoUrl?: string;
+
+  @Prop()
+  registrationNumber?: string;
+
+  @Prop()
+  website?: string;
+
+  @Prop({ type: [Types.ObjectId], ref: "User", default: [] })
+  agentIds?: Types.ObjectId[];
+}
+
 @Schema({ timestamps: true })
 export class User {
   @Prop({ type: String, enum: UserRole, default: UserRole.Unassigned })
@@ -143,6 +160,21 @@ export class User {
 
   @Prop({ type: Preferences })
   preferences?: Preferences;
+
+  @Prop({ type: OrgProfile })
+  orgProfile?: OrgProfile;
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  agentOrgId?: Types.ObjectId;
+
+  @Prop()
+  agentInviteTokenHash?: string;
+
+  @Prop({ lowercase: true, trim: true })
+  agentInviteEmail?: string;
+
+  @Prop()
+  agentInviteTokenExpiresAt?: Date;
 
   @Prop({ default: false })
   emailVerified: boolean;

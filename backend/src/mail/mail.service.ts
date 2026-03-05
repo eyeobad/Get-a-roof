@@ -134,4 +134,21 @@ export class MailService {
       html,
     });
   }
+
+  async sendAgentInvite(email: string, orgName: string, inviteUrl: string) {
+    const html = `
+      <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+        <p>Hi there,</p>
+        <p><strong>${orgName}</strong> has invited you to join their team on Get a Roof as an agent.</p>
+        <p>Click the link below to accept the invitation:</p>
+        <p><a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#0a44b8;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
+        <p>This invite link will expire in 72 hours.</p>
+      </div>
+    `;
+    await this.sendMail({
+      to: email,
+      subject: `Join ${orgName} on Get a Roof`,
+      html,
+    });
+  }
 }

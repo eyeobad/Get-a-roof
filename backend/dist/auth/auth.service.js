@@ -228,6 +228,9 @@ let AuthService = AuthService_1 = class AuthService {
             role: user.role,
             tv: user.tokenVersion ?? 0,
         };
+        if (user.agentOrgId) {
+            payload.orgId = user.agentOrgId.toString();
+        }
         const accessToken = this.jwtService.sign(payload);
         const { loginCredentials, emailOtp, emailOtpHash, emailOtpExpiresAt, emailOtpAttempts, phoneOtp, phoneOtpHash, phoneOtpExpiresAt, phoneOtpAttempts, passwordResetToken, passwordResetExpiresAt, verificationDetails, ...safeUser } = user.toObject();
         return {

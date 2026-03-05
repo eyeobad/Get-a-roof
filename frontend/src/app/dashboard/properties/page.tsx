@@ -1,13 +1,26 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 import { showToast } from "@/lib/alerts";
 import { useToastError } from "@/hooks/useToastError";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+} from "chart.js";
+import { Doughnut, Bar } from "react-chartjs-2";
+
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -17,6 +30,7 @@ type PropertyStatus = "Listed" | "Draft";
 
 type Property = {
   id: string;
+  landlordId?: string;
   status: PropertyStatus;
   title: string;
   price: number;
@@ -73,6 +87,7 @@ function PropertyCard({
   onContinue,
   onDelete,
   isDeleting,
+  agentName,
 }: {
   p: Property;
   onEdit: (id: string) => void;
@@ -80,6 +95,7 @@ function PropertyCard({
   onContinue: (id: string) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
+  agentName?: string;
 }) {
   const isDraft = p.status === "Draft";
   const matchesLabel =
@@ -120,6 +136,11 @@ function PropertyCard({
           <h2 className="text-[18px] font-bold text-gray-900 leading-tight">
             {p.title}
           </h2>
+          {agentName ? (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#0a44b8]">
+              {agentName}
+            </p>
+          ) : null}
 
           <div className="flex items-baseline gap-1">
             <span className="text-[20px] font-extrabold text-[#0a44b8]">
@@ -183,7 +204,7 @@ function PropertyCard({
   );
 }
 
- 
+
 function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -228,6 +249,10 @@ function LandlordDashboardContent() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteAt, setPendingDeleteAt] = useState(0);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
+  const [showAgents, setShowAgents] = useState(false);
+  const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
   useToastError(error);
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
@@ -238,11 +263,25 @@ function LandlordDashboardContent() {
   const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
   const deleteLandlordProperty = useAppStore((state) => state.deleteLandlordProperty);
+  const orgAgents = useAppStore((state) => state.orgAgents);
+  const inviteAgent = useAppStore((state) => state.inviteAgent);
+  const loadOrgAgents = useAppStore((state) => state.loadOrgAgents);
+  const removeAgent = useAppStore((state) => state.removeAgent);
+  const orgStats = useAppStore((state) => state.orgStats);
+  const loadOrgStats = useAppStore((state) => state.loadOrgStats);
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+
+  const isOrg = user?.role === "Organisation";
+  const orgName = (user as Record<string, unknown> | null)?.orgProfile
+    ? ((user as Record<string, unknown>).orgProfile as { orgName?: string })?.orgName
+    : undefined;
+  const userId = useAppStore((state) => state.userId);
 
   const mappedProperties: Property[] = useMemo(
     () =>
       landlordProperties.map((property) => ({
         id: property.id,
+        landlordId: property.landlordId,
         status: (property.status as PropertyStatus) ?? "Draft",
         title: property.title ?? "Untitled property",
         price: property.price ?? 0,
@@ -255,13 +294,115 @@ function LandlordDashboardContent() {
     [landlordProperties]
   );
 
+  /* Memoized chart data to avoid Chart.js re-render loop */
+  const donutData = useMemo(() => {
+    if (!orgStats) return null;
+    return {
+      labels: [
+        orgName ?? "You",
+        ...orgStats.listingsByAgent.map((a) => a.name),
+      ],
+      datasets: [{
+        data: [
+          orgStats.ownerListingCount,
+          ...orgStats.listingsByAgent.map((a) => a.count),
+        ],
+        backgroundColor: ["#0a44b8", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"],
+        borderWidth: 2,
+        borderColor: "#f5f6f8",
+      }],
+    };
+  }, [orgStats, orgName]);
+
+  const barData = useMemo(() => {
+    if (!orgStats) return null;
+    return {
+      labels: orgStats.matchesByMonth.map((m) => m.month),
+      datasets: [{
+        label: "Matches",
+        data: orgStats.matchesByMonth.map((m) => m.count),
+        backgroundColor: "#0a44b8",
+        borderRadius: 8,
+        barThickness: 18,
+      }],
+    };
+  }, [orgStats]);
+
+  const agentNameById = useMemo(() => {
+    if (!isOrg || !orgStats) return new Map<string, string>();
+    const map = new Map<string, string>();
+    if (userId) map.set(userId, orgName ?? "You");
+    orgStats.listingsByAgent.forEach((agent) => {
+      map.set(agent.agentId, agent.name || agent.email || "Agent");
+    });
+    return map;
+  }, [isOrg, orgName, orgStats, userId]);
+
+  const agentListingCountById = useMemo(() => {
+    const map = new Map<string, number>();
+    orgStats?.listingsByAgent.forEach((agent) => {
+      map.set(agent.agentId, agent.count ?? 0);
+    });
+    return map;
+  }, [orgStats]);
+
+  const donutOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: false as const,
+      plugins: {
+        legend: {
+          position: "bottom" as const,
+          labels: { boxWidth: 12, font: { size: 11, weight: "bold" as const } },
+        },
+      },
+      cutout: "60%",
+    }),
+    []
+  );
+
+  const barOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false as const,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, font: { size: 11 } },
+          grid: { color: "#f0f0f0" },
+        },
+        x: {
+          ticks: { font: { size: 11, weight: "bold" as const } },
+          grid: { display: false },
+        },
+      },
+    }),
+    []
+  );
+
   useEffect(() => {
     if (!authToken) return;
     void loadLandlordProperties();
-    if (!user?.photoUrl) {
+  }, [authToken, loadLandlordProperties]);
+
+  useEffect(() => {
+    if (authToken && !user?.photoUrl) {
       void fetchUserProfile();
     }
-  }, [authToken, loadLandlordProperties, fetchUserProfile, user?.photoUrl]);
+  }, [authToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const orgStatsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!authToken || !isOrg || !userId) return;
+    void loadOrgAgents(userId);
+    if (!orgStatsLoadedRef.current) {
+      orgStatsLoadedRef.current = true;
+      void loadOrgStats(userId);
+    }
+  }, [authToken, isOrg, userId, loadOrgAgents, loadOrgStats]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -272,10 +413,16 @@ function LandlordDashboardContent() {
   }, [authToken, q, loadLandlordProperties]);
 
   const filtered = useMemo(() => {
+    let result = mappedProperties;
     const s = q.trim().toLowerCase();
-    if (!s) return mappedProperties;
-    return mappedProperties.filter((p) => p.title.toLowerCase().includes(s));
-  }, [q, mappedProperties]);
+    if (s) {
+      result = result.filter((p) => p.title.toLowerCase().includes(s));
+    }
+    if (isOrg && agentFilter !== "all") {
+      result = result.filter((p) => p.landlordId === agentFilter);
+    }
+    return result;
+  }, [agentFilter, isOrg, q, mappedProperties]);
 
   const openDraft = async (id: string) => {
     if (authToken) {
@@ -329,10 +476,27 @@ function LandlordDashboardContent() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#f5f6f8]/95 backdrop-blur-sm border-b border-gray-200 px-5 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-extrabold text-[#0a44b8] tracking-tight leading-none">
-            My Properties
-          </h1>
-          <p className="text-[18px] text-gray-600 font-medium mt-1">Dashboard</p>
+          {isOrg && orgName ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[24px] text-[#0a44b8]" style={solidIconStyle}>corporate_fare</span>
+                <h1 className="text-[28px] font-extrabold text-[#0a44b8] tracking-tight leading-none">
+                  {orgName}
+                </h1>
+              </div>
+              <p className="text-[14px] text-gray-500 font-medium mt-1 flex items-center gap-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">Organisation</span>
+                Dashboard
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-[28px] font-extrabold text-[#0a44b8] tracking-tight leading-none">
+                My Properties
+              </h1>
+              <p className="text-[18px] text-gray-600 font-medium mt-1">Dashboard</p>
+            </>
+          )}
         </div>
 
         <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 hover:ring-4 ring-[#0a44b8]/20 transition-all focus:outline-none focus:ring-4">
@@ -349,7 +513,61 @@ function LandlordDashboardContent() {
       </header>
 
       {/* Main */}
-      <main className="px-5 pt-6 flex flex-col gap-6 max-w-md mx-auto w-full">
+      <main className="px-5 pt-6 flex flex-col gap-6 max-w-md lg:max-w-6xl mx-auto w-full">
+
+        {/* ═══════════ ORG STATS & CHARTS ═══════════ */}
+        {isOrg && orgStats && (
+          <>
+            {/* Overview Cards */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Listings", value: orgStats.totalListings, icon: "home_work", color: "#0a44b8" },
+                { label: "Matches", value: orgStats.totalMatches, icon: "handshake", color: "#10b981" },
+                { label: "Agents", value: orgStats.activeAgents, icon: "group", color: "#6366f1" },
+              ].map((card) => (
+                <div key={card.label} className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4 flex flex-col items-center gap-2">
+                  <span className="material-symbols-outlined text-[28px]" style={{ ...solidIconStyle, color: card.color }}>
+                    {card.icon}
+                  </span>
+                  <span className="text-[26px] font-extrabold text-gray-900">{card.value}</span>
+                  <span className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">{card.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Donut — Listings per Member */}
+              <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4">
+                <h3 className="text-[14px] font-bold text-gray-700 mb-3">Listings by Member</h3>
+                {donutData && (orgStats.listingsByAgent.length > 0 || orgStats.ownerListingCount > 0) ? (
+                  <div className="w-full aspect-square max-w-[220px] lg:max-w-[320px] mx-auto">
+                    <Doughnut
+                      data={donutData}
+                      options={donutOptions}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-400 text-[13px] py-6">No listings yet</p>
+                )}
+              </div>
+
+              {/* Bar — Matches over 6 months */}
+              <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4">
+                <h3 className="text-[14px] font-bold text-gray-700 mb-3">Matches (6 months)</h3>
+                {barData && (
+                  <div className="h-[220px] lg:h-[280px]">
+                    <Bar
+                      data={barData}
+                      options={barOptions}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Search */}
         <div className="relative">
           <span
@@ -367,8 +585,141 @@ function LandlordDashboardContent() {
           />
         </div>
 
+        {/* Agent Management Panel (Org only) */}
+        {isOrg && (
+          <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAgents((prev) => !prev)}
+              className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[24px] text-[#0a44b8]" style={solidIconStyle}>group</span>
+                <span className="text-[18px] font-bold text-gray-900">Agents</span>
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[12px] font-bold bg-[#0a44b8]/10 text-[#0a44b8]">
+                  {orgAgents.length}
+                </span>
+              </div>
+              <span className="material-symbols-outlined text-gray-500 transition-transform" style={{ transform: showAgents ? 'rotate(180deg)' : undefined }}>
+                expand_more
+              </span>
+            </button>
+
+            {showAgents && (
+              <div className="px-5 pb-5 space-y-4">
+                {/* Invite Form */}
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    placeholder="Agent email address"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="flex-1 h-12 rounded-xl border border-gray-300 bg-white px-4 text-[16px] focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8]"
+                  />
+                  <button
+                    type="button"
+                    disabled={isInviting || !inviteEmail.trim()}
+                    onClick={async () => {
+                      if (!userId || !inviteEmail.trim()) return;
+                      setIsInviting(true);
+                      try {
+                        await inviteAgent(userId, inviteEmail.trim());
+                        showToast({ title: "Invite sent!", text: `Invitation sent to ${inviteEmail.trim()}`, variant: "success" });
+                        setInviteEmail("");
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : "Failed to send invite";
+                        showToast({ title: "Invite failed", text: msg, variant: "error" });
+                      } finally {
+                        setIsInviting(false);
+                      }
+                    }}
+                    className="h-12 px-5 rounded-xl bg-[#0a44b8] text-white font-bold text-[15px] hover:bg-[#082485] disabled:opacity-50 transition-colors flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">send</span>
+                    {isInviting ? "Sending..." : "Invite"}
+                  </button>
+                </div>
+
+                {/* Agent List */}
+                {orgAgents.length === 0 ? (
+                  <p className="text-center text-gray-500 text-[15px] py-4">
+                    No agents yet. Invite your team members above.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {orgAgents.map((agent) => {
+                      const agentId = (agent.id ?? agent._id) as string;
+                      return (
+                        <div
+                          key={agentId}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-[#0a44b8]/10 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-[20px] text-[#0a44b8]" style={solidIconStyle}>person</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[15px] font-semibold text-gray-900 truncate">
+                              {agent.firstName ?? ""} {agent.lastName ?? ""}
+                            </p>
+                            <p className="text-[13px] text-gray-500 truncate">{agent.email}</p>
+                          </div>
+                          <span className="inline-flex items-center justify-center rounded-full bg-[#0a44b8]/10 px-2.5 py-1 text-[11px] font-bold text-[#0a44b8]">
+                            {agentListingCountById.get(agentId) ?? 0} listings
+                          </span>
+                          <button
+                            type="button"
+                            disabled={removingAgentId === agentId}
+                            onClick={async () => {
+                              if (!userId) return;
+                              setRemovingAgentId(agentId);
+                              try {
+                                await removeAgent(userId, agentId);
+                                showToast({ title: "Agent removed", variant: "success" });
+                              } catch (err) {
+                                const msg = err instanceof Error ? err.message : "Failed";
+                                showToast({ title: msg, variant: "error" });
+                              } finally {
+                                setRemovingAgentId(null);
+                              }
+                            }}
+                            className="h-9 w-9 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            aria-label={`Remove ${agent.firstName ?? "agent"}`}
+                          >
+                            <span className="material-symbols-outlined text-[20px]" style={solidIconStyle}>person_remove</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Cards */}
         <div className="flex flex-col gap-6">
+          {isOrg ? (
+            <div className="flex items-center gap-3">
+              <label htmlFor="agent-filter" className="text-sm font-semibold text-gray-700">
+                Filter by agent
+              </label>
+              <select
+                id="agent-filter"
+                value={agentFilter}
+                onChange={(event) => setAgentFilter(event.target.value)}
+                className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:border-[#0a44b8] focus:outline-none"
+              >
+                <option value="all">All members</option>
+                {userId ? <option value={userId}>{orgName ?? "Owner"}</option> : null}
+                {orgStats?.listingsByAgent.map((agent) => (
+                  <option key={agent.agentId} value={agent.agentId}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {filtered.length ? (
             filtered.map((p) => (
               <PropertyCard
@@ -379,22 +730,23 @@ function LandlordDashboardContent() {
                 onContinue={onContinue}
                 onDelete={onDelete}
                 isDeleting={isDeletingId === p.id}
+                agentName={isOrg ? agentNameById.get(p.landlordId ?? "") : undefined}
               />
             ))
           ) : authToken ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 space-y-4">
               <p>No properties yet. Start by adding your first listing.</p>
-            <button
-              type="button"
-              onClick={goAddProperty}
-              className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
-            >
-              <span onClick={goAddProperty} className="cursor-pointer">
-                Add Property
-              </span>
-            </button>
-          </div>
-        ) : (
+              <button
+                type="button"
+                onClick={goAddProperty}
+                className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
+              >
+                <span onClick={goAddProperty} className="cursor-pointer">
+                  Add Property
+                </span>
+              </button>
+            </div>
+          ) : (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
               Sign in to load your properties.
             </div>

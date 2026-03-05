@@ -5,6 +5,7 @@ var UserRole;
 (function (UserRole) {
     UserRole["Tenant"] = "Tenant";
     UserRole["Landlord"] = "Landlord";
+    UserRole["Organisation"] = "Organisation";
     UserRole["Admin"] = "Admin";
     UserRole["Unassigned"] = "Unassigned";
 })(UserRole || (exports.UserRole = UserRole = {}));

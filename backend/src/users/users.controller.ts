@@ -19,10 +19,13 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import * as multer from "multer";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { CreateOrgDto } from "./dto/create-org.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { SavePropertyDto } from "./dto/save-property.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { Roles } from "../common/guards/roles.decorator";
 import { UserRole } from "../common/enums";
 
 const profileImageMimeTypes = new Set([
@@ -51,10 +54,76 @@ export class UsersController {
     if (requestedRole === UserRole.Admin || requestedRole === UserRole.Unassigned) {
       throw new ForbiddenException("Invalid role");
     }
+    if (requestedRole === UserRole.Organisation) {
+      throw new ForbiddenException("Use /api/users/org to register an organisation");
+    }
     dto.role =
       requestedRole === UserRole.Landlord ? UserRole.Landlord : UserRole.Tenant;
     await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
     return this.usersService.createUser(dto);
+  }
+
+  @Post("org")
+  async createOrg(@Body() dto: CreateOrgDto) {
+    return this.usersService.createOrganisation(dto);
+  }
+
+  @Post(":orgId/agents/invite")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Organisation)
+  async inviteAgent(
+    @Param("orgId") orgId: string,
+    @Body() body: { email: string },
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== orgId) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService.inviteAgent(orgId, body.email);
+  }
+
+  @Post("agents/accept-invite")
+  @UseGuards(JwtAuthGuard)
+  async acceptAgentInvite(
+    @Body() body: { token: string; orgId: string },
+    @Req() req: Request & { user?: any }
+  ) {
+    return this.usersService.acceptAgentInvite(
+      body.token,
+      body.orgId,
+      req.user?.sub
+    );
+  }
+
+  @Delete(":orgId/agents/:agentId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Organisation)
+  async removeAgent(
+    @Param("orgId") orgId: string,
+    @Param("agentId") agentId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    if (req.user?.sub !== orgId) {
+      throw new ForbiddenException("Access denied");
+    }
+    return this.usersService.removeAgent(orgId, agentId);
+  }
+
+  @Get(":orgId/agents")
+  @UseGuards(JwtAuthGuard)
+  async getOrgAgents(
+    @Param("orgId") orgId: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    // Allow org owner or any agent of the org
+    const callerIsOrg = req.user?.sub === orgId;
+    if (!callerIsOrg) {
+      const caller = await this.usersService.findById(req.user?.sub);
+      if (!caller.agentOrgId || caller.agentOrgId.toString() !== orgId) {
+        throw new ForbiddenException("Access denied");
+      }
+    }
+    return this.usersService.getOrgAgents(orgId);
   }
 
   @Get(":id")

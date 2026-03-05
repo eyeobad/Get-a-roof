@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var UsersService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
@@ -24,20 +25,24 @@ const match_schema_1 = require("../matches/schemas/match.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
 const enums_1 = require("../common/enums");
 const crypto_1 = require("crypto");
+const mail_service_1 = require("../mail/mail.service");
 const profileMimeTypes = new Set([
     "image/jpeg",
     "image/png",
     "image/webp",
     "image/gif",
 ]);
-let UsersService = class UsersService {
-    constructor(userModel, propertyModel, matchModel, messageModel, appwriteStorage) {
+let UsersService = UsersService_1 = class UsersService {
+    constructor(userModel, propertyModel, matchModel, messageModel, appwriteStorage, mailService) {
         this.userModel = userModel;
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.messageModel = messageModel;
         this.appwriteStorage = appwriteStorage;
+        this.mailService = mailService;
+        this.logger = new common_1.Logger(UsersService_1.name);
         this.signupVerificationTtlMs = 15 * 60 * 1000;
+        this.agentInviteTtlMs = 72 * 60 * 60 * 1000;
         this.signupVerificationSecret = process.env.SIGNUP_VERIFICATION_SECRET ||
             process.env.OTP_SECRET ||
             process.env.JWT_SECRET ||
@@ -71,9 +76,14 @@ let UsersService = class UsersService {
             ? await bcrypt.hash(dto.password, 10)
             : undefined;
         const { password, recaptchaToken: _recaptchaToken, ...rest } = dto;
+        const resolvedRole = dto.role === enums_1.UserRole.Landlord
+            ? enums_1.UserRole.Landlord
+            : dto.role === enums_1.UserRole.Organisation
+                ? enums_1.UserRole.Organisation
+                : enums_1.UserRole.Tenant;
         const created = new this.userModel({
             ...rest,
-            role: dto.role === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant,
+            role: resolvedRole,
             email,
             loginCredentials: {
                 passwordHash,
@@ -129,11 +139,16 @@ let UsersService = class UsersService {
     }
     async createOAuthUser(data) {
         const email = data.email.toLowerCase();
+        const resolvedRole = data.role === enums_1.UserRole.Landlord
+            ? enums_1.UserRole.Landlord
+            : data.role === enums_1.UserRole.Organisation
+                ? enums_1.UserRole.Organisation
+                : enums_1.UserRole.Tenant;
         const created = new this.userModel({
             email,
             firstName: data.firstName,
             lastName: data.lastName,
-            role: data.role === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant,
+            role: resolvedRole,
             loginCredentials: {
                 googleId: data.googleId,
             },
@@ -326,9 +341,174 @@ let UsersService = class UsersService {
             return false;
         return (0, crypto_1.timingSafeEqual)(left, right);
     }
+    async createOrganisation(dto) {
+        const email = dto.email.toLowerCase();
+        const existing = await this.userModel.findOne({ email }).exec();
+        if (existing) {
+            if (!existing.emailVerified) {
+                const challenge = await this.createSignupVerificationChallenge(existing);
+                return {
+                    status: "PENDING_VERIFICATION",
+                    userId: existing.id,
+                    email: existing.email,
+                    verificationToken: challenge.token,
+                    verificationTokenExpiresAt: challenge.expiresAt,
+                };
+            }
+            throw new common_1.ConflictException("Email already in use");
+        }
+        if (dto.phoneNumber) {
+            const existingPhone = await this.userModel
+                .findOne({ phoneNumber: dto.phoneNumber })
+                .exec();
+            if (existingPhone) {
+                throw new common_1.ConflictException("Phone number already in use");
+            }
+        }
+        const passwordHash = dto.password
+            ? await bcrypt.hash(dto.password, 10)
+            : undefined;
+        const { password, recaptchaToken: _recaptchaToken, orgName, registrationNumber, website, ...rest } = dto;
+        const created = new this.userModel({
+            ...rest,
+            role: enums_1.UserRole.Organisation,
+            email,
+            loginCredentials: { passwordHash },
+            orgProfile: {
+                orgName,
+                registrationNumber,
+                website,
+                agentIds: [],
+            },
+        });
+        const saved = await created.save();
+        const challenge = await this.createSignupVerificationChallenge(saved);
+        return {
+            status: "PENDING_VERIFICATION",
+            userId: saved.id,
+            email: saved.email,
+            verificationToken: challenge.token,
+            verificationTokenExpiresAt: challenge.expiresAt,
+        };
+    }
+    async inviteAgent(orgId, agentEmail) {
+        const org = await this.findById(orgId);
+        if (org.role !== enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("Only organisations can invite agents");
+        }
+        const email = agentEmail.toLowerCase();
+        const existing = await this.userModel.findOne({ email }).exec();
+        if (existing && existing.agentOrgId?.toString() === orgId) {
+            throw new common_1.ConflictException("This user is already an agent of your organisation");
+        }
+        const token = (0, crypto_1.randomBytes)(24).toString("base64url");
+        const expiresAt = new Date(Date.now() + this.agentInviteTtlMs);
+        const tokenHash = this.hashAgentInviteToken(token, orgId, email);
+        org.agentInviteTokenHash = tokenHash;
+        org.agentInviteEmail = email;
+        org.agentInviteTokenExpiresAt = expiresAt;
+        await org.save();
+        const orgName = org.orgProfile?.orgName ?? "Organisation";
+        const baseUrl = process.env.FRONTEND_URL?.trim() ||
+            process.env.APP_URL?.trim() ||
+            "http://localhost:3000";
+        const inviteUrl = `${baseUrl.replace(/\/$/, "")}/agent-invite?token=${encodeURIComponent(token)}&orgId=${encodeURIComponent(orgId)}&orgName=${encodeURIComponent(orgName)}`;
+        try {
+            await this.mailService.sendAgentInvite(email, orgName, inviteUrl);
+        }
+        catch (error) {
+            this.logger.error(`Failed to send agent invite to ${email}: ${error?.message ?? "unknown error"}`);
+            throw new common_1.ServiceUnavailableException("Unable to deliver invite email right now. Please try again shortly.");
+        }
+        return {
+            token,
+            inviteUrl,
+            email,
+            orgName,
+            expiresAt,
+            sent: true,
+        };
+    }
+    async acceptAgentInvite(token, orgId, agentUserId) {
+        const org = await this.findById(orgId);
+        if (org.role !== enums_1.UserRole.Organisation) {
+            throw new common_1.BadRequestException("Invalid invite");
+        }
+        const agent = await this.findById(agentUserId);
+        const email = agent.email.toLowerCase();
+        if (!org.agentInviteTokenHash) {
+            throw new common_1.BadRequestException("No pending invite");
+        }
+        if (org.agentInviteTokenExpiresAt &&
+            org.agentInviteTokenExpiresAt.getTime() < Date.now()) {
+            org.agentInviteTokenHash = undefined;
+            org.agentInviteEmail = undefined;
+            org.agentInviteTokenExpiresAt = undefined;
+            await org.save();
+            throw new common_1.BadRequestException("Invite expired");
+        }
+        if (org.agentInviteEmail && org.agentInviteEmail !== email) {
+            throw new common_1.ForbiddenException("This invite was sent to a different email. Sign in with the invited account and try again.");
+        }
+        const expected = this.hashAgentInviteToken(token, orgId, email);
+        if (!this.secureCompare(org.agentInviteTokenHash, expected)) {
+            throw new common_1.BadRequestException("Invalid invite token");
+        }
+        agent.agentOrgId = new mongoose_2.Types.ObjectId(orgId);
+        if (agent.role === enums_1.UserRole.Tenant || agent.role === enums_1.UserRole.Unassigned) {
+            agent.role = enums_1.UserRole.Landlord;
+        }
+        await agent.save();
+        const agentObjectId = new mongoose_2.Types.ObjectId(agentUserId);
+        const currentAgentIds = org.orgProfile?.agentIds ?? [];
+        if (!currentAgentIds.some((id) => id.toString() === agentUserId)) {
+            await this.userModel.findByIdAndUpdate(orgId, {
+                $addToSet: { "orgProfile.agentIds": agentObjectId },
+            });
+        }
+        org.agentInviteTokenHash = undefined;
+        org.agentInviteEmail = undefined;
+        org.agentInviteTokenExpiresAt = undefined;
+        await org.save();
+        return { linked: true, orgId, agentId: agentUserId };
+    }
+    async removeAgent(orgId, agentId) {
+        const org = await this.findById(orgId);
+        if (org.role !== enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("Only organisations can remove agents");
+        }
+        const agentObjectId = new mongoose_2.Types.ObjectId(agentId);
+        await this.userModel.findByIdAndUpdate(orgId, {
+            $pull: { "orgProfile.agentIds": agentObjectId },
+        });
+        const agent = await this.userModel.findById(agentId).exec();
+        if (agent && agent.agentOrgId?.toString() === orgId) {
+            agent.agentOrgId = undefined;
+            await agent.save();
+        }
+        return { removed: true };
+    }
+    async getOrgAgents(orgId) {
+        const org = await this.findById(orgId);
+        if (org.role !== enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("Not an organisation");
+        }
+        const agentIds = org.orgProfile?.agentIds ?? [];
+        if (agentIds.length === 0)
+            return [];
+        const agents = await this.userModel
+            .find({ _id: { $in: agentIds } })
+            .exec();
+        return agents.map((agent) => this.sanitizeUser(agent));
+    }
+    hashAgentInviteToken(token, orgId, email) {
+        return (0, crypto_1.createHmac)("sha256", this.signupVerificationSecret)
+            .update(`agent-invite:${orgId}:${email}:${token}`)
+            .digest("hex");
+    }
 };
 exports.UsersService = UsersService;
-exports.UsersService = UsersService = __decorate([
+exports.UsersService = UsersService = UsersService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
     __param(1, (0, mongoose_1.InjectModel)(property_schema_1.Property.name)),
@@ -338,5 +518,6 @@ exports.UsersService = UsersService = __decorate([
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        appwrite_service_1.AppwriteStorageService])
+        appwrite_service_1.AppwriteStorageService,
+        mail_service_1.MailService])
 ], UsersService);

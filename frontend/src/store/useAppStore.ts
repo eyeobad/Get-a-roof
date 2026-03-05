@@ -81,6 +81,7 @@ type LandlordDraft = {
 
 type LandlordPropertySummary = {
   id: string;
+  landlordId?: string;
   status?: string;
   title?: string;
   price?: number;
@@ -298,7 +299,7 @@ type AppState = {
   login: (email: string, password: string) => Promise<ApiAuthResponse | null>;
   googleLogin: (
     firebaseIdToken: string,
-    role?: "Tenant" | "Landlord"
+    role?: "Tenant" | "Landlord" | "Organisation"
   ) => Promise<ApiAuthResponse | null>;
   registerTenant: (payload: {
     firstName?: string;
@@ -383,6 +384,31 @@ type AppState = {
   loadLandlordPropertyMatches: (propertyId: string) => Promise<void>;
   markLandlordPropertyMatchesSeen: (propertyId: string) => Promise<void>;
   deleteLandlordProperty: (propertyId: string) => Promise<boolean>;
+  registerOrganisation: (payload: {
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    phoneNumber?: string;
+    password: string;
+    orgName: string;
+    registrationNumber?: string;
+    website?: string;
+    recaptchaToken?: string;
+  }) => Promise<ApiUser | VerificationPendingResponse>;
+  inviteAgent: (orgId: string, email: string) => Promise<Record<string, unknown>>;
+  acceptAgentInvite: (token: string, orgId: string) => Promise<Record<string, unknown>>;
+  loadOrgAgents: (orgId: string) => Promise<ApiUser[]>;
+  removeAgent: (orgId: string, agentId: string) => Promise<Record<string, unknown>>;
+  orgAgents: ApiUser[];
+  orgStats: {
+    totalListings: number;
+    totalMatches: number;
+    activeAgents: number;
+    ownerListingCount: number;
+    listingsByAgent: { agentId: string; name: string; email: string; count: number }[];
+    matchesByMonth: { month: string; count: number }[];
+  } | null;
+  loadOrgStats: (orgId: string) => Promise<void>;
 };
 
 const listingMap: Record<string, Listing> = {};
@@ -653,6 +679,7 @@ const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySumm
     basePrice !== undefined && basePrice !== null ? basePrice * 12 : basePrice;
   return {
     id: resolvePropertyId(property),
+    landlordId: toIdString(property?.landlordId),
     status: property?.status,
     title: property?.title ?? property?.address?.street ?? property?.neighborhood,
     price: annualPrice,
@@ -1313,10 +1340,11 @@ export const useAppStore = create<AppState>()(
       loadRecycledIntoExplore: async () => {
         const state = get();
         if (!state.authToken) return false;
+        const token = state.authToken;
         const data = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
           `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
           {
-            token: state.authToken,
+            token,
           }
         );
         const matches = Array.isArray(data)
@@ -1338,7 +1366,7 @@ export const useAppStore = create<AppState>()(
             const matchId = toIdString(match._id) || toIdString(match.id);
             return apiFetch(`/api/matches/${matchId}/recycle`, {
               method: "POST",
-              token: state.authToken,
+              token,
             }).catch(() => null);
           })
         );
@@ -1346,7 +1374,7 @@ export const useAppStore = create<AppState>()(
         const refreshed = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
           `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
           {
-            token: state.authToken,
+            token,
           }
         );
         const refreshedMatches = Array.isArray(refreshed)
@@ -1978,6 +2006,85 @@ export const useAppStore = create<AppState>()(
           };
         });
         return true;
+      },
+      orgAgents: [],
+      registerOrganisation: async (payload) => {
+        return apiFetch<ApiUser | VerificationPendingResponse>(`/api/users/org`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      },
+      inviteAgent: async (orgId, email) => {
+        const state = get();
+        if (!state.authToken) throw new Error("Unauthorized");
+        return apiFetch<Record<string, unknown>>(
+          `/api/users/${orgId}/agents/invite`,
+          {
+            method: "POST",
+            body: JSON.stringify({ email }),
+            token: state.authToken,
+          }
+        );
+      },
+      acceptAgentInvite: async (token, orgId) => {
+        const state = get();
+        if (!state.authToken) throw new Error("Unauthorized");
+        return apiFetch<Record<string, unknown>>(
+          `/api/users/agents/accept-invite`,
+          {
+            method: "POST",
+            body: JSON.stringify({ token, orgId }),
+            token: state.authToken,
+          }
+        );
+      },
+      loadOrgAgents: async (orgId) => {
+        const state = get();
+        if (!state.authToken) return [];
+        const data = await apiFetch<ApiUser[]>(
+          `/api/users/${orgId}/agents`,
+          { token: state.authToken }
+        );
+        const agents = data ?? [];
+        set({ orgAgents: agents });
+        return agents;
+      },
+      removeAgent: async (orgId, agentId) => {
+        const state = get();
+        if (!state.authToken) throw new Error("Unauthorized");
+        const result = await apiFetch<Record<string, unknown>>(
+          `/api/users/${orgId}/agents/${agentId}`,
+          {
+            method: "DELETE",
+            token: state.authToken,
+          }
+        );
+        set((prev) => ({
+          orgAgents: prev.orgAgents.filter(
+            (agent) => (agent.id ?? agent._id) !== agentId
+          ),
+        }));
+        return result;
+      },
+      orgStats: null,
+      loadOrgStats: async (orgId) => {
+        const state = get();
+        if (!state.authToken) return;
+        try {
+          const data = await apiFetch<{
+            totalListings: number;
+            totalMatches: number;
+            activeAgents: number;
+            ownerListingCount: number;
+            listingsByAgent: { agentId: string; name: string; email: string; count: number }[];
+            matchesByMonth: { month: string; count: number }[];
+          }>(`/api/landlord/${orgId}/org-stats`, {
+            token: state.authToken,
+          });
+          set({ orgStats: data });
+        } catch {
+          // stats optional
+        }
       },
     }),
     {

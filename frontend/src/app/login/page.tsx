@@ -54,7 +54,10 @@ export default function LoginPage() {
           ? [rawRole]
           : [];
       const isLandlord = roles.some(
-        (value) => value?.toString().toLowerCase() === "landlord"
+        (value) => {
+          const r = value?.toString().toLowerCase();
+          return r === "landlord" || r === "organisation";
+        }
       );
       const isAdmin = roles.some(
         (value) => value?.toString().toLowerCase() === "admin"
@@ -102,7 +105,10 @@ export default function LoginPage() {
       const rawRole = result.user.role;
       const roles = Array.isArray(rawRole) ? rawRole : rawRole ? [rawRole] : [];
       const isLandlord = roles.some(
-        (value) => value?.toString().toLowerCase() === "landlord"
+        (value) => {
+          const r = value?.toString().toLowerCase();
+          return r === "landlord" || r === "organisation";
+        }
       );
       const isAdmin = roles.some(
         (value) => value?.toString().toLowerCase() === "admin"

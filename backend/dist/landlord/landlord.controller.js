@@ -23,6 +23,12 @@ let LandlordController = class LandlordController {
     constructor(landlordService) {
         this.landlordService = landlordService;
     }
+    getOrgStats(id, req) {
+        if (req.user?.sub !== id) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.landlordService.getOrgStats(id);
+    }
     getProperties(id, req, q, status, sort) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
@@ -68,9 +74,19 @@ let LandlordController = class LandlordController {
 };
 exports.LandlordController = LandlordController;
 __decorate([
+    (0, common_1.Get)(":id/org-stats"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Organisation),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], LandlordController.prototype, "getOrgStats", null);
+__decorate([
     (0, common_1.Get)(":id/properties"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Query)("q")),
@@ -83,7 +99,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(":id/properties/:propertyId/new-matches-count"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Param)("propertyId")),
     __param(2, (0, common_1.Req)()),
@@ -94,7 +110,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(":id/properties-with-matches"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Query)("q")),
@@ -107,7 +123,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(":id/properties/:propertyId/matches"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Param)("propertyId")),
     __param(2, (0, common_1.Req)()),
@@ -118,7 +134,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(":id/properties/:propertyId/mark-seen"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Param)("propertyId")),
     __param(2, (0, common_1.Req)()),
@@ -129,7 +145,7 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(":id/properties/:propertyId"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Param)("propertyId")),
     __param(2, (0, common_1.Req)()),
@@ -140,7 +156,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(":id/tenants/:tenantId"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Landlord, enums_1.UserRole.Organisation),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, common_1.Param)("tenantId")),
     __param(2, (0, common_1.Req)()),

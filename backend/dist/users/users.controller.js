@@ -18,10 +18,13 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer = require("multer");
 const users_service_1 = require("./users.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
+const create_org_dto_1 = require("./dto/create-org.dto");
 const update_user_dto_1 = require("./dto/update-user.dto");
 const update_preferences_dto_1 = require("./dto/update-preferences.dto");
 const save_property_dto_1 = require("./dto/save-property.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
+const roles_guard_1 = require("../common/guards/roles.guard");
+const roles_decorator_1 = require("../common/guards/roles.decorator");
 const enums_1 = require("../common/enums");
 const profileImageMimeTypes = new Set([
     "image/jpeg",
@@ -44,10 +47,41 @@ let UsersController = class UsersController {
         if (requestedRole === enums_1.UserRole.Admin || requestedRole === enums_1.UserRole.Unassigned) {
             throw new common_1.ForbiddenException("Invalid role");
         }
+        if (requestedRole === enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("Use /api/users/org to register an organisation");
+        }
         dto.role =
             requestedRole === enums_1.UserRole.Landlord ? enums_1.UserRole.Landlord : enums_1.UserRole.Tenant;
         await this.usersService.assertRecaptchaToken(dto.recaptchaToken);
         return this.usersService.createUser(dto);
+    }
+    async createOrg(dto) {
+        return this.usersService.createOrganisation(dto);
+    }
+    async inviteAgent(orgId, body, req) {
+        if (req.user?.sub !== orgId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.usersService.inviteAgent(orgId, body.email);
+    }
+    async acceptAgentInvite(body, req) {
+        return this.usersService.acceptAgentInvite(body.token, body.orgId, req.user?.sub);
+    }
+    async removeAgent(orgId, agentId, req) {
+        if (req.user?.sub !== orgId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        return this.usersService.removeAgent(orgId, agentId);
+    }
+    async getOrgAgents(orgId, req) {
+        const callerIsOrg = req.user?.sub === orgId;
+        if (!callerIsOrg) {
+            const caller = await this.usersService.findById(req.user?.sub);
+            if (!caller.agentOrgId || caller.agentOrgId.toString() !== orgId) {
+                throw new common_1.ForbiddenException("Access denied");
+            }
+        }
+        return this.usersService.getOrgAgents(orgId);
     }
     findOne(id, req) {
         if (req.user?.sub !== id) {
@@ -122,6 +156,53 @@ __decorate([
     __metadata("design:paramtypes", [create_user_dto_1.CreateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)("org"),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_org_dto_1.CreateOrgDto]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "createOrg", null);
+__decorate([
+    (0, common_1.Post)(":orgId/agents/invite"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Organisation),
+    __param(0, (0, common_1.Param)("orgId")),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "inviteAgent", null);
+__decorate([
+    (0, common_1.Post)("agents/accept-invite"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "acceptAgentInvite", null);
+__decorate([
+    (0, common_1.Delete)(":orgId/agents/:agentId"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Organisation),
+    __param(0, (0, common_1.Param)("orgId")),
+    __param(1, (0, common_1.Param)("agentId")),
+    __param(2, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "removeAgent", null);
+__decorate([
+    (0, common_1.Get)(":orgId/agents"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Param)("orgId")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getOrgAgents", null);
 __decorate([
     (0, common_1.Get)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

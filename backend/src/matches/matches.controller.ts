@@ -82,7 +82,7 @@ export class MatchesController {
 
   @Patch(":id")
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.Landlord)
+  @Roles(UserRole.Landlord, UserRole.Organisation)
   update(
     @Param("id") id: string,
     @Body() dto: UpdateMatchDto,

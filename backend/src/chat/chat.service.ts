@@ -30,7 +30,7 @@ export class ChatService {
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>
-  ) {}
+  ) { }
 
   private parseRouteRequestPayload(content: string): RouteRequestPayload | null {
     if (!content?.startsWith(ROUTE_REQUEST_PREFIX)) {
@@ -132,7 +132,11 @@ export class ChatService {
       }
 
       if (routePayload.status === "approved" || routePayload.status === "denied") {
-        if (dto.senderId !== landlordId) {
+        const isOwner = dto.senderId === landlordId;
+        const isAgentMember = !isOwner
+          ? await this.isOrgMember(dto.senderId, landlordId)
+          : false;
+        if (!isOwner && !isAgentMember) {
           throw new ForbiddenException("Only landlord can approve or deny route access");
         }
         matchPatch.routeAccessStatus =
@@ -184,6 +188,10 @@ export class ChatService {
     const limit = options?.limit ?? 20;
     const offset = options?.offset ?? 0;
 
+    // If user is an agent, also include conversations for the org owner
+    // If user is an org owner, also include conversations for their agents
+    const orgMemberIds = await this.getOrgRelatedIds(userId);
+
     const pipeline: PipelineStage[] = [
       {
         $lookup: {
@@ -210,6 +218,9 @@ export class ChatService {
             { tenantId: userId },
             { "property.landlordId": userObjectId },
             { "property.landlordId": userId },
+            ...(orgMemberIds.length
+              ? [{ "property.landlordId": { $in: orgMemberIds } }]
+              : []),
           ],
         },
       },
@@ -252,7 +263,10 @@ export class ChatService {
       {
         $lookup: {
           from: "messages",
-          let: { matchId: "$_id", currentUserId: userId },
+          let: {
+            matchId: "$_id",
+            validReceiverIds: [userId, ...orgMemberIds.map(id => id.toString())]
+          },
           pipeline: [
             {
               $match: {
@@ -272,9 +286,9 @@ export class ChatService {
                       {
                         $and: [
                           {
-                            $eq: [
+                            $in: [
                               { $toString: "$receiverId" },
-                              "$$currentUserId",
+                              "$$validReceiverIds",
                             ],
                           },
                           { $eq: ["$isRead", false] },
@@ -357,9 +371,14 @@ export class ChatService {
   }
 
   async markMatchRead(matchId: string, userId: string) {
-    await this.assertMatchMembership(matchId, userId);
+    const { match, property } = await this.assertMatchMembership(matchId, userId);
+
+    const tenantId = match.tenantId.toString();
+    const landlordId = property.landlordId.toString();
+    const targetReceiverId = tenantId === userId ? tenantId : landlordId;
+
     const result = await this.messageModel.updateMany(
-      { matchId, receiverId: userId, isRead: false },
+      { matchId, receiverId: targetReceiverId, isRead: false },
       { $set: { isRead: true, readAt: new Date() } }
     );
 
@@ -452,7 +471,11 @@ export class ChatService {
       throw new NotFoundException("Property not found");
     }
     if (resolvedLandlordId !== landlordId) {
-      throw new ForbiddenException("Access denied");
+      // Check if user is an agent of the org that owns this property
+      const agentAllowed = await this.isOrgMember(landlordId, resolvedLandlordId);
+      if (!agentAllowed) {
+        throw new ForbiddenException("Access denied");
+      }
     }
 
     if (match.status !== MatchStatus.ChatInitiated) {
@@ -498,10 +521,42 @@ export class ChatService {
     }
     const isTenant = tenantId === userId;
     const isLandlord = landlordId === userId;
-    if (!isTenant && !isLandlord) {
+    const isOrgAgent = !isTenant && !isLandlord
+      ? await this.isOrgMember(userId, landlordId)
+      : false;
+    if (!isTenant && !isLandlord && !isOrgAgent) {
       throw new ForbiddenException("Access denied");
     }
     return { match, property };
+  }
+
+  /** Check if userId is an agent belonging to the org identified by orgOwnerId */
+  private async isOrgMember(userId: string, orgOwnerId: string): Promise<boolean> {
+    const user = await this.userModel.findById(userId).select("agentOrgId").lean();
+    if (!user?.agentOrgId) return false;
+    return user.agentOrgId.toString() === orgOwnerId;
+  }
+
+  /** Get related org member IDs for conversation visibility */
+  private async getOrgRelatedIds(userId: string): Promise<Types.ObjectId[]> {
+    const user = await this.userModel
+      .findById(userId)
+      .select("role agentOrgId orgProfile")
+      .lean();
+    if (!user) return [];
+
+    // If the user is an agent, return the org owner so they see org conversations
+    if (user.agentOrgId) {
+      return [new Types.ObjectId(user.agentOrgId.toString())];
+    }
+
+    // If the user is an org owner, return all agent IDs so they see agent conversations
+    const agentIds = (user as any)?.orgProfile?.agentIds;
+    if (Array.isArray(agentIds) && agentIds.length > 0) {
+      return agentIds.map((id: any) => new Types.ObjectId(id.toString()));
+    }
+
+    return [];
   }
 
   async getParticipantIds(matchId: string) {

@@ -16,6 +16,7 @@ const appwrite_module_1 = require("../appwrite/appwrite.module");
 const property_schema_1 = require("../properties/schemas/property.schema");
 const match_schema_1 = require("../matches/schemas/match.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const mail_module_1 = require("../mail/mail.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -29,6 +30,7 @@ exports.UsersModule = UsersModule = __decorate([
                 { name: message_schema_1.Message.name, schema: message_schema_1.MessageSchema },
             ]),
             appwrite_module_1.AppwriteModule,
+            mail_module_1.MailModule,
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],

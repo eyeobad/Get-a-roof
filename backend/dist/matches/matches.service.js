@@ -142,7 +142,12 @@ let MatchesService = class MatchesService {
             throw new common_1.NotFoundException("Match not found");
         }
         const property = await this.propertiesService.getProperty(match.propertyId.toString());
-        if (property.landlordId.toString() !== landlordId) {
+        const propLandlordId = property.landlordId.toString();
+        const isDirectOwner = propLandlordId === landlordId;
+        const isAgent = !isDirectOwner
+            ? await this.isOrgAgentOf(landlordId, propLandlordId)
+            : false;
+        if (!isDirectOwner && !isAgent) {
             throw new common_1.ForbiddenException("Access denied");
         }
         if (dto.status) {
@@ -150,6 +155,12 @@ let MatchesService = class MatchesService {
         }
         match.landlordSeenAt = new Date();
         return match.save();
+    }
+    async isOrgAgentOf(userId, orgOwnerId) {
+        const user = await this.usersService.findById(userId);
+        if (!user?.agentOrgId)
+            return false;
+        return user.agentOrgId.toString() === orgOwnerId;
     }
     async hardBlockMatch(matchId, tenantId) {
         const match = await this.matchModel.findById(matchId).exec();
@@ -320,6 +331,38 @@ let MatchesService = class MatchesService {
             { $group: { _id: "$propertyId", count: { $sum: 1 } } },
         ];
         return this.matchModel.aggregate(pipeline).exec();
+    }
+    async getMatchesByMonthForPropertyIds(propertyIds, monthsBack = 6) {
+        if (!propertyIds.length)
+            return [];
+        const oids = propertyIds.map(toObjectId);
+        const start = new Date();
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        start.setMonth(start.getMonth() - Math.max(0, monthsBack - 1));
+        const pipeline = [
+            {
+                $match: {
+                    propertyId: { $in: oids },
+                    createdAt: { $gte: start },
+                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                },
+            },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: { format: "%Y-%m", date: "$createdAt" },
+                    },
+                    count: { $sum: 1 },
+                },
+            },
+            { $sort: { _id: 1 } },
+        ];
+        const rows = await this.matchModel.aggregate(pipeline).exec();
+        return rows.map((row) => ({
+            monthKey: row._id,
+            count: row.count ?? 0,
+        }));
     }
     async findPropertyIdsWithMatches(landlordPropertyIds) {
         if (!landlordPropertyIds.length)

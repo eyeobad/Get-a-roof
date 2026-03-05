@@ -68,6 +68,17 @@ export default function CreateAccountPage() {
                 );
               })}
             </div>
+            <div className="mt-6 text-center">
+              <p className="text-[15px] text-[#4a5d78] font-medium">
+                Signing up as a real estate agency?{" "}
+                <Link
+                  href="/org-signup"
+                  className="text-[#0a44b8] font-bold hover:underline underline-offset-4"
+                >
+                  Register as an Organisation
+                </Link>
+              </p>
+            </div>
             <div className="mt-12 border-t border-[#dbe4f5] pt-6 text-center">
               <p className="text-lg font-medium">
                 Already have an account?

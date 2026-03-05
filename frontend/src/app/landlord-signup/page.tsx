@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 import { getGoogleIdToken } from "@/lib/firebase";
@@ -13,7 +13,7 @@ const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
 };
 
-export default function SignUpPage() {
+function SignUpContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [form, setForm] = useState({
@@ -31,7 +31,10 @@ export default function SignUpPage() {
   const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
+  const isAgentSignup = searchParams?.get("isAgent") === "true";
+  const redirectParam = searchParams?.get("redirect") ?? "";
 
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -156,7 +159,10 @@ export default function SignUpPage() {
         userId,
         email: payload.email,
         role: "landlord",
-        next: "/verify-identity",
+        next:
+          isAgentSignup && redirectParam
+            ? decodeURIComponent(redirectParam)
+            : "/verify-identity",
         otpSent: otpSent ? "1" : "0",
         ...(verificationToken ? { verificationToken } : {}),
       });
@@ -206,9 +212,13 @@ export default function SignUpPage() {
             />
           </div>
           <h1 className="text-[#0a44b8] text-[32px] font-bold tracking-tight mb-2">
-            Get A Roof
+            {isAgentSignup ? "Create Agent Account" : "Create Landlord Account"}
           </h1>
-          <p className="text-[#1A1A1A]/80 text-lg">Start your journey home.</p>
+          <p className="text-[#1A1A1A]/80 text-lg">
+            {isAgentSignup
+              ? "Join your organisation to manage properties."
+              : "List and manage your properties with ease."}
+          </p>
         </header>
 
         {/* Form */}
@@ -392,5 +402,13 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpContent />
+    </Suspense>
   );
 }

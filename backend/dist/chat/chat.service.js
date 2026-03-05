@@ -113,7 +113,11 @@ let ChatService = class ChatService {
                 matchPatch.routeOriginLng = routePayload.tenantLocation.lng;
             }
             if (routePayload.status === "approved" || routePayload.status === "denied") {
-                if (dto.senderId !== landlordId) {
+                const isOwner = dto.senderId === landlordId;
+                const isAgentMember = !isOwner
+                    ? await this.isOrgMember(dto.senderId, landlordId)
+                    : false;
+                if (!isOwner && !isAgentMember) {
                     throw new common_1.ForbiddenException("Only landlord can approve or deny route access");
                 }
                 matchPatch.routeAccessStatus =
@@ -158,6 +162,7 @@ let ChatService = class ChatService {
         const userObjectId = new mongoose_2.Types.ObjectId(userId);
         const limit = options?.limit ?? 20;
         const offset = options?.offset ?? 0;
+        const orgMemberIds = await this.getOrgRelatedIds(userId);
         const pipeline = [
             {
                 $lookup: {
@@ -184,6 +189,9 @@ let ChatService = class ChatService {
                         { tenantId: userId },
                         { "property.landlordId": userObjectId },
                         { "property.landlordId": userId },
+                        ...(orgMemberIds.length
+                            ? [{ "property.landlordId": { $in: orgMemberIds } }]
+                            : []),
                     ],
                 },
             },
@@ -226,7 +234,10 @@ let ChatService = class ChatService {
             {
                 $lookup: {
                     from: "messages",
-                    let: { matchId: "$_id", currentUserId: userId },
+                    let: {
+                        matchId: "$_id",
+                        validReceiverIds: [userId, ...orgMemberIds.map(id => id.toString())]
+                    },
                     pipeline: [
                         {
                             $match: {
@@ -246,9 +257,9 @@ let ChatService = class ChatService {
                                             {
                                                 $and: [
                                                     {
-                                                        $eq: [
+                                                        $in: [
                                                             { $toString: "$receiverId" },
-                                                            "$$currentUserId",
+                                                            "$$validReceiverIds",
                                                         ],
                                                     },
                                                     { $eq: ["$isRead", false] },
@@ -322,8 +333,11 @@ let ChatService = class ChatService {
             .exec();
     }
     async markMatchRead(matchId, userId) {
-        await this.assertMatchMembership(matchId, userId);
-        const result = await this.messageModel.updateMany({ matchId, receiverId: userId, isRead: false }, { $set: { isRead: true, readAt: new Date() } });
+        const { match, property } = await this.assertMatchMembership(matchId, userId);
+        const tenantId = match.tenantId.toString();
+        const landlordId = property.landlordId.toString();
+        const targetReceiverId = tenantId === userId ? tenantId : landlordId;
+        const result = await this.messageModel.updateMany({ matchId, receiverId: targetReceiverId, isRead: false }, { $set: { isRead: true, readAt: new Date() } });
         return { updatedCount: result.modifiedCount };
     }
     async startThread(tenantId, propertyId, message) {
@@ -406,7 +420,10 @@ let ChatService = class ChatService {
             throw new common_1.NotFoundException("Property not found");
         }
         if (resolvedLandlordId !== landlordId) {
-            throw new common_1.ForbiddenException("Access denied");
+            const agentAllowed = await this.isOrgMember(landlordId, resolvedLandlordId);
+            if (!agentAllowed) {
+                throw new common_1.ForbiddenException("Access denied");
+            }
         }
         if (match.status !== enums_1.MatchStatus.ChatInitiated) {
             match.status = enums_1.MatchStatus.ChatInitiated;
@@ -448,10 +465,35 @@ let ChatService = class ChatService {
         }
         const isTenant = tenantId === userId;
         const isLandlord = landlordId === userId;
-        if (!isTenant && !isLandlord) {
+        const isOrgAgent = !isTenant && !isLandlord
+            ? await this.isOrgMember(userId, landlordId)
+            : false;
+        if (!isTenant && !isLandlord && !isOrgAgent) {
             throw new common_1.ForbiddenException("Access denied");
         }
         return { match, property };
+    }
+    async isOrgMember(userId, orgOwnerId) {
+        const user = await this.userModel.findById(userId).select("agentOrgId").lean();
+        if (!user?.agentOrgId)
+            return false;
+        return user.agentOrgId.toString() === orgOwnerId;
+    }
+    async getOrgRelatedIds(userId) {
+        const user = await this.userModel
+            .findById(userId)
+            .select("role agentOrgId orgProfile")
+            .lean();
+        if (!user)
+            return [];
+        if (user.agentOrgId) {
+            return [new mongoose_2.Types.ObjectId(user.agentOrgId.toString())];
+        }
+        const agentIds = user?.orgProfile?.agentIds;
+        if (Array.isArray(agentIds) && agentIds.length > 0) {
+            return agentIds.map((id) => new mongoose_2.Types.ObjectId(id.toString()));
+        }
+        return [];
     }
     async getParticipantIds(matchId) {
         if (!mongoose_2.Types.ObjectId.isValid(matchId)) {
