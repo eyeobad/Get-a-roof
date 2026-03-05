@@ -29,11 +29,17 @@ let LandlordController = class LandlordController {
         }
         return this.landlordService.getOrgStats(id);
     }
-    getProperties(id, req, q, status, sort) {
+    getProperties(id, req, q, status, scope, sort) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
         }
-        return this.landlordService.getLandlordProperties(id, { q, status, sort });
+        const normalizedScope = scope === "mine" || scope === "all" ? scope : undefined;
+        return this.landlordService.getLandlordProperties(id, {
+            q,
+            status,
+            sort,
+            scope: normalizedScope,
+        });
     }
     getNewMatchesCount(id, propertyId, req) {
         if (req.user?.sub !== id) {
@@ -41,11 +47,17 @@ let LandlordController = class LandlordController {
         }
         return this.landlordService.getNewMatchesCount(id, propertyId);
     }
-    getPropertiesWithMatches(id, req, q, status, sort) {
+    getPropertiesWithMatches(id, req, q, status, scope, sort) {
         if (req.user?.sub !== id) {
             throw new common_1.ForbiddenException("Access denied");
         }
-        return this.landlordService.getPropertiesWithMatches(id, { q, status, sort });
+        const normalizedScope = scope === "mine" || scope === "all" ? scope : undefined;
+        return this.landlordService.getPropertiesWithMatches(id, {
+            q,
+            status,
+            sort,
+            scope: normalizedScope,
+        });
     }
     getPropertyMatches(id, propertyId, req) {
         if (req.user?.sub !== id) {
@@ -91,9 +103,10 @@ __decorate([
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Query)("q")),
     __param(3, (0, common_1.Query)("status")),
-    __param(4, (0, common_1.Query)("sort")),
+    __param(4, (0, common_1.Query)("scope")),
+    __param(5, (0, common_1.Query)("sort")),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, String, String, String]),
+    __metadata("design:paramtypes", [String, Object, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], LandlordController.prototype, "getProperties", null);
 __decorate([
@@ -115,9 +128,10 @@ __decorate([
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Query)("q")),
     __param(3, (0, common_1.Query)("status")),
-    __param(4, (0, common_1.Query)("sort")),
+    __param(4, (0, common_1.Query)("scope")),
+    __param(5, (0, common_1.Query)("sort")),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, String, String, String]),
+    __metadata("design:paramtypes", [String, Object, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], LandlordController.prototype, "getPropertiesWithMatches", null);
 __decorate([

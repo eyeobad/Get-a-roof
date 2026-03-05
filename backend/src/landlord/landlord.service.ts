@@ -4,26 +4,31 @@ import { MatchesService } from "../matches/matches.service";
 import { UsersService } from "../users/users.service";
 import { PropertyDocument } from "../properties/schemas/property.schema";
 import { UserRole } from "../common/enums";
+import { WorkspaceService } from "../common/services/workspace.service";
+
+type PropertyScope = "mine" | "all";
 
 @Injectable()
 export class LandlordService {
   constructor(
     private readonly propertiesService: PropertiesService,
     private readonly matchesService: MatchesService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
+    private readonly workspaceService: WorkspaceService
   ) {}
 
   async getLandlordProperties(
     landlordId: string,
-    options?: { q?: string; status?: string; sort?: string }
+    options?: { q?: string; status?: string; sort?: string; scope?: PropertyScope }
   ) {
-    const memberIds = await this.getOrgMemberIds(landlordId);
-    const groupedProperties = await Promise.all(
-      memberIds.map((memberId) =>
-        this.propertiesService.getLandlordProperties(memberId, options)
-      )
+    const normalizedScope = await this.normalizePropertyScope(
+      landlordId,
+      options?.scope
     );
-    const properties = groupedProperties.flat();
+    const properties = await this.propertiesService.getLandlordProperties(
+      landlordId,
+      { ...options, scope: normalizedScope }
+    );
     const propertyIds = properties.map((property) => property.id);
     const counts = await this.matchesService.getMatchCountsByPropertyIds(
       propertyIds
@@ -49,22 +54,23 @@ export class LandlordService {
   }
 
   async getNewMatchesCount(landlordId: string, propertyId: string) {
-    await this.assertPropertyOwnership(landlordId, propertyId);
+    await this.assertPropertyManagement(landlordId, propertyId);
     const count = await this.matchesService.countNewByProperty(propertyId);
     return { propertyId, newMatchesCount: count };
   }
 
   async getPropertiesWithMatches(
     landlordId: string,
-    options?: { q?: string; status?: string; sort?: string }
+    options?: { q?: string; status?: string; sort?: string; scope?: PropertyScope }
   ) {
-    const memberIds = await this.getOrgMemberIds(landlordId);
-    const groupedProperties = await Promise.all(
-      memberIds.map((memberId) =>
-        this.propertiesService.getLandlordProperties(memberId, options)
-      )
+    const normalizedScope = await this.normalizePropertyScope(
+      landlordId,
+      options?.scope
     );
-    const properties = groupedProperties.flat();
+    const properties = await this.propertiesService.getLandlordProperties(
+      landlordId,
+      { ...options, scope: normalizedScope }
+    );
     const propertyIds = properties.map((property) => property.id);
     if (!propertyIds.length) {
       return [];
@@ -102,18 +108,19 @@ export class LandlordService {
   }
 
   async getPropertyMatches(landlordId: string, propertyId: string) {
-    await this.assertPropertyOwnership(landlordId, propertyId);
+    await this.assertPropertyManagement(landlordId, propertyId);
     return this.matchesService.getPropertyMatchesWithTenant(propertyId);
   }
 
   async getTenantProfile(landlordId: string, tenantId: string) {
-    const memberIds = await this.getOrgMemberIds(landlordId);
-    const groupedProperties = await Promise.all(
-      memberIds.map((memberId) =>
-        this.propertiesService.getLandlordProperties(memberId)
-      )
+    const normalizedScope = await this.normalizePropertyScope(
+      landlordId,
+      "all"
     );
-    const propertyIds = groupedProperties.flat().map((property) => property.id);
+    const properties = await this.propertiesService.getLandlordProperties(landlordId, {
+      scope: normalizedScope,
+    });
+    const propertyIds = properties.map((property) => property.id);
     const hasMatch = await this.matchesService.landlordHasTenantMatch(
       propertyIds,
       tenantId
@@ -126,57 +133,42 @@ export class LandlordService {
   }
 
   async markPropertyMatchesSeen(landlordId: string, propertyId: string) {
-    await this.assertPropertyOwnership(landlordId, propertyId);
+    await this.assertPropertyManagement(landlordId, propertyId);
     return this.matchesService.markMatchesSeenForProperty(propertyId);
   }
 
   async deleteProperty(landlordId: string, propertyId: string) {
-    await this.assertPropertyOwnership(landlordId, propertyId);
+    await this.assertPropertyManagement(landlordId, propertyId);
     return this.propertiesService.deletePropertyForLandlord(landlordId, propertyId);
   }
 
   async getOrgStats(orgId: string) {
     const org = await this.usersService.findById(orgId);
-    const agentIds: string[] =
-      (org as any)?.orgProfile?.agentIds?.map((id: any) => id.toString()) ?? [];
+    if (org.role !== UserRole.Organisation) {
+      throw new ForbiddenException("Not an organisation");
+    }
 
-    const allMemberIds = [orgId, ...agentIds];
+    const memberIds = await this.workspaceService.getOrgMemberIds(orgId);
+    const normalizedMembers = Array.from(new Set(memberIds));
+    const [orgAgents, properties] = await Promise.all([
+      this.usersService.getOrgAgents(orgId),
+      this.propertiesService.getLandlordProperties(orgId, { scope: "all" }),
+    ]);
 
-    const agents = agentIds.length
-      ? await Promise.all(
-          agentIds.map(async (id) => {
-            try {
-              const agent = await this.usersService.findById(id);
-              return {
-                agentId: id,
-                name:
-                  [agent.firstName, agent.lastName].filter(Boolean).join(" ") ||
-                  agent.email ||
-                  "Agent",
-                email: agent.email ?? "",
-              };
-            } catch {
-              return { agentId: id, name: "Unknown", email: "" };
-            }
-          })
-        )
-      : [];
+    const listingCountByOwnerId = new Map<string, number>();
+    properties.forEach((property) => {
+      const ownerId = property.landlordId?.toString?.();
+      if (!ownerId) return;
+      listingCountByOwnerId.set(
+        ownerId,
+        (listingCountByOwnerId.get(ownerId) ?? 0) + 1
+      );
+    });
 
-    const listingsByMember = await Promise.all(
-      allMemberIds.map(async (memberId) => {
-        const props = await this.propertiesService.getLandlordProperties(memberId);
-        return { memberId, count: props.length };
-      })
-    );
-
-    const totalListings = listingsByMember.reduce((sum, m) => sum + m.count, 0);
-
-    const allProps = await Promise.all(
-      allMemberIds.map((id) => this.propertiesService.getLandlordProperties(id))
-    );
-    const allPropertyIds = allProps
-      .flat()
-      .map((p: any) => p.id ?? p._id?.toString())
+    const totalListings = properties.length;
+    const activeAgents = normalizedMembers.length > 0 ? normalizedMembers.length - 1 : 0;
+    const allPropertyIds = properties
+      .map((property) => property.id ?? property._id?.toString())
       .filter(Boolean);
 
     const totalMatchCounts = allPropertyIds.length
@@ -187,10 +179,26 @@ export class LandlordService {
       0
     );
 
-    const listingsByAgent = agents.map((agent) => {
-      const entry = listingsByMember.find((m) => m.memberId === agent.agentId);
-      return { ...agent, count: entry?.count ?? 0 };
+    const agentMap = new Map<string, { name: string; email: string }>();
+    orgAgents.forEach((agent) => {
+      const agentId = (agent as any)?.id ?? (agent as any)?._id;
+      if (!agentId) return;
+      agentMap.set(String(agentId), {
+        name:
+          [agent.firstName, agent.lastName].filter(Boolean).join(" ") ||
+          agent.email ||
+          "Agent",
+        email: agent.email ?? "",
+      });
     });
+    const listingsByAgent = normalizedMembers
+      .filter((memberId) => memberId !== orgId)
+      .map((memberId) => ({
+        agentId: memberId,
+        name: agentMap.get(memberId)?.name || "Agent",
+        email: agentMap.get(memberId)?.email || "",
+        count: listingCountByOwnerId.get(memberId) ?? 0,
+      }));
 
     const now = new Date();
     const matchesByMonth: { month: string; count: number }[] = [];
@@ -218,39 +226,34 @@ export class LandlordService {
     return {
       totalListings,
       totalMatches,
-      activeAgents: agentIds.length,
+      activeAgents,
+      ownerListingCount:
+        listingCountByOwnerId.get(orgId) ?? 0,
       listingsByAgent,
       matchesByMonth,
-      ownerListingCount:
-        listingsByMember.find((m) => m.memberId === orgId)?.count ?? 0,
     };
   }
 
-  private async assertPropertyOwnership(landlordId: string, propertyId: string) {
-    const property = await this.propertiesService.getProperty(propertyId);
-    if (property.landlordId.toString() === landlordId) {
-      return;
+  private async normalizePropertyScope(
+    actorId: string,
+    scope?: PropertyScope
+  ): Promise<PropertyScope> {
+    const context = await this.workspaceService.getWorkspaceActorContext(actorId);
+    if (context.scope === "solo") {
+      return "mine";
     }
-
-    const memberIds = await this.getOrgMemberIds(landlordId);
-    if (!memberIds.includes(property.landlordId.toString())) {
-      throw new ForbiddenException("Access denied");
-    }
+    return scope === "mine" ? "mine" : "all";
   }
 
-  private async getOrgMemberIds(userId: string): Promise<string[]> {
-    const user = await this.usersService.findById(userId);
-    if (user.role !== UserRole.Organisation) {
-      return [userId];
+  private async assertPropertyManagement(landlordId: string, propertyId: string) {
+    const property = await this.propertiesService.getProperty(propertyId);
+    const canManage = await this.workspaceService.canActorManageProperty(
+      landlordId,
+      property
+    );
+    if (!canManage) {
+      throw new ForbiddenException("Access denied");
     }
-
-    const agents = await this.usersService.getOrgAgents(userId);
-    const orgAgentIds = agents
-      .map((agent) => (agent as any)?.id ?? (agent as any)?._id)
-      .map((id) => (id ? String(id) : ""))
-      .filter(Boolean);
-
-    return [userId, ...orgAgentIds];
   }
 
   private mapPropertySummary(

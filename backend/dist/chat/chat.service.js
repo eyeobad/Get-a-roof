@@ -21,13 +21,15 @@ const match_schema_1 = require("../matches/schemas/match.schema");
 const property_schema_1 = require("../properties/schemas/property.schema");
 const enums_1 = require("../common/enums");
 const user_schema_1 = require("../users/schemas/user.schema");
+const workspace_service_1 = require("../common/services/workspace.service");
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
 let ChatService = class ChatService {
-    constructor(messageModel, matchModel, propertyModel, userModel) {
+    constructor(messageModel, matchModel, propertyModel, userModel, workspaceService) {
         this.messageModel = messageModel;
         this.matchModel = matchModel;
         this.propertyModel = propertyModel;
         this.userModel = userModel;
+        this.workspaceService = workspaceService;
     }
     parseRouteRequestPayload(content) {
         if (!content?.startsWith(ROUTE_REQUEST_PREFIX)) {
@@ -113,11 +115,8 @@ let ChatService = class ChatService {
                 matchPatch.routeOriginLng = routePayload.tenantLocation.lng;
             }
             if (routePayload.status === "approved" || routePayload.status === "denied") {
-                const isOwner = dto.senderId === landlordId;
-                const isAgentMember = !isOwner
-                    ? await this.isOrgMember(dto.senderId, landlordId)
-                    : false;
-                if (!isOwner && !isAgentMember) {
+                const canManage = await this.workspaceService.canActorManageProperty(dto.senderId, property);
+                if (!canManage) {
                     throw new common_1.ForbiddenException("Only landlord can approve or deny route access");
                 }
                 matchPatch.routeAccessStatus =
@@ -162,7 +161,10 @@ let ChatService = class ChatService {
         const userObjectId = new mongoose_2.Types.ObjectId(userId);
         const limit = options?.limit ?? 20;
         const offset = options?.offset ?? 0;
-        const orgMemberIds = await this.getOrgRelatedIds(userId);
+        const context = await this.workspaceService.getWorkspaceActorContext(userId);
+        const landlordVisibilityIds = (context.scope === "owner" ? context.orgMemberIds : [userId])
+            .filter((id) => mongoose_2.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose_2.Types.ObjectId(id));
         const pipeline = [
             {
                 $lookup: {
@@ -186,12 +188,7 @@ let ChatService = class ChatService {
                     status: { $ne: enums_1.MatchStatus.Dismissed },
                     $or: [
                         { tenantId: userObjectId },
-                        { tenantId: userId },
-                        { "property.landlordId": userObjectId },
-                        { "property.landlordId": userId },
-                        ...(orgMemberIds.length
-                            ? [{ "property.landlordId": { $in: orgMemberIds } }]
-                            : []),
+                        { "property.landlordId": { $in: landlordVisibilityIds } },
                     ],
                 },
             },
@@ -236,7 +233,7 @@ let ChatService = class ChatService {
                     from: "messages",
                     let: {
                         matchId: "$_id",
-                        validReceiverIds: [userId, ...orgMemberIds.map(id => id.toString())]
+                        currentUserId: userId,
                     },
                     pipeline: [
                         {
@@ -257,9 +254,9 @@ let ChatService = class ChatService {
                                             {
                                                 $and: [
                                                     {
-                                                        $in: [
+                                                        $eq: [
                                                             { $toString: "$receiverId" },
-                                                            "$$validReceiverIds",
+                                                            "$$currentUserId",
                                                         ],
                                                     },
                                                     { $eq: ["$isRead", false] },
@@ -333,11 +330,8 @@ let ChatService = class ChatService {
             .exec();
     }
     async markMatchRead(matchId, userId) {
-        const { match, property } = await this.assertMatchMembership(matchId, userId);
-        const tenantId = match.tenantId.toString();
-        const landlordId = property.landlordId.toString();
-        const targetReceiverId = tenantId === userId ? tenantId : landlordId;
-        const result = await this.messageModel.updateMany({ matchId, receiverId: targetReceiverId, isRead: false }, { $set: { isRead: true, readAt: new Date() } });
+        await this.assertMatchMembership(matchId, userId);
+        const result = await this.messageModel.updateMany({ matchId, receiverId: userId, isRead: false }, { $set: { isRead: true, readAt: new Date() } });
         return { updatedCount: result.modifiedCount };
     }
     async startThread(tenantId, propertyId, message) {
@@ -347,7 +341,6 @@ let ChatService = class ChatService {
         }
         const landlordId = property.landlordId?.toString?.();
         if (!landlordId) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
         const [tenantUser, landlordUser] = await Promise.all([
@@ -355,7 +348,6 @@ let ChatService = class ChatService {
             this.userModel.findById(landlordId).exec(),
         ]);
         if (!landlordUser) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
         if (landlordId === tenantId) {
@@ -408,7 +400,6 @@ let ChatService = class ChatService {
         }
         const resolvedLandlordId = property.landlordId?.toString?.();
         if (!resolvedLandlordId) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
         const [tenantUser, landlordUser] = await Promise.all([
@@ -416,14 +407,11 @@ let ChatService = class ChatService {
             this.userModel.findById(resolvedLandlordId).exec(),
         ]);
         if (!landlordUser) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
-        if (resolvedLandlordId !== landlordId) {
-            const agentAllowed = await this.isOrgMember(landlordId, resolvedLandlordId);
-            if (!agentAllowed) {
-                throw new common_1.ForbiddenException("Access denied");
-            }
+        const canManage = await this.workspaceService.canActorManageProperty(landlordId, property);
+        if (!canManage) {
+            throw new common_1.ForbiddenException("Access denied");
         }
         if (match.status !== enums_1.MatchStatus.ChatInitiated) {
             match.status = enums_1.MatchStatus.ChatInitiated;
@@ -460,40 +448,16 @@ let ChatService = class ChatService {
         const tenantId = match.tenantId?.toString?.();
         const landlordId = property.landlordId?.toString?.();
         if (!tenantId || !landlordId) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
         const isTenant = tenantId === userId;
-        const isLandlord = landlordId === userId;
-        const isOrgAgent = !isTenant && !isLandlord
-            ? await this.isOrgMember(userId, landlordId)
-            : false;
-        if (!isTenant && !isLandlord && !isOrgAgent) {
+        const isAuthorizedLandlord = isTenant
+            ? false
+            : await this.workspaceService.canActorManageProperty(userId, property);
+        if (!isTenant && !isAuthorizedLandlord) {
             throw new common_1.ForbiddenException("Access denied");
         }
         return { match, property };
-    }
-    async isOrgMember(userId, orgOwnerId) {
-        const user = await this.userModel.findById(userId).select("agentOrgId").lean();
-        if (!user?.agentOrgId)
-            return false;
-        return user.agentOrgId.toString() === orgOwnerId;
-    }
-    async getOrgRelatedIds(userId) {
-        const user = await this.userModel
-            .findById(userId)
-            .select("role agentOrgId orgProfile")
-            .lean();
-        if (!user)
-            return [];
-        if (user.agentOrgId) {
-            return [new mongoose_2.Types.ObjectId(user.agentOrgId.toString())];
-        }
-        const agentIds = user?.orgProfile?.agentIds;
-        if (Array.isArray(agentIds) && agentIds.length > 0) {
-            return agentIds.map((id) => new mongoose_2.Types.ObjectId(id.toString()));
-        }
-        return [];
     }
     async getParticipantIds(matchId) {
         if (!mongoose_2.Types.ObjectId.isValid(matchId)) {
@@ -512,23 +476,9 @@ let ChatService = class ChatService {
         const tenantId = match.tenantId?.toString?.();
         const landlordId = property.landlordId?.toString?.();
         if (!tenantId || !landlordId) {
-            await this.purgeOrphanProperty(property._id);
             throw new common_1.NotFoundException("Property not found");
         }
         return { tenantId, landlordId };
-    }
-    async purgeOrphanProperty(propertyId) {
-        const matchIds = await this.matchModel
-            .find({ propertyId })
-            .distinct("_id")
-            .exec();
-        if (matchIds.length) {
-            await this.messageModel.deleteMany({
-                matchId: { $in: matchIds.map((id) => new mongoose_2.Types.ObjectId(id)) },
-            });
-            await this.matchModel.deleteMany({ _id: { $in: matchIds } });
-        }
-        await this.propertyModel.deleteOne({ _id: propertyId });
     }
     async assertChatParticipant(matchId, senderId, receiverId) {
         const { match, property } = await this.assertMatchMembership(matchId, senderId);
@@ -551,5 +501,6 @@ exports.ChatService = ChatService = __decorate([
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        mongoose_2.Model])
+        mongoose_2.Model,
+        workspace_service_1.WorkspaceService])
 ], ChatService);

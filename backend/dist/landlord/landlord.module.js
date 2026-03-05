@@ -13,12 +13,13 @@ const landlord_service_1 = require("./landlord.service");
 const properties_module_1 = require("../properties/properties.module");
 const matches_module_1 = require("../matches/matches.module");
 const users_module_1 = require("../users/users.module");
+const workspace_module_1 = require("../common/services/workspace.module");
 let LandlordModule = class LandlordModule {
 };
 exports.LandlordModule = LandlordModule;
 exports.LandlordModule = LandlordModule = __decorate([
     (0, common_1.Module)({
-        imports: [properties_module_1.PropertiesModule, matches_module_1.MatchesModule, users_module_1.UsersModule],
+        imports: [properties_module_1.PropertiesModule, matches_module_1.MatchesModule, users_module_1.UsersModule, workspace_module_1.WorkspaceModule],
         controllers: [landlord_controller_1.LandlordController],
         providers: [landlord_service_1.LandlordService],
     })

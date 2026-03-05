@@ -18,6 +18,7 @@ const chat_controller_1 = require("./chat.controller");
 const chat_service_1 = require("./chat.service");
 const chat_gateway_1 = require("./chat.gateway");
 const message_schema_1 = require("./schemas/message.schema");
+const workspace_module_1 = require("../common/services/workspace.module");
 let ChatModule = class ChatModule {
 };
 exports.ChatModule = ChatModule;
@@ -28,6 +29,7 @@ exports.ChatModule = ChatModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: match_schema_1.Match.name, schema: match_schema_1.MatchSchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: property_schema_1.Property.name, schema: property_schema_1.PropertySchema }]),
             mongoose_1.MongooseModule.forFeature([{ name: user_schema_1.User.name, schema: user_schema_1.UserSchema }]),
+            workspace_module_1.WorkspaceModule,
             jwt_1.JwtModule.registerAsync({
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => ({

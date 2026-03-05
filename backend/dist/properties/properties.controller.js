@@ -60,10 +60,11 @@ let PropertiesController = class PropertiesController {
         return this.propertiesService.createProperty(dto);
     }
     async update(id, dto, req) {
-        const property = await this.propertiesService.getProperty(id);
-        if (property.landlordId.toString() !== req.user?.sub) {
+        const actorId = req.user?.sub;
+        if (!actorId) {
             throw new common_1.ForbiddenException("Access denied");
         }
+        await this.propertiesService.assertPropertyMutationAccess(id, actorId);
         return this.propertiesService.updateProperty(id, dto);
     }
     explore(query, req) {

@@ -15,16 +15,17 @@ const properties_service_1 = require("../properties/properties.service");
 const matches_service_1 = require("../matches/matches.service");
 const users_service_1 = require("../users/users.service");
 const enums_1 = require("../common/enums");
+const workspace_service_1 = require("../common/services/workspace.service");
 let LandlordService = class LandlordService {
-    constructor(propertiesService, matchesService, usersService) {
+    constructor(propertiesService, matchesService, usersService, workspaceService) {
         this.propertiesService = propertiesService;
         this.matchesService = matchesService;
         this.usersService = usersService;
+        this.workspaceService = workspaceService;
     }
     async getLandlordProperties(landlordId, options) {
-        const memberIds = await this.getOrgMemberIds(landlordId);
-        const groupedProperties = await Promise.all(memberIds.map((memberId) => this.propertiesService.getLandlordProperties(memberId, options)));
-        const properties = groupedProperties.flat();
+        const normalizedScope = await this.normalizePropertyScope(landlordId, options?.scope);
+        const properties = await this.propertiesService.getLandlordProperties(landlordId, { ...options, scope: normalizedScope });
         const propertyIds = properties.map((property) => property.id);
         const counts = await this.matchesService.getMatchCountsByPropertyIds(propertyIds);
         const newCounts = await this.matchesService.getNewMatchCountsByPropertyIds(propertyIds);
@@ -34,14 +35,13 @@ let LandlordService = class LandlordService {
         return this.sortSummaries(summaries, options?.sort);
     }
     async getNewMatchesCount(landlordId, propertyId) {
-        await this.assertPropertyOwnership(landlordId, propertyId);
+        await this.assertPropertyManagement(landlordId, propertyId);
         const count = await this.matchesService.countNewByProperty(propertyId);
         return { propertyId, newMatchesCount: count };
     }
     async getPropertiesWithMatches(landlordId, options) {
-        const memberIds = await this.getOrgMemberIds(landlordId);
-        const groupedProperties = await Promise.all(memberIds.map((memberId) => this.propertiesService.getLandlordProperties(memberId, options)));
-        const properties = groupedProperties.flat();
+        const normalizedScope = await this.normalizePropertyScope(landlordId, options?.scope);
+        const properties = await this.propertiesService.getLandlordProperties(landlordId, { ...options, scope: normalizedScope });
         const propertyIds = properties.map((property) => property.id);
         if (!propertyIds.length) {
             return [];
@@ -57,13 +57,15 @@ let LandlordService = class LandlordService {
         return this.sortSummaries(summaries, options?.sort);
     }
     async getPropertyMatches(landlordId, propertyId) {
-        await this.assertPropertyOwnership(landlordId, propertyId);
+        await this.assertPropertyManagement(landlordId, propertyId);
         return this.matchesService.getPropertyMatchesWithTenant(propertyId);
     }
     async getTenantProfile(landlordId, tenantId) {
-        const memberIds = await this.getOrgMemberIds(landlordId);
-        const groupedProperties = await Promise.all(memberIds.map((memberId) => this.propertiesService.getLandlordProperties(memberId)));
-        const propertyIds = groupedProperties.flat().map((property) => property.id);
+        const normalizedScope = await this.normalizePropertyScope(landlordId, "all");
+        const properties = await this.propertiesService.getLandlordProperties(landlordId, {
+            scope: normalizedScope,
+        });
+        const propertyIds = properties.map((property) => property.id);
         const hasMatch = await this.matchesService.landlordHasTenantMatch(propertyIds, tenantId);
         if (!hasMatch) {
             throw new common_1.ForbiddenException("Access denied");
@@ -72,52 +74,60 @@ let LandlordService = class LandlordService {
         return this.usersService.sanitizeUser(tenant);
     }
     async markPropertyMatchesSeen(landlordId, propertyId) {
-        await this.assertPropertyOwnership(landlordId, propertyId);
+        await this.assertPropertyManagement(landlordId, propertyId);
         return this.matchesService.markMatchesSeenForProperty(propertyId);
     }
     async deleteProperty(landlordId, propertyId) {
-        await this.assertPropertyOwnership(landlordId, propertyId);
+        await this.assertPropertyManagement(landlordId, propertyId);
         return this.propertiesService.deletePropertyForLandlord(landlordId, propertyId);
     }
     async getOrgStats(orgId) {
         const org = await this.usersService.findById(orgId);
-        const agentIds = org?.orgProfile?.agentIds?.map((id) => id.toString()) ?? [];
-        const allMemberIds = [orgId, ...agentIds];
-        const agents = agentIds.length
-            ? await Promise.all(agentIds.map(async (id) => {
-                try {
-                    const agent = await this.usersService.findById(id);
-                    return {
-                        agentId: id,
-                        name: [agent.firstName, agent.lastName].filter(Boolean).join(" ") ||
-                            agent.email ||
-                            "Agent",
-                        email: agent.email ?? "",
-                    };
-                }
-                catch {
-                    return { agentId: id, name: "Unknown", email: "" };
-                }
-            }))
-            : [];
-        const listingsByMember = await Promise.all(allMemberIds.map(async (memberId) => {
-            const props = await this.propertiesService.getLandlordProperties(memberId);
-            return { memberId, count: props.length };
-        }));
-        const totalListings = listingsByMember.reduce((sum, m) => sum + m.count, 0);
-        const allProps = await Promise.all(allMemberIds.map((id) => this.propertiesService.getLandlordProperties(id)));
-        const allPropertyIds = allProps
-            .flat()
-            .map((p) => p.id ?? p._id?.toString())
+        if (org.role !== enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("Not an organisation");
+        }
+        const memberIds = await this.workspaceService.getOrgMemberIds(orgId);
+        const normalizedMembers = Array.from(new Set(memberIds));
+        const [orgAgents, properties] = await Promise.all([
+            this.usersService.getOrgAgents(orgId),
+            this.propertiesService.getLandlordProperties(orgId, { scope: "all" }),
+        ]);
+        const listingCountByOwnerId = new Map();
+        properties.forEach((property) => {
+            const ownerId = property.landlordId?.toString?.();
+            if (!ownerId)
+                return;
+            listingCountByOwnerId.set(ownerId, (listingCountByOwnerId.get(ownerId) ?? 0) + 1);
+        });
+        const totalListings = properties.length;
+        const activeAgents = normalizedMembers.length > 0 ? normalizedMembers.length - 1 : 0;
+        const allPropertyIds = properties
+            .map((property) => property.id ?? property._id?.toString())
             .filter(Boolean);
         const totalMatchCounts = allPropertyIds.length
             ? await this.matchesService.getMatchCountsByPropertyIds(allPropertyIds)
             : [];
         const totalMatches = totalMatchCounts.reduce((sum, item) => sum + (item.count ?? 0), 0);
-        const listingsByAgent = agents.map((agent) => {
-            const entry = listingsByMember.find((m) => m.memberId === agent.agentId);
-            return { ...agent, count: entry?.count ?? 0 };
+        const agentMap = new Map();
+        orgAgents.forEach((agent) => {
+            const agentId = agent?.id ?? agent?._id;
+            if (!agentId)
+                return;
+            agentMap.set(String(agentId), {
+                name: [agent.firstName, agent.lastName].filter(Boolean).join(" ") ||
+                    agent.email ||
+                    "Agent",
+                email: agent.email ?? "",
+            });
         });
+        const listingsByAgent = normalizedMembers
+            .filter((memberId) => memberId !== orgId)
+            .map((memberId) => ({
+            agentId: memberId,
+            name: agentMap.get(memberId)?.name || "Agent",
+            email: agentMap.get(memberId)?.email || "",
+            count: listingCountByOwnerId.get(memberId) ?? 0,
+        }));
         const now = new Date();
         const matchesByMonth = [];
         const monthKeyToIndex = new Map();
@@ -140,33 +150,25 @@ let LandlordService = class LandlordService {
         return {
             totalListings,
             totalMatches,
-            activeAgents: agentIds.length,
+            activeAgents,
+            ownerListingCount: listingCountByOwnerId.get(orgId) ?? 0,
             listingsByAgent,
             matchesByMonth,
-            ownerListingCount: listingsByMember.find((m) => m.memberId === orgId)?.count ?? 0,
         };
     }
-    async assertPropertyOwnership(landlordId, propertyId) {
-        const property = await this.propertiesService.getProperty(propertyId);
-        if (property.landlordId.toString() === landlordId) {
-            return;
+    async normalizePropertyScope(actorId, scope) {
+        const context = await this.workspaceService.getWorkspaceActorContext(actorId);
+        if (context.scope === "solo") {
+            return "mine";
         }
-        const memberIds = await this.getOrgMemberIds(landlordId);
-        if (!memberIds.includes(property.landlordId.toString())) {
+        return scope === "mine" ? "mine" : "all";
+    }
+    async assertPropertyManagement(landlordId, propertyId) {
+        const property = await this.propertiesService.getProperty(propertyId);
+        const canManage = await this.workspaceService.canActorManageProperty(landlordId, property);
+        if (!canManage) {
             throw new common_1.ForbiddenException("Access denied");
         }
-    }
-    async getOrgMemberIds(userId) {
-        const user = await this.usersService.findById(userId);
-        if (user.role !== enums_1.UserRole.Organisation) {
-            return [userId];
-        }
-        const agents = await this.usersService.getOrgAgents(userId);
-        const orgAgentIds = agents
-            .map((agent) => agent?.id ?? agent?._id)
-            .map((id) => (id ? String(id) : ""))
-            .filter(Boolean);
-        return [userId, ...orgAgentIds];
     }
     mapPropertySummary(property, matchCount, newCount) {
         const plain = property.toObject();
@@ -216,5 +218,6 @@ exports.LandlordService = LandlordService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [properties_service_1.PropertiesService,
         matches_service_1.MatchesService,
-        users_service_1.UsersService])
+        users_service_1.UsersService,
+        workspace_service_1.WorkspaceService])
 ], LandlordService);

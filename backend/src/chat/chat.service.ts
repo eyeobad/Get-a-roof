@@ -12,6 +12,7 @@ import { Match, MatchDocument } from "../matches/schemas/match.schema";
 import { Property, PropertyDocument } from "../properties/schemas/property.schema";
 import { MatchStatus, RouteAccessStatus } from "../common/enums";
 import { User, UserDocument } from "../users/schemas/user.schema";
+import { WorkspaceService } from "../common/services/workspace.service";
 
 type RouteRequestPayload = {
   id: string;
@@ -29,7 +30,8 @@ export class ChatService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly workspaceService: WorkspaceService
   ) { }
 
   private parseRouteRequestPayload(content: string): RouteRequestPayload | null {
@@ -132,11 +134,11 @@ export class ChatService {
       }
 
       if (routePayload.status === "approved" || routePayload.status === "denied") {
-        const isOwner = dto.senderId === landlordId;
-        const isAgentMember = !isOwner
-          ? await this.isOrgMember(dto.senderId, landlordId)
-          : false;
-        if (!isOwner && !isAgentMember) {
+        const canManage = await this.workspaceService.canActorManageProperty(
+          dto.senderId,
+          property
+        );
+        if (!canManage) {
           throw new ForbiddenException("Only landlord can approve or deny route access");
         }
         matchPatch.routeAccessStatus =
@@ -187,10 +189,12 @@ export class ChatService {
     const userObjectId = new Types.ObjectId(userId);
     const limit = options?.limit ?? 20;
     const offset = options?.offset ?? 0;
-
-    // If user is an agent, also include conversations for the org owner
-    // If user is an org owner, also include conversations for their agents
-    const orgMemberIds = await this.getOrgRelatedIds(userId);
+    const context = await this.workspaceService.getWorkspaceActorContext(userId);
+    const landlordVisibilityIds = (
+      context.scope === "owner" ? context.orgMemberIds : [userId]
+    )
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
 
     const pipeline: PipelineStage[] = [
       {
@@ -215,12 +219,7 @@ export class ChatService {
           status: { $ne: MatchStatus.Dismissed },
           $or: [
             { tenantId: userObjectId },
-            { tenantId: userId },
-            { "property.landlordId": userObjectId },
-            { "property.landlordId": userId },
-            ...(orgMemberIds.length
-              ? [{ "property.landlordId": { $in: orgMemberIds } }]
-              : []),
+            { "property.landlordId": { $in: landlordVisibilityIds } },
           ],
         },
       },
@@ -265,7 +264,7 @@ export class ChatService {
           from: "messages",
           let: {
             matchId: "$_id",
-            validReceiverIds: [userId, ...orgMemberIds.map(id => id.toString())]
+            currentUserId: userId,
           },
           pipeline: [
             {
@@ -286,9 +285,9 @@ export class ChatService {
                       {
                         $and: [
                           {
-                            $in: [
+                            $eq: [
                               { $toString: "$receiverId" },
-                              "$$validReceiverIds",
+                              "$$currentUserId",
                             ],
                           },
                           { $eq: ["$isRead", false] },
@@ -371,14 +370,10 @@ export class ChatService {
   }
 
   async markMatchRead(matchId: string, userId: string) {
-    const { match, property } = await this.assertMatchMembership(matchId, userId);
-
-    const tenantId = match.tenantId.toString();
-    const landlordId = property.landlordId.toString();
-    const targetReceiverId = tenantId === userId ? tenantId : landlordId;
+    await this.assertMatchMembership(matchId, userId);
 
     const result = await this.messageModel.updateMany(
-      { matchId, receiverId: targetReceiverId, isRead: false },
+      { matchId, receiverId: userId, isRead: false },
       { $set: { isRead: true, readAt: new Date() } }
     );
 
@@ -392,7 +387,6 @@ export class ChatService {
     }
     const landlordId = property.landlordId?.toString?.();
     if (!landlordId) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
     const [tenantUser, landlordUser] = await Promise.all([
@@ -400,7 +394,6 @@ export class ChatService {
       this.userModel.findById(landlordId).exec(),
     ]);
     if (!landlordUser) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
     if (landlordId === tenantId) {
@@ -459,7 +452,6 @@ export class ChatService {
     }
     const resolvedLandlordId = property.landlordId?.toString?.();
     if (!resolvedLandlordId) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
     const [tenantUser, landlordUser] = await Promise.all([
@@ -467,15 +459,14 @@ export class ChatService {
       this.userModel.findById(resolvedLandlordId).exec(),
     ]);
     if (!landlordUser) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
-    if (resolvedLandlordId !== landlordId) {
-      // Check if user is an agent of the org that owns this property
-      const agentAllowed = await this.isOrgMember(landlordId, resolvedLandlordId);
-      if (!agentAllowed) {
-        throw new ForbiddenException("Access denied");
-      }
+    const canManage = await this.workspaceService.canActorManageProperty(
+      landlordId,
+      property
+    );
+    if (!canManage) {
+      throw new ForbiddenException("Access denied");
     }
 
     if (match.status !== MatchStatus.ChatInitiated) {
@@ -516,47 +507,16 @@ export class ChatService {
     const tenantId = match.tenantId?.toString?.();
     const landlordId = property.landlordId?.toString?.();
     if (!tenantId || !landlordId) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
     const isTenant = tenantId === userId;
-    const isLandlord = landlordId === userId;
-    const isOrgAgent = !isTenant && !isLandlord
-      ? await this.isOrgMember(userId, landlordId)
-      : false;
-    if (!isTenant && !isLandlord && !isOrgAgent) {
+    const isAuthorizedLandlord = isTenant
+      ? false
+      : await this.workspaceService.canActorManageProperty(userId, property);
+    if (!isTenant && !isAuthorizedLandlord) {
       throw new ForbiddenException("Access denied");
     }
     return { match, property };
-  }
-
-  /** Check if userId is an agent belonging to the org identified by orgOwnerId */
-  private async isOrgMember(userId: string, orgOwnerId: string): Promise<boolean> {
-    const user = await this.userModel.findById(userId).select("agentOrgId").lean();
-    if (!user?.agentOrgId) return false;
-    return user.agentOrgId.toString() === orgOwnerId;
-  }
-
-  /** Get related org member IDs for conversation visibility */
-  private async getOrgRelatedIds(userId: string): Promise<Types.ObjectId[]> {
-    const user = await this.userModel
-      .findById(userId)
-      .select("role agentOrgId orgProfile")
-      .lean();
-    if (!user) return [];
-
-    // If the user is an agent, return the org owner so they see org conversations
-    if (user.agentOrgId) {
-      return [new Types.ObjectId(user.agentOrgId.toString())];
-    }
-
-    // If the user is an org owner, return all agent IDs so they see agent conversations
-    const agentIds = (user as any)?.orgProfile?.agentIds;
-    if (Array.isArray(agentIds) && agentIds.length > 0) {
-      return agentIds.map((id: any) => new Types.ObjectId(id.toString()));
-    }
-
-    return [];
   }
 
   async getParticipantIds(matchId: string) {
@@ -576,24 +536,9 @@ export class ChatService {
     const tenantId = match.tenantId?.toString?.();
     const landlordId = property.landlordId?.toString?.();
     if (!tenantId || !landlordId) {
-      await this.purgeOrphanProperty(property._id);
       throw new NotFoundException("Property not found");
     }
     return { tenantId, landlordId };
-  }
-
-  private async purgeOrphanProperty(propertyId: Types.ObjectId) {
-    const matchIds = await this.matchModel
-      .find({ propertyId })
-      .distinct("_id")
-      .exec();
-    if (matchIds.length) {
-      await this.messageModel.deleteMany({
-        matchId: { $in: matchIds.map((id) => new Types.ObjectId(id)) },
-      });
-      await this.matchModel.deleteMany({ _id: { $in: matchIds } });
-    }
-    await this.propertyModel.deleteOne({ _id: propertyId });
   }
 
   private async assertChatParticipant(

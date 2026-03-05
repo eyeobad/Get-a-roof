@@ -145,6 +145,14 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Property.prototype, "landlordId", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: String, enum: ["owner", "agent"], default: "owner" }),
+    __metadata("design:type", String)
+], Property.prototype, "ownerKind", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: "User" }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Property.prototype, "orgId", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Property.prototype, "images", void 0);
@@ -229,3 +237,4 @@ exports.Property = Property = __decorate([
 ], Property);
 exports.PropertySchema = mongoose_1.SchemaFactory.createForClass(Property);
 exports.PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
+exports.PropertySchema.index({ orgId: 1, status: 1, updatedAt: -1 });

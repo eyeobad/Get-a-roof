@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { Property, PropertyDocument } from "./schemas/property.schema";
@@ -15,6 +20,7 @@ import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
+import { WorkspaceService } from "../common/services/workspace.service";
 
 const propertyImageMimeTypes = new Set([
   "image/jpeg",
@@ -31,6 +37,8 @@ const propertyProofMimeTypes = new Set([
   "application/pdf",
 ]);
 
+type PropertyScope = "mine" | "all";
+
 @Injectable()
 export class PropertiesService {
   constructor(
@@ -39,19 +47,42 @@ export class PropertiesService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly usersService: UsersService,
-    private readonly appwriteStorage: AppwriteStorageService
+    private readonly appwriteStorage: AppwriteStorageService,
+    private readonly workspaceService: WorkspaceService
   ) { }
 
   async createProperty(dto: CreatePropertyDto) {
     if (!dto.landlordId || !Types.ObjectId.isValid(dto.landlordId)) {
       throw new BadRequestException("Invalid landlordId");
     }
-    const landlord = await this.userModel.findById(dto.landlordId).select("role").lean();
-    if (!landlord || (landlord.role !== UserRole.Landlord && landlord.role !== UserRole.Organisation)) {
-      throw new BadRequestException("Property must be tied to a valid landlord or organisation account");
+    const actor = await this.userModel
+      .findById(dto.landlordId)
+      .select("role agentOrgId")
+      .lean()
+      .exec();
+    if (
+      !actor ||
+      (actor.role !== UserRole.Landlord &&
+        actor.role !== UserRole.Organisation)
+    ) {
+      throw new BadRequestException("Invalid owner");
     }
+
+    const actorContext = await this.workspaceService.getWorkspaceActorContext(
+      dto.landlordId
+    );
+    const ownerKind = actorContext.scope === "agent" ? "agent" : "owner";
+    const orgId = actorContext.orgId
+      ? new Types.ObjectId(actorContext.orgId)
+      : undefined;
+
     const normalized = this.normalizePropertyPayload(dto);
-    const created = new this.propertyModel(normalized);
+    const created = new this.propertyModel({
+      ...normalized,
+      landlordId: new Types.ObjectId(dto.landlordId),
+      ownerKind,
+      ...(orgId ? { orgId } : {}),
+    });
     return created.save();
   }
 
@@ -71,12 +102,12 @@ export class PropertiesService {
     if (!property) {
       throw new NotFoundException("Property not found");
     }
-    const landlordExists = await this.userModel
-      .exists({ _id: property.landlordId, role: UserRole.Landlord });
-    if (!landlordExists) {
-      await this.propertyModel.deleteOne({ _id: property._id });
-      throw new NotFoundException("Property not found");
-    }
+    return property;
+  }
+
+  async assertPropertyMutationAccess(propertyId: string, actorId: string) {
+    const property = await this.getProperty(propertyId);
+    await this.workspaceService.assertCanManageProperty(actorId, property);
     return property;
   }
 
@@ -119,7 +150,7 @@ export class PropertiesService {
       }
     }
     const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
-    const validProperties = await this.removeOrphanedProperties(properties);
+    const validProperties = await this.excludeOrphanedProperties(properties);
     return this.applyScoringAndFilters(validProperties, options);
   }
 
@@ -153,7 +184,7 @@ export class PropertiesService {
       .find(withCoords)
       .limit(limit)
       .exec();
-    const validProperties = await this.removeOrphanedProperties(properties);
+    const validProperties = await this.excludeOrphanedProperties(properties);
     const results = await this.applyScoringAndFilters(validProperties, options);
     const routeAccessMap = await this.getTenantRouteAccessMap(
       options?.userId,
@@ -212,25 +243,36 @@ export class PropertiesService {
 
   async getLandlordProperties(
     landlordId: string,
-    options?: { q?: string; status?: string; sort?: string }
+    options?: {
+      q?: string;
+      status?: string;
+      sort?: string;
+      scope?: PropertyScope;
+    }
   ) {
-    const filters: Record<string, any> = {
-      landlordId: Types.ObjectId.isValid(landlordId)
-        ? new Types.ObjectId(landlordId)
-        : landlordId,
-    };
+    const workspaceFilters: Record<string, any> = await this.workspaceService.getPropertyWorkspaceFilter(
+      landlordId,
+      options?.scope
+    );
+
+    const clauses: Record<string, any>[] = [workspaceFilters];
+
     if (options?.status) {
-      filters.status = options.status;
+      clauses.push({ status: options.status });
     }
     if (options?.q) {
       const regex = new RegExp(options.q, "i");
-      filters.$or = [
+      clauses.push({
+        $or: [
         { "address.street": regex },
         { "address.city": regex },
         { "address.state": regex },
         { neighborhood: regex },
-      ];
+        ],
+      });
     }
+
+    const filters = clauses.length === 1 ? clauses[0] : { $and: clauses };
 
     const projection = {
       address: 1,
@@ -258,10 +300,8 @@ export class PropertiesService {
   }
 
   async deletePropertyForLandlord(landlordId: string, propertyId: string) {
+    await this.assertPropertyMutationAccess(propertyId, landlordId);
     const property = await this.getProperty(propertyId);
-    if (property.landlordId.toString() !== landlordId) {
-      throw new NotFoundException("Property not found");
-    }
 
     const matchIds = await this.matchModel
       .find({ propertyId: property._id })
@@ -475,7 +515,7 @@ export class PropertiesService {
     return map;
   }
 
-  private async removeOrphanedProperties(properties: PropertyDocument[]) {
+  private async excludeOrphanedProperties(properties: PropertyDocument[]) {
     if (!properties.length) return properties;
     const landlordIds = Array.from(
       new Set(
@@ -493,20 +533,12 @@ export class PropertiesService {
     const validSet = new Set(validLandlords.map((user) => user._id.toString()));
 
     const keep: PropertyDocument[] = [];
-    const orphanIds: Types.ObjectId[] = [];
     properties.forEach((property) => {
       const ownerId = property.landlordId?.toString?.() ?? "";
       if (ownerId && validSet.has(ownerId)) {
         keep.push(property);
-      } else {
-        orphanIds.push(property._id);
       }
     });
-
-    if (orphanIds.length) {
-      await this.propertyModel.deleteMany({ _id: { $in: orphanIds } });
-      await this.matchModel.deleteMany({ propertyId: { $in: orphanIds } });
-    }
 
     return keep;
   }

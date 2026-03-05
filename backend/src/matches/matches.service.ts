@@ -14,6 +14,7 @@ import { UsersService } from "../users/users.service";
 import { PropertiesService } from "../properties/properties.service";
 import { computeMatchScore, PropertyMatchInput } from "../common/utils/match.utils";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
+import { WorkspaceService } from "../common/services/workspace.service";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -62,7 +63,8 @@ export class MatchesService {
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly usersService: UsersService,
-    private readonly propertiesService: PropertiesService
+    private readonly propertiesService: PropertiesService,
+    private readonly workspaceService: WorkspaceService
   ) { }
 
   // -----------------------------------------------------------------------
@@ -187,13 +189,11 @@ export class MatchesService {
     const property = await this.propertiesService.getProperty(
       match.propertyId.toString()
     );
-    const propLandlordId = property.landlordId.toString();
-    const isDirectOwner = propLandlordId === landlordId;
-    const isAgent = !isDirectOwner
-      ? await this.isOrgAgentOf(landlordId, propLandlordId)
-      : false;
-
-    if (!isDirectOwner && !isAgent) {
+    const canManage = await this.workspaceService.canActorManageProperty(
+      landlordId,
+      property
+    );
+    if (!canManage) {
       throw new ForbiddenException("Access denied");
     }
 
@@ -202,13 +202,6 @@ export class MatchesService {
     }
     match.landlordSeenAt = new Date();
     return match.save();
-  }
-
-  /** Check if userId is an agent belonging to the org identified by orgOwnerId */
-  private async isOrgAgentOf(userId: string, orgOwnerId: string): Promise<boolean> {
-    const user = await this.usersService.findById(userId);
-    if (!user?.agentOrgId) return false;
-    return user.agentOrgId.toString() === orgOwnerId;
   }
 
   // -----------------------------------------------------------------------

@@ -17,6 +17,7 @@ const appwrite_module_1 = require("../appwrite/appwrite.module");
 const match_schema_1 = require("../matches/schemas/match.schema");
 const user_schema_1 = require("../users/schemas/user.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const workspace_module_1 = require("../common/services/workspace.module");
 let PropertiesModule = class PropertiesModule {
 };
 exports.PropertiesModule = PropertiesModule;
@@ -29,6 +30,7 @@ exports.PropertiesModule = PropertiesModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: message_schema_1.Message.name, schema: message_schema_1.MessageSchema }]),
             users_module_1.UsersModule,
             appwrite_module_1.AppwriteModule,
+            workspace_module_1.WorkspaceModule,
         ],
         controllers: [properties_controller_1.PropertiesController],
         providers: [properties_service_1.PropertiesService],

@@ -9,6 +9,7 @@ import { ChatController } from "./chat.controller";
 import { ChatService } from "./chat.service";
 import { ChatGateway } from "./chat.gateway";
 import { Message, MessageSchema } from "./schemas/message.schema";
+import { WorkspaceModule } from "../common/services/workspace.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { Message, MessageSchema } from "./schemas/message.schema";
     MongooseModule.forFeature([{ name: Match.name, schema: MatchSchema }]),
     MongooseModule.forFeature([{ name: Property.name, schema: PropertySchema }]),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    WorkspaceModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

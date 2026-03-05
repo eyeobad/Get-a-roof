@@ -100,10 +100,11 @@ export class PropertiesController {
     @Body() dto: UpdatePropertyDto,
     @Req() req: Request & { user?: any }
   ) {
-    const property = await this.propertiesService.getProperty(id);
-    if (property.landlordId.toString() !== req.user?.sub) {
+    const actorId = req.user?.sub;
+    if (!actorId) {
       throw new ForbiddenException("Access denied");
     }
+    await this.propertiesService.assertPropertyMutationAccess(id, actorId);
     return this.propertiesService.updateProperty(id, dto);
   }
 

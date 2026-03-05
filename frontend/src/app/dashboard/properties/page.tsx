@@ -270,12 +270,21 @@ function LandlordDashboardContent() {
   const orgStats = useAppStore((state) => state.orgStats);
   const loadOrgStats = useAppStore((state) => state.loadOrgStats);
   const [agentFilter, setAgentFilter] = useState<string>("all");
-
-  const isOrg = user?.role === "Organisation";
-  const orgName = (user as Record<string, unknown> | null)?.orgProfile
-    ? ((user as Record<string, unknown>).orgProfile as { orgName?: string })?.orgName
-    : undefined;
+  const [propertyScope, setPropertyScope] = useState<"mine" | "all">("mine");
   const userId = useAppStore((state) => state.userId);
+
+  const userRole = Array.isArray(user?.role) ? user?.role[0] : user?.role;
+  const isOrgOwner = userRole === "Organisation";
+  const isOrgAgent = userRole === "Landlord" && Boolean(user?.agentOrgId);
+  const orgId = isOrgOwner ? userId : (user?.agentOrgId as string | undefined);
+  const orgName =
+    (user as Record<string, unknown> | null)?.orgProfile
+      ? ((user as Record<string, unknown>).orgProfile as { orgName?: string })?.orgName
+      : undefined;
+  const isOrgContext = isOrgOwner || isOrgAgent;
+  const canManageOrgMembers = isOrgOwner;
+  const isOrgScopeEnabled = isOrgContext;
+  const orgRoleBadge = isOrgOwner ? "Owner" : isOrgAgent ? "Agent" : undefined;
 
   const mappedProperties: Property[] = useMemo(
     () =>
@@ -329,22 +338,77 @@ function LandlordDashboardContent() {
   }, [orgStats]);
 
   const agentNameById = useMemo(() => {
-    if (!isOrg || !orgStats) return new Map<string, string>();
+    if (!isOrgContext) return new Map<string, string>();
     const map = new Map<string, string>();
-    if (userId) map.set(userId, orgName ?? "You");
-    orgStats.listingsByAgent.forEach((agent) => {
-      map.set(agent.agentId, agent.name || agent.email || "Agent");
-    });
+    if (userId) {
+      map.set(userId, isOrgOwner ? "You" : "You");
+    }
+    if (orgStats) {
+      orgStats.listingsByAgent.forEach((agent) => {
+        map.set(agent.agentId, agent.name || agent.email || "Agent");
+      });
+    } else {
+      orgAgents.forEach((agent) => {
+        const name = [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim();
+        if (agent.id || agent._id) {
+          map.set((agent.id ?? agent._id) as string, name || agent.email || "Agent");
+        }
+      });
+    }
+    if (isOrgOwner && userId) map.set(userId, orgName ?? "Owner");
+    if (isOrgAgent && userId) map.set(userId, "You");
     return map;
-  }, [isOrg, orgName, orgStats, userId]);
+  }, [isOrgContext, isOrgAgent, isOrgOwner, orgAgents, orgName, orgStats, userId]);
+
+  const memberOptions = useMemo(() => {
+    if (!isOrgContext) return [];
+    const options: Array<{ id: string; label: string }> = [];
+    const seen = new Set<string>();
+
+    if (userId) {
+      const ownerLabel = isOrgOwner ? orgName ?? "Owner" : "You";
+      options.push({ id: userId, label: ownerLabel });
+      seen.add(userId);
+    }
+
+    const candidates = orgStats?.listingsByAgent?.length
+      ? orgStats.listingsByAgent
+      : orgAgents.map((agent) => ({
+        agentId: (agent.id ?? agent._id) as string | undefined,
+        name: [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim(),
+        email: agent.email,
+      }));
+
+    candidates.forEach((agent) => {
+      if (!agent.agentId) return;
+      if (seen.has(agent.agentId)) return;
+      seen.add(agent.agentId);
+      const label = [agent.name, agent.email].filter(Boolean).join(" | ");
+      options.push({ id: agent.agentId, label: label || "Agent" });
+    });
+
+    return options;
+  }, [isOrgContext, isOrgOwner, orgAgents, orgName, orgStats, userId]);
 
   const agentListingCountById = useMemo(() => {
+    if (!isOrgContext) return new Map<string, number>();
     const map = new Map<string, number>();
-    orgStats?.listingsByAgent.forEach((agent) => {
-      map.set(agent.agentId, agent.count ?? 0);
-    });
+    if (orgStats) {
+      orgStats.listingsByAgent.forEach((agent) => {
+        map.set(agent.agentId, agent.count ?? 0);
+      });
+      if (orgId) {
+        map.set(orgId, orgStats.ownerListingCount ?? 0);
+      }
+    } else {
+      landlordProperties.forEach((property) => {
+        const landlordId = property.landlordId;
+        if (!landlordId) return;
+        map.set(landlordId, (map.get(landlordId) ?? 0) + 1);
+      });
+    }
     return map;
-  }, [orgStats]);
+  }, [isOrgContext, landlordProperties, orgId, orgStats]);
 
   const donutOptions = useMemo(
     () => ({
@@ -384,33 +448,54 @@ function LandlordDashboardContent() {
   );
 
   useEffect(() => {
+    if (!isOrgContext) {
+      setPropertyScope("mine");
+      return;
+    }
+    if (isOrgAgent) {
+      setPropertyScope("mine");
+    } else if (isOrgOwner) {
+      setPropertyScope("all");
+    }
+  }, [isOrgAgent, isOrgOwner, isOrgContext]);
+
+  useEffect(() => {
     if (!authToken) return;
-    void loadLandlordProperties();
-  }, [authToken, loadLandlordProperties]);
+    void loadLandlordProperties({ scope: propertyScope });
+  }, [authToken, loadLandlordProperties, propertyScope]);
 
   useEffect(() => {
     if (authToken && !user?.photoUrl) {
       void fetchUserProfile();
     }
-  }, [authToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authToken, user?.photoUrl, fetchUserProfile]);
+
+  useEffect(() => {
+    if (!isOrgContext || propertyScope === "mine") {
+      setAgentFilter("all");
+    }
+  }, [isOrgContext, propertyScope]);
 
   const orgStatsLoadedRef = useRef(false);
   useEffect(() => {
-    if (!authToken || !isOrg || !userId) return;
-    void loadOrgAgents(userId);
-    if (!orgStatsLoadedRef.current) {
+    if (!authToken || !isOrgContext || !orgId) return;
+    void loadOrgAgents(orgId);
+    if (isOrgOwner && !orgStatsLoadedRef.current) {
       orgStatsLoadedRef.current = true;
-      void loadOrgStats(userId);
+      void loadOrgStats(orgId);
     }
-  }, [authToken, isOrg, userId, loadOrgAgents, loadOrgStats]);
+  }, [authToken, isOrgContext, isOrgOwner, orgId, loadOrgAgents, loadOrgStats]);
 
   useEffect(() => {
     if (!authToken) return;
     const timer = setTimeout(() => {
-      void loadLandlordProperties({ q: q.trim() || undefined });
+      void loadLandlordProperties({
+        q: q.trim() || undefined,
+        scope: propertyScope,
+      });
     }, 300);
     return () => clearTimeout(timer);
-  }, [authToken, q, loadLandlordProperties]);
+  }, [authToken, q, loadLandlordProperties, propertyScope]);
 
   const filtered = useMemo(() => {
     let result = mappedProperties;
@@ -418,11 +503,21 @@ function LandlordDashboardContent() {
     if (s) {
       result = result.filter((p) => p.title.toLowerCase().includes(s));
     }
-    if (isOrg && agentFilter !== "all") {
+    if (isOrgContext && propertyScope === "all" && agentFilter !== "all") {
       result = result.filter((p) => p.landlordId === agentFilter);
     }
+    if (isOrgContext && propertyScope === "mine") {
+      result = result.filter((p) => p.landlordId === userId);
+    }
     return result;
-  }, [agentFilter, isOrg, q, mappedProperties]);
+  }, [
+    agentFilter,
+    isOrgContext,
+    mappedProperties,
+    propertyScope,
+    q,
+    userId,
+  ]);
 
   const openDraft = async (id: string) => {
     if (authToken) {
@@ -471,21 +566,74 @@ function LandlordDashboardContent() {
     }
   };
 
+  const getEmptyState = () => {
+    if (!authToken) {
+      return {
+        title: "Sign in to load your properties.",
+        ctaLabel: null as string | null,
+      };
+    }
+    if (!isOrgContext) {
+      return {
+        title: "No properties yet. Start by adding your first listing.",
+        ctaLabel: "Add Property",
+      };
+    }
+    if (propertyScope === "mine") {
+      return isOrgOwner
+        ? {
+          title: "No listings under your owner profile yet.",
+          ctaLabel: "Add Property",
+          helper: "Create your first property to appear in the workspace.",
+        }
+        : {
+          title: "No properties created by you yet.",
+          ctaLabel: "Add Property",
+          helper: "Add a listing to build your contribution to this org.",
+        };
+    }
+    if (agentFilter !== "all") {
+      return {
+        title: "No properties match this agent filter.",
+        ctaLabel: null as string | null,
+        helper: "Try selecting another agent or switch to My Listings.",
+      };
+    }
+    return isOrgOwner
+      ? {
+        title: "This organisation has no listings yet.",
+        ctaLabel: "Add Property",
+        helper: "Create one listing to start collaborating with your agents.",
+      }
+      : {
+        title: `${orgName ?? "This organisation"} has no listings yet.`,
+        ctaLabel: null,
+        helper: "Ask your owner or teammates to add listings first.",
+      };
+  };
+
   return (
     <div className="min-h-screen bg-[#f5f6f8] text-gray-900 pb-24">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#f5f6f8]/95 backdrop-blur-sm border-b border-gray-200 px-5 py-4 flex items-center justify-between">
         <div>
-          {isOrg && orgName ? (
+          {isOrgContext ? (
             <>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[24px] text-[#0a44b8]" style={solidIconStyle}>corporate_fare</span>
                 <h1 className="text-[28px] font-extrabold text-[#0a44b8] tracking-tight leading-none">
-                  {orgName}
+                  {orgName ?? "Organisation"}
                 </h1>
               </div>
               <p className="text-[14px] text-gray-500 font-medium mt-1 flex items-center gap-1">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">Organisation</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+                  {isOrgOwner ? "Organisation" : orgRoleBadge ?? "Member"}
+                </span>
+                {orgRoleBadge ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                    {orgRoleBadge}
+                  </span>
+                ) : null}
                 Dashboard
               </p>
             </>
@@ -516,7 +664,7 @@ function LandlordDashboardContent() {
       <main className="px-5 pt-6 flex flex-col gap-6 max-w-md lg:max-w-6xl mx-auto w-full">
 
         {/* ═══════════ ORG STATS & CHARTS ═══════════ */}
-        {isOrg && orgStats && (
+        {isOrgOwner && orgStats && (
           <>
             {/* Overview Cards */}
             <div className="grid grid-cols-3 gap-3">
@@ -586,7 +734,7 @@ function LandlordDashboardContent() {
         </div>
 
         {/* Agent Management Panel (Org only) */}
-        {isOrg && (
+        {isOrgScopeEnabled && canManageOrgMembers && (
           <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] overflow-hidden">
             <button
               type="button"
@@ -620,10 +768,10 @@ function LandlordDashboardContent() {
                     type="button"
                     disabled={isInviting || !inviteEmail.trim()}
                     onClick={async () => {
-                      if (!userId || !inviteEmail.trim()) return;
+                      if (!orgId || !inviteEmail.trim()) return;
                       setIsInviting(true);
                       try {
-                        await inviteAgent(userId, inviteEmail.trim());
+                        await inviteAgent(orgId, inviteEmail.trim());
                         showToast({ title: "Invite sent!", text: `Invitation sent to ${inviteEmail.trim()}`, variant: "success" });
                         setInviteEmail("");
                       } catch (err) {
@@ -670,10 +818,10 @@ function LandlordDashboardContent() {
                             type="button"
                             disabled={removingAgentId === agentId}
                             onClick={async () => {
-                              if (!userId) return;
+                              if (!orgId) return;
                               setRemovingAgentId(agentId);
                               try {
-                                await removeAgent(userId, agentId);
+                                await removeAgent(orgId, agentId);
                                 showToast({ title: "Agent removed", variant: "success" });
                               } catch (err) {
                                 const msg = err instanceof Error ? err.message : "Failed";
@@ -699,26 +847,59 @@ function LandlordDashboardContent() {
 
         {/* Cards */}
         <div className="flex flex-col gap-6">
-          {isOrg ? (
-            <div className="flex items-center gap-3">
-              <label htmlFor="agent-filter" className="text-sm font-semibold text-gray-700">
-                Filter by agent
-              </label>
-              <select
-                id="agent-filter"
-                value={agentFilter}
-                onChange={(event) => setAgentFilter(event.target.value)}
-                className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:border-[#0a44b8] focus:outline-none"
-              >
-                <option value="all">All members</option>
-                {userId ? <option value={userId}>{orgName ?? "Owner"}</option> : null}
-                {orgStats?.listingsByAgent.map((agent) => (
-                  <option key={agent.agentId} value={agent.agentId}>
-                    {agent.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {isOrgScopeEnabled ? (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm font-semibold text-gray-700">Viewing scope</p>
+                <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPropertyScope("mine")}
+                    className={[
+                      "h-9 px-3 rounded-lg text-sm font-bold transition-colors",
+                      propertyScope === "mine"
+                        ? "bg-[#0a44b8] text-white shadow"
+                        : "text-gray-600 hover:bg-gray-100",
+                    ].join(" ")}
+                  >
+                    My Listings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPropertyScope("all")}
+                    className={[
+                      "h-9 px-3 rounded-lg text-sm font-bold transition-colors",
+                      propertyScope === "all"
+                        ? "bg-[#0a44b8] text-white shadow"
+                        : "text-gray-600 hover:bg-gray-100",
+                    ].join(" ")}
+                  >
+                    All Organisation Listings
+                  </button>
+                </div>
+              </div>
+
+              {propertyScope === "all" ? (
+                <div className="flex items-center gap-3">
+                  <label htmlFor="agent-filter" className="text-sm font-semibold text-gray-700">
+                    Filter by member
+                  </label>
+                  <select
+                    id="agent-filter"
+                    value={agentFilter}
+                    onChange={(event) => setAgentFilter(event.target.value)}
+                    className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:border-[#0a44b8] focus:outline-none"
+                  >
+                    <option value="all">All members</option>
+                    {memberOptions.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </>
           ) : null}
           {filtered.length ? (
             filtered.map((p) => (
@@ -730,25 +911,28 @@ function LandlordDashboardContent() {
                 onContinue={onContinue}
                 onDelete={onDelete}
                 isDeleting={isDeletingId === p.id}
-                agentName={isOrg ? agentNameById.get(p.landlordId ?? "") : undefined}
+                agentName={isOrgContext ? agentNameById.get(p.landlordId ?? "") : undefined}
               />
             ))
           ) : authToken ? (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 space-y-4">
-              <p>No properties yet. Start by adding your first listing.</p>
-              <button
-                type="button"
-                onClick={goAddProperty}
-                className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
-              >
-                <span onClick={goAddProperty} className="cursor-pointer">
-                  Add Property
-                </span>
-              </button>
+              <p>{getEmptyState().title}</p>
+              {getEmptyState().helper ? (
+                <p className="text-sm text-gray-400">{getEmptyState().helper}</p>
+              ) : null}
+              {getEmptyState().ctaLabel ? (
+                <button
+                  type="button"
+                  onClick={goAddProperty}
+                  className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
+                >
+                  {getEmptyState().ctaLabel}
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
-              Sign in to load your properties.
+              {getEmptyState().title}
             </div>
           )}
         </div>
@@ -766,7 +950,7 @@ function LandlordDashboardContent() {
           <span className="material-symbols-outlined text-[30px]" style={solidIconStyle}>
             add
           </span>
-          <span className="text-[18px] font-bold cursor-pointer" onClick={goAddProperty}>
+          <span className="text-[18px] font-bold">
             Add Property
           </span>
         </button>

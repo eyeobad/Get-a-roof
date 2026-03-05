@@ -27,6 +27,7 @@ const property_utils_1 = require("../common/utils/property.utils");
 const appwrite_service_1 = require("../appwrite/appwrite.service");
 const user_schema_1 = require("../users/schemas/user.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const workspace_service_1 = require("../common/services/workspace.service");
 const propertyImageMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -41,24 +42,41 @@ const propertyProofMimeTypes = new Set([
     "application/pdf",
 ]);
 let PropertiesService = class PropertiesService {
-    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage) {
+    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage, workspaceService) {
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.userModel = userModel;
         this.messageModel = messageModel;
         this.usersService = usersService;
         this.appwriteStorage = appwriteStorage;
+        this.workspaceService = workspaceService;
     }
     async createProperty(dto) {
         if (!dto.landlordId || !mongoose_2.Types.ObjectId.isValid(dto.landlordId)) {
             throw new common_1.BadRequestException("Invalid landlordId");
         }
-        const landlord = await this.userModel.findById(dto.landlordId).select("role").lean();
-        if (!landlord || (landlord.role !== enums_1.UserRole.Landlord && landlord.role !== enums_1.UserRole.Organisation)) {
-            throw new common_1.BadRequestException("Property must be tied to a valid landlord or organisation account");
+        const actor = await this.userModel
+            .findById(dto.landlordId)
+            .select("role agentOrgId")
+            .lean()
+            .exec();
+        if (!actor ||
+            (actor.role !== enums_1.UserRole.Landlord &&
+                actor.role !== enums_1.UserRole.Organisation)) {
+            throw new common_1.BadRequestException("Invalid owner");
         }
+        const actorContext = await this.workspaceService.getWorkspaceActorContext(dto.landlordId);
+        const ownerKind = actorContext.scope === "agent" ? "agent" : "owner";
+        const orgId = actorContext.orgId
+            ? new mongoose_2.Types.ObjectId(actorContext.orgId)
+            : undefined;
         const normalized = this.normalizePropertyPayload(dto);
-        const created = new this.propertyModel(normalized);
+        const created = new this.propertyModel({
+            ...normalized,
+            landlordId: new mongoose_2.Types.ObjectId(dto.landlordId),
+            ownerKind,
+            ...(orgId ? { orgId } : {}),
+        });
         return created.save();
     }
     async updateProperty(id, dto) {
@@ -76,12 +94,11 @@ let PropertiesService = class PropertiesService {
         if (!property) {
             throw new common_1.NotFoundException("Property not found");
         }
-        const landlordExists = await this.userModel
-            .exists({ _id: property.landlordId, role: enums_1.UserRole.Landlord });
-        if (!landlordExists) {
-            await this.propertyModel.deleteOne({ _id: property._id });
-            throw new common_1.NotFoundException("Property not found");
-        }
+        return property;
+    }
+    async assertPropertyMutationAccess(propertyId, actorId) {
+        const property = await this.getProperty(propertyId);
+        await this.workspaceService.assertCanManageProperty(actorId, property);
         return property;
     }
     async getPropertyForViewer(id, userId) {
@@ -112,7 +129,7 @@ let PropertiesService = class PropertiesService {
             }
         }
         const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
-        const validProperties = await this.removeOrphanedProperties(properties);
+        const validProperties = await this.excludeOrphanedProperties(properties);
         return this.applyScoringAndFilters(validProperties, options);
     }
     async getMapMatches(filters, options) {
@@ -136,7 +153,7 @@ let PropertiesService = class PropertiesService {
             .find(withCoords)
             .limit(limit)
             .exec();
-        const validProperties = await this.removeOrphanedProperties(properties);
+        const validProperties = await this.excludeOrphanedProperties(properties);
         const results = await this.applyScoringAndFilters(validProperties, options);
         const routeAccessMap = await this.getTenantRouteAccessMap(options?.userId, results.map((property) => property._id));
         return results.map((property) => ({
@@ -180,23 +197,23 @@ let PropertiesService = class PropertiesService {
         return { url: result.url };
     }
     async getLandlordProperties(landlordId, options) {
-        const filters = {
-            landlordId: mongoose_2.Types.ObjectId.isValid(landlordId)
-                ? new mongoose_2.Types.ObjectId(landlordId)
-                : landlordId,
-        };
+        const workspaceFilters = await this.workspaceService.getPropertyWorkspaceFilter(landlordId, options?.scope);
+        const clauses = [workspaceFilters];
         if (options?.status) {
-            filters.status = options.status;
+            clauses.push({ status: options.status });
         }
         if (options?.q) {
             const regex = new RegExp(options.q, "i");
-            filters.$or = [
-                { "address.street": regex },
-                { "address.city": regex },
-                { "address.state": regex },
-                { neighborhood: regex },
-            ];
+            clauses.push({
+                $or: [
+                    { "address.street": regex },
+                    { "address.city": regex },
+                    { "address.state": regex },
+                    { neighborhood: regex },
+                ],
+            });
         }
+        const filters = clauses.length === 1 ? clauses[0] : { $and: clauses };
         const projection = {
             address: 1,
             neighborhood: 1,
@@ -223,10 +240,8 @@ let PropertiesService = class PropertiesService {
         return query.exec();
     }
     async deletePropertyForLandlord(landlordId, propertyId) {
+        await this.assertPropertyMutationAccess(propertyId, landlordId);
         const property = await this.getProperty(propertyId);
-        if (property.landlordId.toString() !== landlordId) {
-            throw new common_1.NotFoundException("Property not found");
-        }
         const matchIds = await this.matchModel
             .find({ propertyId: property._id })
             .distinct("_id")
@@ -383,7 +398,7 @@ let PropertiesService = class PropertiesService {
         });
         return map;
     }
-    async removeOrphanedProperties(properties) {
+    async excludeOrphanedProperties(properties) {
         if (!properties.length)
             return properties;
         const landlordIds = Array.from(new Set(properties
@@ -397,20 +412,12 @@ let PropertiesService = class PropertiesService {
             .lean();
         const validSet = new Set(validLandlords.map((user) => user._id.toString()));
         const keep = [];
-        const orphanIds = [];
         properties.forEach((property) => {
             const ownerId = property.landlordId?.toString?.() ?? "";
             if (ownerId && validSet.has(ownerId)) {
                 keep.push(property);
             }
-            else {
-                orphanIds.push(property._id);
-            }
         });
-        if (orphanIds.length) {
-            await this.propertyModel.deleteMany({ _id: { $in: orphanIds } });
-            await this.matchModel.deleteMany({ propertyId: { $in: orphanIds } });
-        }
         return keep;
     }
 };
@@ -426,5 +433,6 @@ exports.PropertiesService = PropertiesService = __decorate([
         mongoose_2.Model,
         mongoose_2.Model,
         users_service_1.UsersService,
-        appwrite_service_1.AppwriteStorageService])
+        appwrite_service_1.AppwriteStorageService,
+        workspace_service_1.WorkspaceService])
 ], PropertiesService);

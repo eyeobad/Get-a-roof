@@ -41,12 +41,19 @@ export class LandlordController {
     @Req() req: Request & { user?: any },
     @Query("q") q?: string,
     @Query("status") status?: string,
+    @Query("scope") scope?: string,
     @Query("sort") sort?: string
   ) {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getLandlordProperties(id, { q, status, sort });
+    const normalizedScope = scope === "mine" || scope === "all" ? scope : undefined;
+    return this.landlordService.getLandlordProperties(id, {
+      q,
+      status,
+      sort,
+      scope: normalizedScope,
+    });
   }
 
   @Get(":id/properties/:propertyId/new-matches-count")
@@ -71,12 +78,19 @@ export class LandlordController {
     @Req() req: Request & { user?: any },
     @Query("q") q?: string,
     @Query("status") status?: string,
+    @Query("scope") scope?: string,
     @Query("sort") sort?: string
   ) {
     if (req.user?.sub !== id) {
       throw new ForbiddenException("Access denied");
     }
-    return this.landlordService.getPropertiesWithMatches(id, { q, status, sort });
+    const normalizedScope = scope === "mine" || scope === "all" ? scope : undefined;
+    return this.landlordService.getPropertiesWithMatches(id, {
+      q,
+      status,
+      sort,
+      scope: normalizedScope,
+    });
   }
 
   @Get(":id/properties/:propertyId/matches")
@@ -134,4 +148,5 @@ export class LandlordController {
     }
     return this.landlordService.getTenantProfile(id, tenantId);
   }
+
 }

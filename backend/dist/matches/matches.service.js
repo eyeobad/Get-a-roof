@@ -22,6 +22,7 @@ const users_service_1 = require("../users/users.service");
 const properties_service_1 = require("../properties/properties.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const message_schema_1 = require("../chat/schemas/message.schema");
+const workspace_service_1 = require("../common/services/workspace.service");
 const DEFAULT_PAGE_LIMIT = 20;
 const RECYCLE_COOLDOWN_DAYS = 14;
 const VALID_TRANSITIONS = {
@@ -48,11 +49,12 @@ function paginationStages(page = 1, limit = DEFAULT_PAGE_LIMIT) {
     return [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }];
 }
 let MatchesService = class MatchesService {
-    constructor(matchModel, messageModel, usersService, propertiesService) {
+    constructor(matchModel, messageModel, usersService, propertiesService, workspaceService) {
         this.matchModel = matchModel;
         this.messageModel = messageModel;
         this.usersService = usersService;
         this.propertiesService = propertiesService;
+        this.workspaceService = workspaceService;
     }
     async createMatch(dto) {
         if (!dto.tenantId) {
@@ -142,12 +144,8 @@ let MatchesService = class MatchesService {
             throw new common_1.NotFoundException("Match not found");
         }
         const property = await this.propertiesService.getProperty(match.propertyId.toString());
-        const propLandlordId = property.landlordId.toString();
-        const isDirectOwner = propLandlordId === landlordId;
-        const isAgent = !isDirectOwner
-            ? await this.isOrgAgentOf(landlordId, propLandlordId)
-            : false;
-        if (!isDirectOwner && !isAgent) {
+        const canManage = await this.workspaceService.canActorManageProperty(landlordId, property);
+        if (!canManage) {
             throw new common_1.ForbiddenException("Access denied");
         }
         if (dto.status) {
@@ -155,12 +153,6 @@ let MatchesService = class MatchesService {
         }
         match.landlordSeenAt = new Date();
         return match.save();
-    }
-    async isOrgAgentOf(userId, orgOwnerId) {
-        const user = await this.usersService.findById(userId);
-        if (!user?.agentOrgId)
-            return false;
-        return user.agentOrgId.toString() === orgOwnerId;
     }
     async hardBlockMatch(matchId, tenantId) {
         const match = await this.matchModel.findById(matchId).exec();
@@ -596,5 +588,6 @@ exports.MatchesService = MatchesService = __decorate([
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         users_service_1.UsersService,
-        properties_service_1.PropertiesService])
+        properties_service_1.PropertiesService,
+        workspace_service_1.WorkspaceService])
 ], MatchesService);

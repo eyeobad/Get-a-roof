@@ -110,6 +110,12 @@ export class Property {
   @Prop({ type: Types.ObjectId, ref: "User", required: true })
   landlordId: Types.ObjectId;
 
+  @Prop({ type: String, enum: ["owner", "agent"], default: "owner" })
+  ownerKind?: "owner" | "agent";
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  orgId?: Types.ObjectId;
+
   @Prop({ type: [String], default: [] })
   images?: string[];
 
@@ -174,3 +180,4 @@ export class Property {
 
 export const PropertySchema = SchemaFactory.createForClass(Property);
 PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
+PropertySchema.index({ orgId: 1, status: 1, updatedAt: -1 });

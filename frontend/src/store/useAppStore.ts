@@ -134,6 +134,14 @@ type ApiUser = {
   phoneNumber?: string;
   photoUrl?: string;
   isVerified?: boolean;
+  agentOrgId?: string;
+  orgProfile?: {
+    orgName?: string;
+    logoUrl?: string;
+    registrationNumber?: string;
+    website?: string;
+    agentIds?: string[];
+  };
   listingsCount?: number;
   matchesCount?: number;
   unreadMessages?: number;
@@ -375,6 +383,7 @@ type AppState = {
     q?: string;
     status?: string;
     sort?: string;
+    scope?: "mine" | "all";
   }) => Promise<void>;
   loadLandlordPropertiesWithMatches: (options?: {
     q?: string;
@@ -1883,6 +1892,7 @@ export const useAppStore = create<AppState>()(
           q: options?.q,
           status: options?.status,
           sort: options?.sort,
+          scope: options?.scope,
         });
         try {
           const data = await apiFetch<ApiProperty[]>(
