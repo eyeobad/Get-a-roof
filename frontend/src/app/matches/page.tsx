@@ -26,6 +26,34 @@ type TagFacet = {
   count: number;
 };
 
+const SKELETON_DELAY_MS = 150;
+
+function MatchesSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={`match-skeleton-${index}`}
+          className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm"
+        >
+          <div className="aspect-[4/3] animate-pulse bg-slate-200" />
+          <div className="space-y-3 p-5">
+            <div className="h-6 w-28 animate-pulse rounded-full bg-slate-200" />
+            <div className="space-y-2">
+              <div className="h-5 w-3/4 animate-pulse rounded-full bg-slate-200" />
+              <div className="h-4 w-2/3 animate-pulse rounded-full bg-slate-100" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-8 w-20 animate-pulse rounded-full bg-slate-100" />
+              <div className="h-8 w-16 animate-pulse rounded-full bg-slate-100" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function MatchesPage() {
   const router = useRouter();
   const matchSummaries = useAppStore((state) => state.matchSummaries);
@@ -42,9 +70,21 @@ export default function MatchesPage() {
   const [draftTagFilter, setDraftTagFilter] = useState("All");
   const [draftSortBy, setDraftSortBy] =
     useState<"latest" | "score" | "priceLow" | "priceHigh">("latest");
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
 
   useEffect(() => {
-    void loadMatches();
+    let active = true;
+    const timer = window.setTimeout(() => {
+      if (active) setIsLoadingMatches(true);
+    }, SKELETON_DELAY_MS);
+    void loadMatches().finally(() => {
+      window.clearTimeout(timer);
+      if (active) setIsLoadingMatches(false);
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [loadMatches]);
 
   const matches = useMemo(() => {
@@ -198,7 +238,9 @@ export default function MatchesPage() {
           </header>
 
           <main className="relative z-0 flex-1 px-5 pt-6 space-y-5">
-            {filteredMatches.length === 0 ? (
+            {isLoadingMatches ? (
+              <MatchesSkeleton />
+            ) : filteredMatches.length === 0 ? (
               <div className="rounded-3xl border border-black/5 bg-white p-8 text-center shadow-sm">
                 <p className="text-lg font-bold text-[#1A1A1A]">
                   {matches.length === 0 ? "No matches yet" : "No results"}
@@ -354,7 +396,9 @@ export default function MatchesPage() {
           </header>
 
           <main className="flex-1 overflow-y-auto px-8 py-6">
-            {filteredMatches.length === 0 ? (
+            {isLoadingMatches ? (
+              <MatchesSkeleton />
+            ) : filteredMatches.length === 0 ? (
               <div className="rounded-3xl border border-black/5 bg-white p-10 text-center shadow-sm">
                 <p className="text-xl font-bold text-[#1A1A1A]">
                   {matches.length === 0 ? "No matches yet" : "No results"}

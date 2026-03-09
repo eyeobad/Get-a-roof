@@ -24,6 +24,7 @@ type RouteRequestPayload = {
 };
 
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
+const SKELETON_DELAY_MS = 150;
 
 const encodeRouteRequest = (payload: RouteRequestPayload) =>
   `${ROUTE_REQUEST_PREFIX}${JSON.stringify(payload)}`;
@@ -109,6 +110,53 @@ function EmptyState({
       >
         {ctaLabel}
       </Link>
+    </div>
+  );
+}
+
+function ConversationListSkeleton() {
+  return (
+    <div className="space-y-0">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div
+          key={`conversation-skeleton-${index}`}
+          className="flex w-full items-center gap-4 border-b border-slate-200 bg-background-light px-5 py-4"
+        >
+          <div className="h-14 w-14 animate-pulse rounded-full bg-slate-200" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-5 w-32 animate-pulse rounded-full bg-slate-200" />
+              <div className="h-4 w-12 animate-pulse rounded-full bg-slate-100" />
+            </div>
+            <div className="h-4 w-3/4 animate-pulse rounded-full bg-slate-100" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChatSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: 5 }).map((_, index) => {
+        const isMe = index % 2 === 0;
+        return (
+          <div
+            key={`chat-skeleton-${index}`}
+            className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${
+                isMe ? "bg-primary/10" : "border border-slate-200 bg-white"
+              }`}
+            >
+              <div className="h-4 w-40 animate-pulse rounded-full bg-slate-200" />
+              <div className="mt-2 h-3 w-16 animate-pulse rounded-full bg-slate-100" />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -209,6 +257,8 @@ function MessagesContent() {
   const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showRouteHint, setShowRouteHint] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [routeAccessDurationByRequestId, setRouteAccessDurationByRequestId] =
     useState<Record<string, 5 | 30 | 1440>>({});
   const activeConversationId =
@@ -376,7 +426,18 @@ function MessagesContent() {
 
   useEffect(() => {
     if (authToken) {
-      void loadConversations();
+      let active = true;
+      const timer = window.setTimeout(() => {
+        if (active) setIsLoadingConversations(true);
+      }, SKELETON_DELAY_MS);
+      void loadConversations().finally(() => {
+        window.clearTimeout(timer);
+        if (active) setIsLoadingConversations(false);
+      });
+      return () => {
+        active = false;
+        window.clearTimeout(timer);
+      };
     }
   }, [authToken, loadConversations]);
 
@@ -414,9 +475,21 @@ function MessagesContent() {
 
   useEffect(() => {
     if (activeConversationId && !messagesByMatch[activeConversationId]) {
+      let active = true;
+      const timer = window.setTimeout(() => {
+        if (active) setIsLoadingMessages(true);
+      }, SKELETON_DELAY_MS);
       setSelectedThreadId(activeConversationId);
-      void loadMessagesForMatch(activeConversationId);
+      void loadMessagesForMatch(activeConversationId).finally(() => {
+        window.clearTimeout(timer);
+        if (active) setIsLoadingMessages(false);
+      });
+      return () => {
+        active = false;
+        window.clearTimeout(timer);
+      };
     }
+    setIsLoadingMessages(false);
   }, [
     activeConversationId,
     messagesByMatch,
@@ -481,7 +554,9 @@ function MessagesContent() {
             </header>
 
             <main className="flex-1 overflow-y-auto pb-24">
-              {conversations.length === 0 ? (
+              {isLoadingConversations ? (
+                <ConversationListSkeleton />
+              ) : conversations.length === 0 ? (
                 <EmptyState
                   title={isLandlordContext ? "No tenant messages yet" : "No conversations yet"}
                   message={
@@ -581,7 +656,10 @@ function MessagesContent() {
               ref={chatRef}
               className="flex-1 overflow-y-auto px-4 py-4 pb-[140px]"
             >
-              <div className="flex flex-col gap-3">
+              {isLoadingMessages ? (
+                <ChatSkeleton />
+              ) : (
+                <div className="flex flex-col gap-3">
                 {activeMessages.map((m) => (
                   <div
                     key={m.id}
@@ -673,7 +751,8 @@ function MessagesContent() {
                   </div>
                 ))}
                 <TypingIndicator visible={isOtherTyping} />
-              </div>
+                </div>
+              )}
             </main>
 
             <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 backdrop-blur-sm lg:hidden">
@@ -789,45 +868,49 @@ function MessagesContent() {
                 `}</style>
 
                 <div className="no-scrollbar">
-                  {conversations.map((conversation) => {
-                    const isActive = conversation.id === activeConversationId;
-                    return (
-                      <button
-                        key={conversation.id}
-                        onClick={() => selectConversation(conversation.id)}
-                        className={`w-full px-6 py-4 border-b border-slate-100 text-left transition-colors ${
-                          isActive
-                            ? "bg-primary/5"
-                            : "bg-white hover:bg-blue-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <ConversationAvatar
-                            src={conversation.image}
-                            alt={conversation.name}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-3">
-                              <p className="truncate text-base font-bold text-slate-900">
-                                {conversation.name}
-                              </p>
-                              <p className="shrink-0 text-xs font-semibold text-slate-500">
-                                {conversation.time}
-                              </p>
-                            </div>
-                            <div className="mt-1 flex items-center justify-between gap-3">
-                              <p className="truncate text-sm font-medium text-slate-600">
-                                {conversation.preview}
-                              </p>
-                              {conversation.unread && !isActive && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                              )}
+                  {isLoadingConversations ? (
+                    <ConversationListSkeleton />
+                  ) : (
+                    conversations.map((conversation) => {
+                      const isActive = conversation.id === activeConversationId;
+                      return (
+                        <button
+                          key={conversation.id}
+                          onClick={() => selectConversation(conversation.id)}
+                          className={`w-full px-6 py-4 border-b border-slate-100 text-left transition-colors ${
+                            isActive
+                              ? "bg-primary/5"
+                              : "bg-white hover:bg-blue-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <ConversationAvatar
+                              src={conversation.image}
+                              alt={conversation.name}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline justify-between gap-3">
+                                <p className="truncate text-base font-bold text-slate-900">
+                                  {conversation.name}
+                                </p>
+                                <p className="shrink-0 text-xs font-semibold text-slate-500">
+                                  {conversation.time}
+                                </p>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-3">
+                                <p className="truncate text-sm font-medium text-slate-600">
+                                  {conversation.preview}
+                                </p>
+                                {conversation.unread && !isActive && (
+                                  <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })
+                  )}
                   <div className="h-4" />
                 </div>
               </main>
@@ -850,7 +933,11 @@ function MessagesContent() {
 
             {/* RIGHT: chat panel (NO BottomNav under here) */}
             <section className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
-              {conversations.length === 0 ? (
+              {isLoadingConversations ? (
+                <div className="flex-1 px-8 py-6">
+                  <ChatSkeleton />
+                </div>
+              ) : conversations.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center px-8">
                   <EmptyState
                     title={isLandlordContext ? "No tenant messages yet" : "No messages yet"}
@@ -899,102 +986,106 @@ function MessagesContent() {
                     }}
                   >
                     <div className="mx-auto max-w-3xl">
-                      <div className="flex flex-col gap-3">
-                        {activeMessages.map((m) => (
-                          <div
-                            key={m.id}
-                            className={`flex ${
-                              m.from === "me"
-                                ? "justify-end"
-                                : "justify-start"
-                            }`}
-                          >
+                      {isLoadingMessages ? (
+                        <ChatSkeleton />
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          {activeMessages.map((m) => (
                             <div
-                              className={`max-w-[72%] rounded-2xl px-4 py-3 shadow-sm ${
+                              key={m.id}
+                              className={`flex ${
                                 m.from === "me"
-                                  ? "bg-primary text-white"
-                                  : "bg-white text-slate-900 border border-slate-200"
+                                  ? "justify-end"
+                                  : "justify-start"
                               }`}
                             >
-                              {m.routeRequest ? (
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-[18px]">map</span>
-                                    <p className="text-sm font-semibold">Route Access Request</p>
-                                  </div>
-                                  <span
-                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                                      (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "approved"
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "denied"
-                                          ? "bg-rose-100 text-rose-700"
-                                          : "bg-amber-100 text-amber-700"
-                                    }`}
-                                  >
-                                    {routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status}
-                                  </span>
-                                  {isLandlordContext &&
-                                    m.from === "them" &&
-                                    (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "pending" && (
-                                      <div className="flex items-center gap-2">
-                                        <select
-                                          value={getDurationForRequest(m.routeRequest.id)}
-                                          onChange={(event) =>
-                                            setRouteAccessDurationByRequestId((prev) => ({
-                                              ...prev,
-                                              [m.routeRequest!.id]: Number(event.target.value) as
-                                                | 5
-                                                | 30
-                                                | 1440,
-                                            }))
-                                          }
-                                          className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
-                                        >
-                                          <option value={5}>5 min</option>
-                                          <option value={30}>30 min</option>
-                                          <option value={1440}>1 day</option>
-                                        </select>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            void sendRouteDecision(
-                                              m.routeRequest!.id,
-                                              "approved",
-                                              getDurationForRequest(m.routeRequest!.id)
-                                            )
-                                          }
-                                          className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-                                        >
-                                          Approve
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
-                                          className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
-                                        >
-                                          Deny
-                                        </button>
-                                      </div>
-                                    )}
-                                </div>
-                              ) : (
-                                <p className="text-sm font-medium leading-relaxed">{m.text}</p>
-                              )}
-                              <p
-                                className={`mt-1 text-[10px] ${
+                              <div
+                                className={`max-w-[72%] rounded-2xl px-4 py-3 shadow-sm ${
                                   m.from === "me"
-                                    ? "text-white/70"
-                                    : "text-slate-500"
+                                    ? "bg-primary text-white"
+                                    : "bg-white text-slate-900 border border-slate-200"
                                 }`}
                               >
-                                {m.time}
-                              </p>
+                                {m.routeRequest ? (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-symbols-outlined text-[18px]">map</span>
+                                      <p className="text-sm font-semibold">Route Access Request</p>
+                                    </div>
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                        (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "approved"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "denied"
+                                            ? "bg-rose-100 text-rose-700"
+                                            : "bg-amber-100 text-amber-700"
+                                      }`}
+                                    >
+                                      {routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status}
+                                    </span>
+                                    {isLandlordContext &&
+                                      m.from === "them" &&
+                                      (routeRequestStatusById[m.routeRequest.id] ?? m.routeRequest.status) === "pending" && (
+                                        <div className="flex items-center gap-2">
+                                          <select
+                                            value={getDurationForRequest(m.routeRequest.id)}
+                                            onChange={(event) =>
+                                              setRouteAccessDurationByRequestId((prev) => ({
+                                                ...prev,
+                                                [m.routeRequest!.id]: Number(event.target.value) as
+                                                  | 5
+                                                  | 30
+                                                  | 1440,
+                                              }))
+                                            }
+                                            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                                          >
+                                            <option value={5}>5 min</option>
+                                            <option value={30}>30 min</option>
+                                            <option value={1440}>1 day</option>
+                                          </select>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              void sendRouteDecision(
+                                                m.routeRequest!.id,
+                                                "approved",
+                                                getDurationForRequest(m.routeRequest!.id)
+                                              )
+                                            }
+                                            className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                          >
+                                            Approve
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
+                                            className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
+                                          >
+                                            Deny
+                                          </button>
+                                        </div>
+                                      )}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm font-medium leading-relaxed">{m.text}</p>
+                                )}
+                                <p
+                                  className={`mt-1 text-[10px] ${
+                                    m.from === "me"
+                                      ? "text-white/70"
+                                      : "text-slate-500"
+                                  }`}
+                                >
+                                  {m.time}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                        <TypingIndicator visible={isOtherTyping} />
-                        <div className="h-2" />
-                      </div>
+                          ))}
+                          <TypingIndicator visible={isOtherTyping} />
+                          <div className="h-2" />
+                        </div>
+                      )}
                     </div>
                   </main>
 

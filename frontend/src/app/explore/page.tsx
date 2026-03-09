@@ -653,7 +653,7 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
     if (!isFront) return;
     const offset = info.offset.x;
     const velocity = info.velocity.x;
-    const directionalSwipe = offset * velocity;
+    const directionalSwipe = offset * Math.abs(velocity);
 
     const distanceThreshold = 120;
     const powerThreshold = 10_000;
