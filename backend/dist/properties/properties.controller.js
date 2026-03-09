@@ -201,6 +201,12 @@ let PropertiesController = class PropertiesController {
                 filters.listingIntent = enums_1.ListingIntent.Rent;
             }
         }
+        if (query.state) {
+            const normalizedState = query.state.trim();
+            if (normalizedState) {
+                filters["address.state"] = normalizedState;
+            }
+        }
         if (query.landlordId) {
             filters.landlordId = query.landlordId;
         }

@@ -70,6 +70,16 @@ export class MatchesController {
     return this.matchesService.recycleDismissedMatch(id, req.user?.sub);
   }
 
+  @Post("recycle-bulk")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Tenant)
+  recycleBulk(
+    @Body() body: { matchIds: string[] },
+    @Req() req: Request & { user?: any }
+  ) {
+    return this.matchesService.recycleDismissedMatchesBulk(body.matchIds, req.user?.sub);
+  }
+
   @Post(":id/hard-block")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.Tenant)

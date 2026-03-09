@@ -197,6 +197,10 @@ __decorate([
     __metadata("design:type", String)
 ], Property.prototype, "description", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ default: 1, min: 1 }),
+    __metadata("design:type", Number)
+], Property.prototype, "availableUnits", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Property.prototype, "amenities", void 0);
@@ -229,6 +233,14 @@ __decorate([
     __metadata("design:type", Date)
 ], Property.prototype, "moderatedAt", void 0);
 __decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Property.prototype, "fingerprintHash", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Property.prototype, "dedupeBucketId", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: LandlordRequirements }),
     __metadata("design:type", LandlordRequirements)
 ], Property.prototype, "landlordRequirements", void 0);
@@ -238,3 +250,19 @@ exports.Property = Property = __decorate([
 exports.PropertySchema = mongoose_1.SchemaFactory.createForClass(Property);
 exports.PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
 exports.PropertySchema.index({ orgId: 1, status: 1, updatedAt: -1 });
+exports.PropertySchema.index({ fingerprintHash: 1, status: 1 });
+exports.PropertySchema.index({ dedupeBucketId: 1, createdAt: -1 });
+exports.PropertySchema.index({
+    status: 1,
+    "address.state": 1,
+    propertyType: 1,
+    listingIntent: 1,
+    monthlyPrice: 1,
+    bedCount: 1,
+    createdAt: -1,
+});
+exports.PropertySchema.index({ "address.lat": 1, "address.lng": 1 });
+exports.PropertySchema.index({ "landlordRequirements.selfCompound": 1 });
+exports.PropertySchema.index({ "landlordRequirements.shortlet": 1 });
+exports.PropertySchema.index({ "landlordRequirements.sharedCompound": 1 });
+exports.PropertySchema.index({ "landlordRequirements.nonOwnerOccupied": 1 });

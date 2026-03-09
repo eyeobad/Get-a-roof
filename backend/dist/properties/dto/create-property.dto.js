@@ -90,6 +90,11 @@ __decorate([
 ], CreatePropertyDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], CreatePropertyDto.prototype, "availableUnits", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
@@ -110,3 +115,8 @@ __decorate([
     (0, class_transformer_1.Type)(() => landlord_requirements_dto_1.LandlordRequirementsDto),
     __metadata("design:type", landlord_requirements_dto_1.LandlordRequirementsDto)
 ], CreatePropertyDto.prototype, "landlordRequirements", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(["increment_units", "create_new_draft"]),
+    __metadata("design:type", String)
+], CreatePropertyDto.prototype, "duplicateAction", void 0);

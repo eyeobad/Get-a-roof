@@ -25,6 +25,7 @@
 15. [Frontend Session Management](#15-frontend-session-management)
 16. [Security Checklist for New Endpoints](#16-security-checklist-for-new-endpoints)
 17. [Match Algorithm & Scoring Engine](#17-match-algorithm--scoring-engine)
+18. [Recent Implementation Log](#18-recent-implementation-log)
 
 ---
 
@@ -768,4 +769,124 @@ $expr: { $eq: [{ $toString: "$propertyId" }, propertyIdString] }
 ```javascript
 { propertyId: new Types.ObjectId(propertyId) }
 ```
+
+---
+
+## 18. Recent Implementation Log
+
+This section records recent hardening and platform changes implemented in this codebase.
+
+### 18.1 Duplicate Listing Protection (Landlord Flow)
+
+Implemented end-to-end duplicate handling for property creation:
+
+| Area | Change |
+|------|--------|
+| Schema | Added `availableUnits` (default `1`), `fingerprintHash`, `dedupeBucketId` on properties |
+| DTO | Added `duplicateAction` (`increment_units` or `create_new_draft`) and `availableUnits` on create |
+| Fingerprint | Added dedicated utility `backend/src/properties/utils/fingerprint.utils.ts` using SHA-256 over normalized property signals |
+| Service logic | Global duplicate lookup by fingerprint in `createProperty()` |
+| Same owner | First attempt returns structured `409` requiring explicit duplicate action |
+| Same owner resolution | `increment_units` increments canonical listing units without creating a new record |
+| Same owner alternate | `create_new_draft` creates a new draft flagged for review |
+| Different owner | Creates draft, shares `dedupeBucketId`, and returns structured `409` with `ownershipType: "different_owner"` |
+
+Structured conflict payload contract:
+
+```json
+{
+  "errorCode": "DUPLICATE_LISTING",
+  "ownershipType": "same_owner | different_owner",
+  "message": "human readable text",
+  "canonicalHint": { "actions": ["increment_units", "create_new_draft"] }
+}
+```
+
+Frontend behavior:
+
+| Ownership Type | UI Behavior |
+|----------------|-------------|
+| `same_owner` | Duplicate modal prompts: Increase Units or Create Draft |
+| `different_owner` | Warning modal informs cross-owner collision and draft-only path |
+
+Relevant files:
+- `backend/src/properties/schemas/property.schema.ts`
+- `backend/src/properties/dto/create-property.dto.ts`
+- `backend/src/properties/dto/update-property.dto.ts`
+- `backend/src/properties/utils/fingerprint.utils.ts`
+- `backend/src/properties/properties.service.ts`
+- `frontend/src/app/add-property-review/page.tsx`
+- `frontend/src/store/useAppStore.ts`
+
+### 18.2 API Error Contract Improvements
+
+`frontend/src/lib/api.ts` now preserves structured backend error data on thrown `Error` objects:
+
+- `error.status` (HTTP status)
+- `error.data` (parsed payload)
+- `error.code` (when `errorCode` is present)
+
+This enables robust UI branching on conflict/error codes without fragile string matching.
+
+### 18.3 Explore Deck Looping Reliability
+
+Explore deck empty-state flow was hardened to avoid false terminal states:
+
+1. Try server-side recycled matches
+2. If unavailable, loop once from in-memory cached deck
+3. Re-fetch filtered explore listings
+4. Show terminal "No more listings" only when all sources are empty
+
+Additionally, loading-state rendering now prevents a blank-looking card stage during fetch/recycle.
+
+Relevant file:
+- `frontend/src/app/explore/page.tsx`
+
+### 18.4 Query Performance Hardening (No Redis Required)
+
+Backend property exploration endpoints now use a short-lived in-memory query cache and lighter query paths:
+
+| Change | Effect |
+|--------|--------|
+| In-memory LRU-style cache (TTL ~30s) | Reduces repeated identical read load |
+| Cache invalidation on create/update/delete | Prevents stale property views after writes |
+| `.lean()` query usage for read endpoints | Lowers serialization overhead |
+| Field projection on explore/map reads | Reduces payload and memory pressure |
+| Added compound query indexes | Improves index selection for hot filters |
+
+Relevant files:
+- `backend/src/properties/utils/query-cache.ts`
+- `backend/src/properties/properties.service.ts`
+- `backend/src/properties/schemas/property.schema.ts`
+
+### 18.5 Frontend Read-Path Performance Safeguards
+
+Added client-side performance protections for API reads:
+
+| Change | Effect |
+|--------|--------|
+| In-flight GET request deduplication | Prevents duplicate concurrent requests |
+| Short-lived memory GET cache (~20s) | Reduces repeat fetch latency |
+| Timeout + retry wrapper for explore/map calls | Improves resilience under transient slowness |
+
+Relevant files:
+- `frontend/src/lib/api.ts`
+- `frontend/src/store/useAppStore.ts`
+
+### 18.6 Tenant Preference Filtering (State + Distance)
+
+Tenant filtering flow now consistently supports:
+
+- `preferredState` (e.g., Lagos, Abuja)
+- `preferredDistance` (km)
+
+Applied across onboarding/profile persistence and explore/map query construction.
+
+Relevant files:
+- `frontend/src/app/tenant-onboarding/page.tsx`
+- `frontend/src/app/tenant-onboarding/review/page.tsx`
+- `frontend/src/app/profile/page.tsx`
+- `frontend/src/store/useAppStore.ts`
+- `backend/src/properties/properties.service.ts`
+- `backend/src/properties/properties.controller.ts`
 

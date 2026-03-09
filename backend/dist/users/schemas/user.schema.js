@@ -129,6 +129,14 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Number)
 ], TenantPreferences.prototype, "maxCommuteRadius", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], TenantPreferences.prototype, "preferredDistance", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], TenantPreferences.prototype, "preferredState", void 0);
 class Preferences {
 }
 __decorate([

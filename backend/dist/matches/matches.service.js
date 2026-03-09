@@ -252,13 +252,24 @@ let MatchesService = class MatchesService {
         if (match.dismissReason === enums_1.DismissReason.Hard) {
             throw new common_1.BadRequestException("This match is permanently blocked");
         }
-        match.status = enums_1.MatchStatus.TenantLiked;
-        match.dismissedAt = undefined;
-        match.dismissReason = undefined;
-        match.recycleCount = (match.recycleCount ?? 0) + 1;
-        match.tenantLiked = true;
-        match.timestamp = new Date();
-        return match.save();
+        await match.deleteOne();
+        return { success: true };
+    }
+    async recycleDismissedMatchesBulk(matchIds, tenantId) {
+        if (!matchIds?.length)
+            return { success: true, count: 0 };
+        const objectIds = matchIds
+            .filter((id) => mongoose_2.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose_2.Types.ObjectId(id));
+        if (!objectIds.length)
+            return { success: true, count: 0 };
+        const result = await this.matchModel.deleteMany({
+            _id: { $in: objectIds },
+            tenantId: new mongoose_2.Types.ObjectId(tenantId),
+            status: enums_1.MatchStatus.Dismissed,
+            dismissReason: { $ne: enums_1.DismissReason.Hard },
+        });
+        return { success: true, count: result.deletedCount };
     }
     async findByProperty(propertyId) {
         return this.matchModel

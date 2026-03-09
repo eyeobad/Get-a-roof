@@ -36,7 +36,7 @@ exports.AppModule = AppModule = __decorate([
                     throttlers: [
                         {
                             ttl: Number(configService.get("THROTTLE_TTL") ?? 60),
-                            limit: Number(configService.get("THROTTLE_LIMIT") ?? 100),
+                            limit: Number(configService.get("THROTTLE_LIMIT") ?? 200),
                         },
                     ],
                 }),

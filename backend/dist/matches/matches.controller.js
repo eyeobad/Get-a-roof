@@ -42,6 +42,9 @@ let MatchesController = class MatchesController {
     recycleMatch(id, req) {
         return this.matchesService.recycleDismissedMatch(id, req.user?.sub);
     }
+    recycleBulk(body, req) {
+        return this.matchesService.recycleDismissedMatchesBulk(body.matchIds, req.user?.sub);
+    }
     hardBlock(id, req) {
         return this.matchesService.hardBlockMatch(id, req.user?.sub);
     }
@@ -93,6 +96,16 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], MatchesController.prototype, "recycleMatch", null);
+__decorate([
+    (0, common_1.Post)("recycle-bulk"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "recycleBulk", null);
 __decorate([
     (0, common_1.Post)(":id/hard-block"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

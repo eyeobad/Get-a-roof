@@ -256,6 +256,13 @@ export class PropertiesController {
       }
     }
 
+    if (query.state) {
+      const normalizedState = query.state.trim();
+      if (normalizedState) {
+        filters["address.state"] = normalizedState;
+      }
+    }
+
     if (query.landlordId) {
       filters.landlordId = query.landlordId as any;
     }

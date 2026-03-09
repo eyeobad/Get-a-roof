@@ -30,6 +30,9 @@ export default function TenantReview() {
     socialHabits?: string;
     hasChildren?: boolean;
     gender?: string;
+    preferredState?: string;
+    preferredDistance?: number;
+    maxCommuteRadius?: number;
   };
 
   type UserProfile = {
@@ -80,7 +83,21 @@ export default function TenantReview() {
     const children =
       tenant.hasChildren === undefined ? "Not set" : tenant.hasChildren ? "Yes" : "No";
 
+    const preferredDistance =
+      typeof tenant.preferredDistance === "number" &&
+      Number.isFinite(tenant.preferredDistance)
+        ? tenant.preferredDistance
+        : typeof tenant.maxCommuteRadius === "number" &&
+            Number.isFinite(tenant.maxCommuteRadius)
+          ? tenant.maxCommuteRadius
+          : undefined;
+
     return [
+      ["Preferred State", tenant.preferredState ?? "Any"],
+      [
+        "Max Distance",
+        preferredDistance !== undefined ? `${Math.round(preferredDistance)} km` : "Not set",
+      ],
       ["Gender", tenant.gender ?? "Not set"],
       ["Employment", tenant.employmentStatus ?? "Not set"],
       ["Annual Earnings", currency(tenant.annualEarnings)],

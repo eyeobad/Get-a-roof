@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,17 +11,28 @@ import { Property, PropertyDocument } from "./schemas/property.schema";
 import { CreatePropertyDto } from "./dto/create-property.dto";
 import { UpdatePropertyDto } from "./dto/update-property.dto";
 import { UsersService } from "../users/users.service";
-import { computeMatchScore, PropertyMatchInput } from "../common/utils/match.utils";
+import {
+  computeMatchScore,
+  PropertyMatchInput,
+  type TenantPreferences,
+} from "../common/utils/match.utils";
 import { haversineDistanceKm } from "../common/utils/geo.utils";
 import { toNumber } from "../common/utils/match.helpers";
 import { Match, MatchDocument } from "../matches/schemas/match.schema";
-import { MatchStatus, RouteAccessStatus, UserRole } from "../common/enums";
+import {
+  MatchStatus,
+  PropertyStatus,
+  RouteAccessStatus,
+  UserRole,
+} from "../common/enums";
 import { normalizePropertyType } from "../common/utils/property.utils";
 import { AppwriteStorageService } from "../appwrite/appwrite.service";
 import { Express } from "express";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
 import { WorkspaceService } from "../common/services/workspace.service";
+import { computePropertyFingerprint } from "./utils/fingerprint.utils";
+import { QueryCache, stableStringify } from "./utils/query-cache";
 
 const propertyImageMimeTypes = new Set([
   "image/jpeg",
@@ -38,6 +50,25 @@ const propertyProofMimeTypes = new Set([
 ]);
 
 type PropertyScope = "mine" | "all";
+const exploreQueryCache = new QueryCache<unknown[]>(500, 30_000);
+const exploreProjection = {
+  _id: 1,
+  landlordId: 1,
+  address: 1,
+  neighborhood: 1,
+  monthlyPrice: 1,
+  propertyType: 1,
+  listingIntent: 1,
+  bedCount: 1,
+  bathCount: 1,
+  sqFt: 1,
+  petFriendly: 1,
+  landlordRequirements: 1,
+  amenities: 1,
+  images: 1,
+  description: 1,
+  status: 1,
+};
 
 @Injectable()
 export class PropertiesService {
@@ -77,23 +108,177 @@ export class PropertiesService {
       : undefined;
 
     const normalized = this.normalizePropertyPayload(dto);
+    const fingerprintHash = computePropertyFingerprint(normalized);
+    const ownerIdentity = (orgId ?? new Types.ObjectId(dto.landlordId)).toString();
+
+    let duplicateCandidates: PropertyDocument[] = [];
+    if (fingerprintHash) {
+      duplicateCandidates = await this.propertyModel
+        .find({
+          fingerprintHash,
+          status: { $in: [PropertyStatus.Draft, PropertyStatus.Listed] },
+        })
+        .sort({ createdAt: 1 })
+        .limit(10)
+        .exec();
+
+      const sameOwnerDuplicate = duplicateCandidates.find(
+        (candidate) => this.resolveOwnerIdentity(candidate) === ownerIdentity
+      );
+
+      if (sameOwnerDuplicate) {
+        if (!dto.duplicateAction) {
+          throw new ConflictException({
+            errorCode: "DUPLICATE_LISTING",
+            ownershipType: "same_owner",
+            message:
+              "Similar listing already exists. Choose to increase units or create a new draft.",
+            canonicalHint: {
+              existingListingId: sameOwnerDuplicate._id?.toString?.(),
+              availableUnits: sameOwnerDuplicate.availableUnits ?? 1,
+              actions: ["increment_units", "create_new_draft"],
+            },
+          });
+        }
+        if (dto.duplicateAction === "create_new_draft") {
+          normalized.status = PropertyStatus.Draft;
+          normalized.moderationStatus = "Pending";
+          normalized.moderationReason =
+            "Potential duplicate detected. Manual review required.";
+        } else {
+          const incrementBy =
+            typeof normalized.availableUnits === "number" &&
+            Number.isFinite(normalized.availableUnits) &&
+            normalized.availableUnits > 0
+              ? Math.floor(normalized.availableUnits)
+              : 1;
+          const updated = await this.propertyModel
+            .findByIdAndUpdate(
+              sameOwnerDuplicate._id,
+              { $inc: { availableUnits: incrementBy } },
+              { new: true }
+            )
+            .exec();
+          if (!updated) {
+            throw new NotFoundException("Property not found");
+          }
+          exploreQueryCache.clear();
+          return updated;
+        }
+      }
+    }
+
+    const duplicateFromAnotherOwner = duplicateCandidates.find(
+      (candidate) => this.resolveOwnerIdentity(candidate) !== ownerIdentity
+    );
+
+    let dedupeBucketId: string | undefined;
+    if (fingerprintHash) {
+      dedupeBucketId =
+        duplicateFromAnotherOwner?.dedupeBucketId ?? new Types.ObjectId().toHexString();
+
+      if (
+        duplicateFromAnotherOwner &&
+        !duplicateFromAnotherOwner.dedupeBucketId
+      ) {
+        await this.propertyModel
+          .updateOne(
+            { _id: duplicateFromAnotherOwner._id },
+            { $set: { dedupeBucketId } }
+          )
+          .exec();
+      }
+    }
+
     const created = new this.propertyModel({
       ...normalized,
       landlordId: new Types.ObjectId(dto.landlordId),
       ownerKind,
+      fingerprintHash,
+      dedupeBucketId,
+      ...(duplicateFromAnotherOwner
+        ? {
+            status: PropertyStatus.Draft,
+            moderationStatus: "Pending",
+            moderationReason:
+              "Potential duplicate across different accounts. Review required.",
+          }
+        : {}),
       ...(orgId ? { orgId } : {}),
     });
-    return created.save();
+    const saved = await created.save();
+    exploreQueryCache.clear();
+    if (duplicateFromAnotherOwner) {
+      throw new ConflictException({
+        errorCode: "DUPLICATE_LISTING",
+        ownershipType: "different_owner",
+        message:
+          "A similar listing exists under another owner. Your listing was saved as draft for review.",
+        dedupeBucketId,
+        draftCreated: true,
+        draftId: saved._id?.toString?.(),
+      });
+    }
+    return saved;
   }
 
   async updateProperty(id: string, dto: UpdatePropertyDto) {
+    const current = await this.propertyModel.findById(id).exec();
+    if (!current) {
+      throw new NotFoundException("Property not found");
+    }
+
     const normalized = this.normalizePropertyPayload(dto);
+    const nextForFingerprint = {
+      ...current.toObject(),
+      ...normalized,
+      address: {
+        ...(current.address?.toObject ? current.address.toObject() : current.address),
+        ...(normalized.address ?? {}),
+      },
+    };
+    const fingerprintHash = computePropertyFingerprint(nextForFingerprint);
+    const ownerIdentity = this.resolveOwnerIdentity(current);
+    const duplicateFromAnotherOwner = fingerprintHash
+      ? await this.propertyModel
+          .findOne({
+            _id: { $ne: current._id },
+            fingerprintHash,
+            status: { $in: [PropertyStatus.Draft, PropertyStatus.Listed] },
+          })
+          .sort({ createdAt: 1 })
+          .exec()
+      : null;
+    const dedupeBucketId =
+      duplicateFromAnotherOwner &&
+      this.resolveOwnerIdentity(duplicateFromAnotherOwner) !== ownerIdentity
+        ? duplicateFromAnotherOwner.dedupeBucketId ?? new Types.ObjectId().toHexString()
+        : current.dedupeBucketId;
+
+    if (duplicateFromAnotherOwner && !duplicateFromAnotherOwner.dedupeBucketId) {
+      await this.propertyModel
+        .updateOne(
+          { _id: duplicateFromAnotherOwner._id },
+          { $set: { dedupeBucketId } }
+        )
+        .exec();
+    }
+
     const updated = await this.propertyModel
-      .findByIdAndUpdate(id, normalized, { new: true })
+      .findByIdAndUpdate(
+        id,
+        {
+          ...normalized,
+          fingerprintHash,
+          dedupeBucketId,
+        },
+        { new: true }
+      )
       .exec();
     if (!updated) {
       throw new NotFoundException("Property not found");
     }
+    exploreQueryCache.clear();
     return updated;
   }
 
@@ -149,9 +334,26 @@ export class PropertiesService {
         }
       }
     }
-    const properties = await this.propertyModel.find(queryFilters).limit(limit).exec();
+
+    const cacheKey = `explore:${stableStringify({
+      queryFilters,
+      options,
+      limit,
+    })}`;
+    const cached = exploreQueryCache.get(cacheKey);
+    if (cached) {
+      return cached as unknown[];
+    }
+
+    const properties = await this.propertyModel
+      .find(queryFilters, exploreProjection)
+      .limit(limit)
+      .lean()
+      .exec();
     const validProperties = await this.excludeOrphanedProperties(properties);
-    return this.applyScoringAndFilters(validProperties, options);
+    const result = await this.applyScoringAndFilters(validProperties, options);
+    exploreQueryCache.set(cacheKey, result);
+    return result;
   }
 
   async getMapMatches(
@@ -180,9 +382,20 @@ export class PropertiesService {
       withCoords._id = { $in: matchIds };
     }
     const limit = options?.limit ?? 50;
+    const cacheKey = `map:${stableStringify({
+      withCoords,
+      options,
+      limit,
+    })}`;
+    const cached = exploreQueryCache.get(cacheKey);
+    if (cached) {
+      return cached as unknown[];
+    }
+
     const properties = await this.propertyModel
-      .find(withCoords)
+      .find(withCoords, exploreProjection)
       .limit(limit)
+      .lean()
       .exec();
     const validProperties = await this.excludeOrphanedProperties(properties);
     const results = await this.applyScoringAndFilters(validProperties, options);
@@ -190,7 +403,7 @@ export class PropertiesService {
       options?.userId,
       results.map((property) => property._id)
     );
-    return results.map((property) => ({
+    const mapped = results.map((property) => ({
       ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
         routeAccessStatus: RouteAccessStatus.None,
       }),
@@ -210,6 +423,8 @@ export class PropertiesService {
       apartmentPreferenceMatchPercentage: property.apartmentPreferenceMatchPercentage,
       distanceKm: property.distanceKm,
     }));
+    exploreQueryCache.set(cacheKey, mapped);
+    return mapped;
   }
 
   async uploadImage(file?: Express.Multer.File) {
@@ -314,6 +529,7 @@ export class PropertiesService {
     }
 
     await this.propertyModel.deleteOne({ _id: property._id });
+    exploreQueryCache.clear();
     return { deleted: true };
   }
 
@@ -332,11 +548,29 @@ export class PropertiesService {
         normalizePropertyType(normalized.propertyType) ?? normalized.propertyType;
     }
 
+    if (normalized.availableUnits !== undefined) {
+      const units = Number(normalized.availableUnits);
+      if (Number.isFinite(units) && units > 0) {
+        normalized.availableUnits = Math.floor(units);
+      } else {
+        delete normalized.availableUnits;
+      }
+    }
+
+    delete normalized.duplicateAction;
+
     return normalized;
   }
 
+  private resolveOwnerIdentity(property: {
+    orgId?: Types.ObjectId | null;
+    landlordId?: Types.ObjectId | null;
+  }) {
+    return (property.orgId ?? property.landlordId)?.toString() ?? "";
+  }
+
   private async applyScoringAndFilters(
-    properties: PropertyDocument[],
+    properties: Array<Record<string, any>>,
     options?: {
       userId?: string;
       lat?: number;
@@ -345,73 +579,96 @@ export class PropertiesService {
       minMatchScore?: number;
     }
   ) {
-    let tenantPreferences: any | undefined;
+    let tenantPreferences: TenantPreferences | undefined;
     if (options?.userId) {
       const user = await this.usersService.findById(options.userId);
-      tenantPreferences = user.preferences?.tenant;
+      tenantPreferences = user.preferences?.tenant as TenantPreferences | undefined;
     }
 
     const baseCoords =
       options?.lat !== undefined && options?.lng !== undefined
         ? { lat: options.lat, lng: options.lng }
         : undefined;
+    const preferredDistance =
+      typeof tenantPreferences?.preferredDistance === "number" &&
+      Number.isFinite(tenantPreferences.preferredDistance)
+        ? tenantPreferences.preferredDistance
+        : undefined;
+    const preferredState =
+      typeof tenantPreferences?.preferredState === "string"
+        ? tenantPreferences.preferredState.trim().toLowerCase()
+        : "";
     const tenantDistance =
       tenantPreferences?.maxCommuteRadius !== undefined
         ? tenantPreferences.maxCommuteRadius * 1.60934
         : undefined;
-    const distanceLimit = baseCoords ? options?.distanceKm ?? tenantDistance : undefined;
+    const distanceLimit = baseCoords
+      ? options?.distanceKm ?? preferredDistance ?? tenantDistance
+      : undefined;
+    const shouldFilterState = Boolean(preferredState);
 
-    const scored = properties.map((property) => {
-      const plain = property.toObject();
-      const matchInput: PropertyMatchInput = {
-        propertyType: plain.propertyType,
-        monthlyPrice: plain.monthlyPrice,
-        petFriendly: plain.petFriendly,
-        landlordRequirements: plain.landlordRequirements,
-        amenities: plain.amenities,
-        lat: plain.address?.lat,
-        lng: plain.address?.lng,
-      };
-
-      const tenantInput = tenantPreferences
-        ? {
-          ...tenantPreferences,
-          lat: baseCoords?.lat ?? tenantPreferences.lat,
-          lng: baseCoords?.lng ?? tenantPreferences.lng,
+    const scored = properties
+      .map((property) => {
+        const plain = property;
+        const listingState =
+          typeof plain.address?.state === "string"
+            ? plain.address.state.trim().toLowerCase()
+            : "";
+        if (shouldFilterState && listingState !== preferredState) {
+          return null;
         }
-        : undefined;
 
-      const match = tenantInput
-        ? computeMatchScore(tenantInput, matchInput)
-        : {
-          preferencesMatchPercentage: 0,
-          apartmentPreferenceMatchPercentage: 0,
-          locationScore: 0,
-          amenityScore: 0,
-          affordabilityScore: 0,
-          matchScore: 0,
+        const matchInput: PropertyMatchInput = {
+          propertyType: plain.propertyType,
+          monthlyPrice: plain.monthlyPrice,
+          petFriendly: plain.petFriendly,
+          landlordRequirements: plain.landlordRequirements,
+          amenities: plain.amenities,
+          lat: plain.address?.lat,
+          lng: plain.address?.lng,
         };
 
-      let distanceKm: number | undefined;
-      if (
-        baseCoords &&
-        plain.address?.lat !== undefined &&
-        plain.address?.lng !== undefined
-      ) {
-        distanceKm = haversineDistanceKm(baseCoords, {
-          lat: plain.address.lat,
-          lng: plain.address.lng,
-        });
-      }
+        const tenantInput = tenantPreferences
+          ? {
+            ...tenantPreferences,
+            lat: baseCoords?.lat ?? tenantPreferences.lat,
+            lng: baseCoords?.lng ?? tenantPreferences.lng,
+          }
+          : undefined;
 
-      return {
-        ...plain,
-        ...match,
-        distanceKm,
-      };
-    });
+        const match = tenantInput
+          ? computeMatchScore(tenantInput, matchInput)
+          : {
+            preferencesMatchPercentage: 0,
+            apartmentPreferenceMatchPercentage: 0,
+            locationScore: 0,
+            amenityScore: 0,
+            affordabilityScore: 0,
+            matchScore: 0,
+          };
+
+        let distanceKm: number | undefined;
+        if (
+          baseCoords &&
+          plain.address?.lat !== undefined &&
+          plain.address?.lng !== undefined
+        ) {
+          distanceKm = haversineDistanceKm(baseCoords, {
+            lat: plain.address.lat,
+            lng: plain.address.lng,
+          });
+        }
+
+        return {
+          ...plain,
+          ...match,
+          distanceKm,
+        };
+      })
+      .filter((property): property is NonNullable<typeof property> => property !== null);
 
     let filtered = scored;
+
 
     if (distanceLimit !== undefined) {
       filtered = filtered.filter(
@@ -515,7 +772,7 @@ export class PropertiesService {
     return map;
   }
 
-  private async excludeOrphanedProperties(properties: PropertyDocument[]) {
+  private async excludeOrphanedProperties(properties: Array<Record<string, any>>) {
     if (!properties.length) return properties;
     const landlordIds = Array.from(
       new Set(
@@ -532,7 +789,7 @@ export class PropertiesService {
       .lean();
     const validSet = new Set(validLandlords.map((user) => user._id.toString()));
 
-    const keep: PropertyDocument[] = [];
+    const keep: Array<Record<string, any>> = [];
     properties.forEach((property) => {
       const ownerId = property.landlordId?.toString?.() ?? "";
       if (ownerId && validSet.has(ownerId)) {

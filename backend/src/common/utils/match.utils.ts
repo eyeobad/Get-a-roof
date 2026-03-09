@@ -22,6 +22,8 @@ export type TenantPreferences = {
   socialHabits?: string;
   hasChildren?: boolean;
   maxCommuteRadius?: number;
+  preferredDistance?: number;
+  preferredState?: string;
   desiredAmenities?: string[];
   lat?: number;
   lng?: number;
@@ -226,10 +228,14 @@ function computeLocationScore(
     { lat: propertyLat, lng: propertyLng }
   );
 
-  // Use tenant's max commute radius, default to 20 km
-  const maxRadiusKm = tenant?.maxCommuteRadius
-    ? tenant.maxCommuteRadius * 1.60934 // convert miles → km
-    : 20;
+  // Use preferred distance first, then fallback to maxCommuteRadius, default 20km
+  const maxRadiusKm =
+    tenant?.preferredDistance ??
+    tenant?.maxCommuteRadius ??
+    20;
+  if (!Number.isFinite(maxRadiusKm) || maxRadiusKm <= 0) {
+    return 50;
+  }
 
   const ratio = distanceKm / maxRadiusKm;
 

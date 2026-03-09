@@ -2,6 +2,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsMongoId,
   IsNumber,
   IsOptional,
@@ -74,6 +75,10 @@ export class CreatePropertyDto {
   description?: string;
 
   @IsOptional()
+  @IsNumber()
+  availableUnits?: number;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   amenities?: string[];
@@ -90,4 +95,8 @@ export class CreatePropertyDto {
   @ValidateNested()
   @Type(() => LandlordRequirementsDto)
   landlordRequirements?: LandlordRequirementsDto;
+
+  @IsOptional()
+  @IsIn(["increment_units", "create_new_draft"])
+  duplicateAction?: "increment_units" | "create_new_draft";
 }

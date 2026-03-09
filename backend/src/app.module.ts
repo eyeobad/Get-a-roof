@@ -24,7 +24,7 @@ import { AdminModule } from "./admin/admin.module";
         throttlers: [
           {
             ttl: Number(configService.get("THROTTLE_TTL") ?? 60),
-            limit: Number(configService.get("THROTTLE_LIMIT") ?? 100),
+            limit: Number(configService.get("THROTTLE_LIMIT") ?? 200),
           },
         ],
       }),
@@ -54,4 +54,4 @@ import { AdminModule } from "./admin/admin.module";
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

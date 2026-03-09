@@ -106,9 +106,12 @@ function computeLocationScore(tenant, property) {
         return 50;
     }
     const distanceKm = (0, geo_utils_1.haversineDistanceKm)({ lat: tenantLat, lng: tenantLng }, { lat: propertyLat, lng: propertyLng });
-    const maxRadiusKm = tenant?.maxCommuteRadius
-        ? tenant.maxCommuteRadius * 1.60934
-        : 20;
+    const maxRadiusKm = tenant?.preferredDistance ??
+        tenant?.maxCommuteRadius ??
+        20;
+    if (!Number.isFinite(maxRadiusKm) || maxRadiusKm <= 0) {
+        return 50;
+    }
     const ratio = distanceKm / maxRadiusKm;
     if (ratio <= 0.25)
         return 100;

@@ -92,6 +92,7 @@ type ProfileState = {
   email: string;
   phone: string;
   photoUrl: string;
+  preferredState: string;
   annualEarnings: number;
   commuteRadius: number;
   preferences: Record<string, string>; // groupKey -> selected label (single select)
@@ -113,7 +114,9 @@ type ApiTenantPreferences = {
   educationLevel?: string;
   socialHabits?: string;
   annualEarnings?: number;
+  preferredState?: string;
   maxCommuteRadius?: number;
+  preferredDistance?: number;
 };
 
 type ApiUser = {
@@ -130,6 +133,7 @@ const defaultProfile: ProfileState = {
   email: "",
   phone: "",
   photoUrl: "",
+  preferredState: "",
   annualEarnings: 0,
   commuteRadius: 0,
   preferences: {},
@@ -156,8 +160,13 @@ const mapUserToProfile = (user: ApiUser | null | undefined): ProfileState => {
     email: user.email ?? defaultProfile.email,
     phone: user.phoneNumber ?? defaultProfile.phone,
     photoUrl: user.photoUrl ?? defaultProfile.photoUrl,
+    preferredState: tenant.preferredState ?? defaultProfile.preferredState,
     annualEarnings: tenant.annualEarnings ?? defaultProfile.annualEarnings,
-    commuteRadius: tenant.maxCommuteRadius ?? defaultProfile.commuteRadius,
+    commuteRadius:
+      typeof tenant.preferredDistance === "number" &&
+      Number.isFinite(tenant.preferredDistance)
+        ? tenant.preferredDistance
+        : tenant.maxCommuteRadius ?? defaultProfile.commuteRadius,
     preferences: {
       gender: tenant.gender ?? "",
       employment: tenant.employmentStatus ?? "",
@@ -482,6 +491,7 @@ export default function ProfilePage() {
       .map(([, value]) => value);
 
     const tenantPayload: Record<string, unknown> = {
+      preferredState: profile.preferredState || undefined,
       gender: profile.preferences.gender || undefined,
       employmentStatus: profile.preferences.employment || undefined,
       maritalStatus: profile.preferences.marital || undefined,
@@ -493,6 +503,7 @@ export default function ProfilePage() {
       socialHabits: profile.preferences.social || undefined,
       annualEarnings: profile.annualEarnings,
       maxCommuteRadius: profile.commuteRadius,
+      preferredDistance: profile.commuteRadius,
       petFriendlyRequired: profile.apartmentPrefs["Pets Allowed"] || false,
       lookingFor,
     };
@@ -851,13 +862,42 @@ export default function ProfilePage() {
                 </div>
               </section>
 
+                  {/* Commute radius */}
+              <section className="mt-8 space-y-5">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold text-slate-900">Preferred Area (State)</span>
+                    <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                      {profile.preferredState || "Not set"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <select
+                      value={profile.preferredState}
+                      onChange={(event) =>
+                        setProfile((prev) => ({
+                          ...prev,
+                          preferredState: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Any state</option>
+                      <option value="Lagos">Lagos</option>
+                      <option value="Abuja">Abuja</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
               {/* Commute radius */}
               <section className="mt-8 space-y-5">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-slate-900">Max Commute Radius</span>
+                    <span className="text-lg font-bold text-slate-900">Max Commute Radius (km)</span>
                     <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                      {profile.commuteRadius} mi
+                      {profile.commuteRadius} km
                     </span>
                   </div>
 
@@ -873,9 +913,9 @@ export default function ProfilePage() {
                       className="w-full accent-primary"
                     />
                     <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                      <span>0 mi</span>
-                      <span>25 mi</span>
-                      <span>50 mi</span>
+                      <span>0 km</span>
+                      <span>25 km</span>
+                      <span>50 km</span>
                     </div>
                   </div>
                 </div>

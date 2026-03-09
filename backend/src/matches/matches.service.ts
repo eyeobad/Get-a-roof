@@ -322,13 +322,27 @@ export class MatchesService {
       throw new BadRequestException("This match is permanently blocked");
     }
 
-    match.status = MatchStatus.TenantLiked;
-    match.dismissedAt = undefined;
-    match.dismissReason = undefined;
-    match.recycleCount = (match.recycleCount ?? 0) + 1;
-    match.tenantLiked = true;
-    match.timestamp = new Date();
-    return match.save();
+    await match.deleteOne();
+    return { success: true };
+  }
+
+  async recycleDismissedMatchesBulk(matchIds: string[], tenantId: string) {
+    if (!matchIds?.length) return { success: true, count: 0 };
+
+    const objectIds = matchIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    if (!objectIds.length) return { success: true, count: 0 };
+
+    const result = await this.matchModel.deleteMany({
+      _id: { $in: objectIds },
+      tenantId: new Types.ObjectId(tenantId),
+      status: MatchStatus.Dismissed,
+      dismissReason: { $ne: DismissReason.Hard },
+    });
+
+    return { success: true, count: result.deletedCount };
   }
 
   // -----------------------------------------------------------------------

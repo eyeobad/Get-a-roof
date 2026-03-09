@@ -76,4 +76,12 @@ export class TenantPreferencesDto {
   @IsOptional()
   @IsNumber()
   maxCommuteRadius?: number;
+
+  @IsOptional()
+  @IsNumber()
+  preferredDistance?: number;
+
+  @IsOptional()
+  @IsString()
+  preferredState?: string;
 }

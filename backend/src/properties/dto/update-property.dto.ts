@@ -69,6 +69,10 @@ export class UpdatePropertyDto {
   description?: string;
 
   @IsOptional()
+  @IsNumber()
+  availableUnits?: number;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   amenities?: string[];

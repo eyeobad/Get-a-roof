@@ -44,6 +44,8 @@ type ExploreFilterState = {
 };
 
 const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
+const BASE_BUDGET = 100000;
+const BASE_DISTANCE = 15;
 
 export default function ExploreCards() {
   const router = useRouter();
@@ -60,10 +62,30 @@ export default function ExploreCards() {
     []
   );
 
+  const initialPreferredDistance = useMemo(() => {
+    const tenantPrefs = (useAppStore.getState().user?.preferences?.tenant ?? {}) as {
+      preferredDistance?: number;
+      maxCommuteRadius?: number;
+    };
+    if (
+      typeof tenantPrefs.preferredDistance === "number" &&
+      Number.isFinite(tenantPrefs.preferredDistance)
+    ) {
+      return Math.round(tenantPrefs.preferredDistance);
+    }
+    if (
+      typeof tenantPrefs.maxCommuteRadius === "number" &&
+      Number.isFinite(tenantPrefs.maxCommuteRadius)
+    ) {
+      return Math.round(tenantPrefs.maxCommuteRadius);
+    }
+    return BASE_DISTANCE;
+  }, []);
+
   const defaultFilters = useMemo<ExploreFilterState>(
     () => ({
-      budget: 100000,
-      distance: 15,
+      budget: BASE_BUDGET,
+      distance: initialPreferredDistance,
       propertyType: "",
       listingIntent: "",
       toggles: toggleOptions.reduce<Record<string, boolean>>(
@@ -71,7 +93,7 @@ export default function ExploreCards() {
         {}
       ),
     }),
-    [toggleOptions]
+    [toggleOptions, initialPreferredDistance]
   );
 
   const [filters, setFilters] = useState<ExploreFilterState>(defaultFilters);
@@ -104,8 +126,10 @@ export default function ExploreCards() {
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
+  const [isLoadingListings, setIsLoadingListings] = useState(false);
   const [recycleAttempted, setRecycleAttempted] = useState(false);
   const isRecyclingDeckRef = useRef(false);
+  const hasLoopedFromMemoryRef = useRef(false);
 
   const controls = useAnimation();
 
@@ -161,26 +185,82 @@ export default function ExploreCards() {
   }, [captureUserLocation]);
 
   useEffect(() => {
+    let active = true;
+    setIsLoadingListings(true);
     void loadExploreListings({
       budget: filters.budget,
       distance: filters.distance,
       propertyType: filters.propertyType,
       listingIntent: filters.listingIntent,
       toggles: filters.toggles,
-    });
-  }, [loadExploreListings, filters]);
+    })
+      .catch(() => {
+        if (active) setRecycleAttempted(true);
+      })
+      .finally(() => {
+        if (active) setIsLoadingListings(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    loadExploreListings,
+    filters.budget,
+    filters.distance,
+    filters.propertyType,
+    filters.listingIntent,
+    filters.toggles,
+  ]);
 
   useEffect(() => {
-    if (exploreQueue.length !== 0) return;
+    if (exploreQueue.length > 0) {
+      hasLoopedFromMemoryRef.current = false;
+      return;
+    }
     if (isRecyclingDeckRef.current || recycleAttempted) return;
 
     let active = true;
     isRecyclingDeckRef.current = true;
 
     void loadRecycledIntoExplore()
-      .then((restored) => {
+      .then(async (restored) => {
         if (!active) return;
-        if (!restored) setRecycleAttempted(true);
+        if (!restored) {
+          const cachedIds = Object.keys(listingsById);
+          if (cachedIds.length > 0 && !hasLoopedFromMemoryRef.current) {
+            hasLoopedFromMemoryRef.current = true;
+            resetExploreQueue();
+            return;
+          }
+          setIsLoadingListings(true);
+          await loadExploreListings({
+            budget: filters.budget,
+            distance: filters.distance,
+            propertyType: filters.propertyType,
+            listingIntent: filters.listingIntent,
+            toggles: filters.toggles,
+          });
+          setIsLoadingListings(false);
+          const nextQueueLength = useAppStore.getState().exploreQueue.length;
+          if (nextQueueLength === 0) {
+            setRecycleAttempted(true);
+          }
+        } else {
+          setIsLoadingListings(true);
+          await loadExploreListings({
+            budget: filters.budget,
+            distance: filters.distance,
+            propertyType: filters.propertyType,
+            listingIntent: filters.listingIntent,
+            toggles: filters.toggles,
+          });
+          setIsLoadingListings(false);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setIsLoadingListings(false);
+        setRecycleAttempted(true);
       })
       .finally(() => {
         if (active) isRecyclingDeckRef.current = false;
@@ -189,7 +269,19 @@ export default function ExploreCards() {
     return () => {
       active = false;
     };
-  }, [exploreQueue.length, recycleAttempted, loadRecycledIntoExplore]);
+  }, [
+    exploreQueue.length,
+    recycleAttempted,
+    loadRecycledIntoExplore,
+    loadExploreListings,
+    resetExploreQueue,
+    listingsById,
+    filters.budget,
+    filters.distance,
+    filters.propertyType,
+    filters.listingIntent,
+    filters.toggles,
+  ]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (isSwipeAnimating || visibleCards.length === 0) return;
@@ -244,86 +336,85 @@ export default function ExploreCards() {
         : 0;
     const activeImage = images[activeImageIndex] ?? card.image;
     return (
-    <>
-      <div className="relative h-[86%] md:h-[72%] w-full">
-        <div className="absolute inset-0">
-          <Image
-            src={activeImage}
-            alt={card.alt}
-            fill
-            sizes="(max-width:768px) 90vw, 640px"
-            className="object-cover"
-          />
-        </div>
-
-        {images.length > 1 && (
-          <>
-            <div className="absolute inset-x-0 top-4 z-20 flex items-center justify-center gap-1.5 px-8">
-              {images.map((_, index) => (
-                <button
-                  key={`${card.id}-dot-${index}`}
-                  type="button"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setCardImageIndex(card.id, index, images.length);
-                  }}
-                  className={`h-1.5 rounded-full transition-all ${
-                    index === activeImageIndex ? "w-6 bg-white" : "w-2 bg-white/50"
-                  }`}
-                  aria-label={`Show photo ${index + 1}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
-
-        <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-bold tracking-wide shadow-sm">
-          {card.tag}
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary to-transparent" />
-      </div>
-
-      <div className="flex-1 bg-primary text-white px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4 pointer-events-none">
-        <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
-          <div className="flex items-end gap-2">
-            <h2 className="text-[2rem] md:text-4xl leading-none font-bold tracking-tight">{card.price}</h2>
-            <span className="text-base md:text-xl font-medium opacity-80 mb-0.5 md:mb-1.5">{card.period}</span>
+      <>
+        <div className="relative h-[86%] md:h-[72%] w-full">
+          <div className="absolute inset-0">
+            <Image
+              src={activeImage}
+              alt={card.alt}
+              fill
+              sizes="(max-width:768px) 90vw, 640px"
+              className="object-cover"
+            />
           </div>
-          <p className="text-[11px] md:text-xs uppercase tracking-[0.28em] md:tracking-[0.35em] text-white/70">{card.highlight}</p>
+
+          {images.length > 1 && (
+            <>
+              <div className="absolute inset-x-0 top-4 z-20 flex items-center justify-center gap-1.5 px-8">
+                {images.map((_, index) => (
+                  <button
+                    key={`${card.id}-dot-${index}`}
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setCardImageIndex(card.id, index, images.length);
+                    }}
+                    className={`h-1.5 rounded-full transition-all ${index === activeImageIndex ? "w-6 bg-white" : "w-2 bg-white/50"
+                      }`}
+                    aria-label={`Show photo ${index + 1}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="absolute top-4 left-4 bg-primary/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-bold tracking-wide shadow-sm">
+            {card.tag}
+          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary to-transparent" />
         </div>
 
-        <div className="grid grid-cols-3 gap-2 md:gap-3 py-1 md:py-2">
-          {card.stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="flex flex-col items-center justify-center bg-white/10 rounded-xl py-2 px-1 md:py-3 backdrop-blur-sm"
-            >
-              <span className="material-symbols-outlined text-lg md:text-2xl mb-0.5 md:mb-1">{stat.icon}</span>
-              <span className="text-sm md:text-lg font-bold">{stat.label}</span>
+        <div className="flex-1 bg-primary text-white px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4 pointer-events-none">
+          <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
+            <div className="flex items-end gap-2">
+              <h2 className="text-[2rem] md:text-4xl leading-none font-bold tracking-tight">{card.price}</h2>
+              <span className="text-base md:text-xl font-medium opacity-80 mb-0.5 md:mb-1.5">{card.period}</span>
             </div>
-          ))}
-        </div>
+            <p className="text-[11px] md:text-xs uppercase tracking-[0.28em] md:tracking-[0.35em] text-white/70">{card.highlight}</p>
+          </div>
 
-        <div className="flex items-start gap-2 md:gap-3">
-          <span className="material-symbols-outlined text-xl md:text-3xl mt-0.5 text-terracotta shrink-0">
-            location_on
-          </span>
+          <div className="grid grid-cols-3 gap-2 md:gap-3 py-1 md:py-2">
+            {card.stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="flex flex-col items-center justify-center bg-white/10 rounded-xl py-2 px-1 md:py-3 backdrop-blur-sm"
+              >
+                <span className="material-symbols-outlined text-lg md:text-2xl mb-0.5 md:mb-1">{stat.icon}</span>
+                <span className="text-sm md:text-lg font-bold">{stat.label}</span>
+              </div>
+            ))}
+          </div>
 
-          <div className="flex flex-col gap-1">
-            <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">{card.address}</p>
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
-              <span className="material-symbols-outlined text-sm">villa</span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
-                {intentLabel}
-              </span>
+          <div className="flex items-start gap-2 md:gap-3">
+            <span className="material-symbols-outlined text-xl md:text-3xl mt-0.5 text-terracotta shrink-0">
+              location_on
+            </span>
+
+            <div className="flex flex-col gap-1">
+              <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">{card.address}</p>
+              <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
+                <span className="material-symbols-outlined text-sm">villa</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
+                  {intentLabel}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
   };
 
   return (
@@ -348,9 +439,8 @@ export default function ExploreCards() {
               setDraftFilters(filters);
               setFiltersOpen(true);
             }}
-            className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-colors ${
-              hasActiveFilters ? "bg-primary/10 text-primary" : "hover:bg-black/5"
-            }`}
+            className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-colors ${hasActiveFilters ? "bg-primary/10 text-primary" : "hover:bg-black/5"
+              }`}
           >
             <span className="material-symbols-outlined text-primary text-3xl">tune</span>
             {hasActiveFilters && (
@@ -382,7 +472,15 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {exploreQueue.length === 0 && recycleAttempted && (
+        {exploreQueue.length === 0 && isLoadingListings && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
+            <span className="material-symbols-outlined text-6xl text-gray-300">hourglass_empty</span>
+            <h3 className="text-xl font-bold text-gray-700">Loading listings</h3>
+            <p className="text-gray-500">Please wait...</p>
+          </div>
+        )}
+
+        {exploreQueue.length === 0 && recycleAttempted && !isLoadingListings && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>
@@ -671,15 +769,13 @@ function FilterModal({
                           },
                         }))
                       }
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition duration-200 ease-in-out ${
-                        isActive ? "bg-primary border-transparent" : "bg-gray-200 border-transparent"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition duration-200 ease-in-out ${isActive ? "bg-primary border-transparent" : "bg-gray-200 border-transparent"
+                        }`}
                     >
                       <span
                         aria-hidden="true"
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
-                          isActive ? "translate-x-5" : "translate-x-0"
-                        }`}
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${isActive ? "translate-x-5" : "translate-x-0"
+                          }`}
                       />
                     </button>
                   </div>

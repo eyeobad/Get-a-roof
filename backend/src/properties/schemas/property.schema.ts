@@ -149,6 +149,9 @@ export class Property {
   @Prop()
   description?: string;
 
+  @Prop({ default: 1, min: 1 })
+  availableUnits?: number;
+
   @Prop({ type: [String], default: [] })
   amenities?: string[];
 
@@ -174,6 +177,12 @@ export class Property {
   @Prop()
   moderatedAt?: Date;
 
+  @Prop()
+  fingerprintHash?: string;
+
+  @Prop()
+  dedupeBucketId?: string;
+
   @Prop({ type: LandlordRequirements })
   landlordRequirements?: LandlordRequirements;
 }
@@ -181,3 +190,19 @@ export class Property {
 export const PropertySchema = SchemaFactory.createForClass(Property);
 PropertySchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
 PropertySchema.index({ orgId: 1, status: 1, updatedAt: -1 });
+PropertySchema.index({ fingerprintHash: 1, status: 1 });
+PropertySchema.index({ dedupeBucketId: 1, createdAt: -1 });
+PropertySchema.index({
+  status: 1,
+  "address.state": 1,
+  propertyType: 1,
+  listingIntent: 1,
+  monthlyPrice: 1,
+  bedCount: 1,
+  createdAt: -1,
+});
+PropertySchema.index({ "address.lat": 1, "address.lng": 1 });
+PropertySchema.index({ "landlordRequirements.selfCompound": 1 });
+PropertySchema.index({ "landlordRequirements.shortlet": 1 });
+PropertySchema.index({ "landlordRequirements.sharedCompound": 1 });
+PropertySchema.index({ "landlordRequirements.nonOwnerOccupied": 1 });

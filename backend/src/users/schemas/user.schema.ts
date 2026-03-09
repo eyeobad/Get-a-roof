@@ -96,6 +96,12 @@ class TenantPreferences {
 
   @Prop()
   maxCommuteRadius?: number;
+
+  @Prop()
+  preferredDistance?: number;
+
+  @Prop()
+  preferredState?: string;
 }
 
 class Preferences {

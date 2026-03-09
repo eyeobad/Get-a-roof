@@ -74,12 +74,25 @@ function MiniChip({ icon, label }: { icon: string; label: string }) {
 }
 
 export default function ReviewPublishPage() {
+  type DuplicateConflictPayload = {
+    errorCode?: string;
+    ownershipType?: "same_owner" | "different_owner";
+    message?: string;
+    draftCreated?: boolean;
+    draftId?: string;
+  };
+  type ApiErrorLike = Error & { status?: number; data?: unknown };
+
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
   const draft = useAppStore((state) => state.landlordDraft);
   const publishLandlordDraft = useAppStore((state) => state.publishLandlordDraft);
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateOwnershipType, setDuplicateOwnershipType] = useState<
+    "same_owner" | "different_owner" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   useToastError(error);
 
@@ -167,7 +180,42 @@ export default function ReviewPublishPage() {
       clearLandlordDraft();
       router.push("/dashboard/properties");
     } catch (err) {
-      setError((err as Error).message || "Unable to publish. Try again.");
+      const typedError = err as ApiErrorLike;
+      const payload =
+        ((typedError.data as { message?: unknown } | undefined)?.message ??
+          typedError.data) as DuplicateConflictPayload | undefined;
+      const isDuplicateConflict =
+        typedError.status === 409 &&
+        payload &&
+        payload.errorCode === "DUPLICATE_LISTING";
+
+      if (isDuplicateConflict) {
+        setDuplicateOwnershipType(payload.ownershipType ?? "same_owner");
+        setShowDuplicateModal(true);
+        if (payload.ownershipType === "different_owner") {
+          setError(payload.message ?? null);
+        }
+      } else {
+        setError((err as Error).message || "Unable to publish. Try again.");
+      }
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleDuplicateChoice = async (
+    action: "increment_units" | "create_new_draft"
+  ) => {
+    setIsPublishing(true);
+    setError(null);
+    try {
+      await publishLandlordDraft(action);
+      setShowDuplicateModal(false);
+      setDuplicateOwnershipType(null);
+      clearLandlordDraft();
+      router.push("/dashboard/properties");
+    } catch (err) {
+      setError((err as Error).message || "Unable to resolve duplicate listing.");
     } finally {
       setIsPublishing(false);
     }
@@ -455,6 +503,7 @@ export default function ReviewPublishPage() {
             <button
               type="button"
               onClick={() => void handlePublish()}
+              disabled={isPublishing}
               className="w-full h-14 rounded-full bg-[#0a44b8] text-white font-bold text-[15px] shadow-lg shadow-[#0a44b8]/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <span>{isPublishing ? "Publishing..." : "Publish Property"}</span>
@@ -468,6 +517,63 @@ export default function ReviewPublishPage() {
           </div>
         </div>
       </div>
+
+      {showDuplicateModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              setShowDuplicateModal(false);
+              setDuplicateOwnershipType(null);
+            }}
+            aria-label="Close duplicate modal"
+          />
+          <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-white border border-black/10 p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-[#1A1A1A]">Similar listing found</h3>
+            <p className="text-sm text-black/65 leading-relaxed">
+              {duplicateOwnershipType === "different_owner"
+                ? "A similar listing appears to belong to another owner or agent. This listing can only be stored as draft for review."
+                : "You already have a very similar active listing. Do you want to increase available units on that listing or create this one as a new draft for review?"}
+            </p>
+            <div className="space-y-3 pt-1">
+              {duplicateOwnershipType === "different_owner" ? (
+                <button
+                  type="button"
+                  disabled={isPublishing}
+                  onClick={() => {
+                    setShowDuplicateModal(false);
+                    setDuplicateOwnershipType(null);
+                    router.push("/dashboard/properties");
+                  }}
+                  className="w-full h-12 rounded-xl bg-[#0a44b8] text-white font-semibold disabled:opacity-60"
+                >
+                  Go to Listings
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={isPublishing}
+                    onClick={() => void handleDuplicateChoice("increment_units")}
+                    className="w-full h-12 rounded-xl bg-[#0a44b8] text-white font-semibold disabled:opacity-60"
+                  >
+                    Increase Available Units
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPublishing}
+                    onClick={() => void handleDuplicateChoice("create_new_draft")}
+                    className="w-full h-12 rounded-xl border border-black/10 bg-white text-[#1A1A1A] font-semibold disabled:opacity-60"
+                  >
+                    Create as New Draft
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

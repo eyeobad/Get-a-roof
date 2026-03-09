@@ -269,12 +269,15 @@ type Thread = {
 type ExploreFilters = {
   budget?: number;
   distance?: number;
+  preferredDistance?: number;
   propertyType?: string;
   listingIntent?: "Rent" | "Shortlet" | "";
+  preferredState?: string;
   toggles?: Record<string, boolean>;
   lat?: number;
   lng?: number;
 };
+type DuplicateAction = "increment_units" | "create_new_draft";
 
 type AppState = {
   listingsById: Record<string, Listing>;
@@ -375,8 +378,11 @@ type AppState = {
   setLandlordDraft: (payload: Partial<LandlordDraft>) => void;
   clearLandlordDraft: () => void;
   loadLandlordDraftById: (propertyId: string) => Promise<void>;
-  saveLandlordDraft: (payload?: Partial<LandlordDraft>) => Promise<LandlordDraft | null>;
-  publishLandlordDraft: () => Promise<LandlordDraft | null>;
+  saveLandlordDraft: (
+    payload?: Partial<LandlordDraft>,
+    duplicateAction?: DuplicateAction
+  ) => Promise<LandlordDraft | null>;
+  publishLandlordDraft: (duplicateAction?: DuplicateAction) => Promise<LandlordDraft | null>;
   uploadLandlordImage: (file: File) => Promise<string | null>;
   uploadLandlordProof: (file: File) => Promise<string | null>;
   loadLandlordProperties: (options?: {
@@ -551,6 +557,33 @@ const formatTime = (value?: string) => {
 };
 
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const apiFetchWithRetry = async <T>(
+  path: string,
+  options: Parameters<typeof apiFetch>[1],
+  retries = 2
+) => {
+  let attempt = 0;
+  while (true) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId =
+      controller !== null ? window.setTimeout(() => controller.abort(), 8_000) : null;
+    try {
+      const value = await apiFetch<T>(path, {
+        ...options,
+        signal: controller?.signal,
+      });
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      return value;
+    } catch (error) {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (attempt >= retries) throw error;
+      attempt += 1;
+      await delay(250 * attempt);
+    }
+  }
+};
 
 const formatMessagePreview = (content?: string) => {
   if (!content) return "Start a conversation";
@@ -723,7 +756,7 @@ const mapPropertyToLandlordDraft = (property: ApiProperty): LandlordDraft => ({
       : "Draft",
 });
 
-const buildLandlordPayload = (draft: LandlordDraft) => {
+const buildLandlordPayload = (draft: LandlordDraft, duplicateAction?: DuplicateAction) => {
   const payload: Record<string, unknown> = {};
 
   if (draft.images) payload.images = draft.images;
@@ -788,6 +821,10 @@ const buildLandlordPayload = (draft: LandlordDraft) => {
     if (Object.keys(requirements).length) {
       payload.landlordRequirements = requirements;
     }
+  }
+
+  if (duplicateAction) {
+    payload.duplicateAction = duplicateAction;
   }
 
   return payload;
@@ -1166,7 +1203,9 @@ export const useAppStore = create<AppState>()(
             }),
             token: state.authToken,
           });
-          await get().loadMatches();
+          if (tenantLiked !== false) {
+            await get().loadMatches();
+          }
         } catch {
           // Best-effort; ignore errors here to avoid blocking UI.
         }
@@ -1313,11 +1352,27 @@ export const useAppStore = create<AppState>()(
           set({ listingsById: listingMap, exploreQueue: initialQueue });
           return;
         }
+        const tenantPrefs = state.user?.preferences?.tenant;
+        const preferredDistance =
+          filters?.preferredDistance ??
+          (typeof tenantPrefs?.preferredDistance === "number" &&
+            Number.isFinite(tenantPrefs.preferredDistance)
+            ? tenantPrefs.preferredDistance
+            : undefined) ??
+          (typeof tenantPrefs?.maxCommuteRadius === "number" &&
+            Number.isFinite(tenantPrefs.maxCommuteRadius)
+            ? tenantPrefs.maxCommuteRadius
+            : undefined);
+        const preferredState =
+          (typeof filters?.preferredState === "string" && filters.preferredState.trim()) ||
+          (typeof tenantPrefs?.preferredState === "string" && tenantPrefs.preferredState.trim()) ||
+          undefined;
         const monthlyBudget =
           filters?.budget !== undefined ? Math.round(filters.budget / 12) : undefined;
         const query = buildQuery({
           budget: monthlyBudget,
-          distanceKm: filters?.distance,
+          distanceKm: filters?.distance ?? preferredDistance,
+          state: preferredState,
           propertyType: filters?.propertyType,
           listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,
@@ -1328,9 +1383,11 @@ export const useAppStore = create<AppState>()(
           nonOwner: filters?.toggles?.nonOwner,
         });
 
-        const data = await apiFetch<ApiProperty[]>(`/api/properties/explore?${query}`, {
-          token: state.authToken,
-        });
+        const data = await apiFetchWithRetry<ApiProperty[]>(
+          `/api/properties/explore?${query}`,
+          { token: state.authToken },
+          2
+        );
 
         const listings = (data ?? []).map(mapPropertyToListing);
         const nextMap = listings.reduce<Record<string, Listing>>((acc, listing) => {
@@ -1370,49 +1427,25 @@ export const useAppStore = create<AppState>()(
           return Boolean(matchId && isMongoId(matchId));
         });
 
-        await Promise.all(
-          recyclableMatches.map((match) => {
-            const matchId = toIdString(match._id) || toIdString(match.id);
-            return apiFetch(`/api/matches/${matchId}/recycle`, {
-              method: "POST",
-              token,
-            }).catch(() => null);
-          })
-        );
+        const matchIdsToRecycle = recyclableMatches
+          .map((match) => toIdString(match._id) || toIdString(match.id))
+          .filter((id): id is string => Boolean(id));
 
-        const refreshed = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
-          `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
-          {
+        if (matchIdsToRecycle.length > 0) {
+          await apiFetch(`/api/matches/recycle-bulk`, {
+            method: "POST",
+            body: JSON.stringify({ matchIds: matchIdsToRecycle }),
             token,
-          }
-        );
-        const refreshedMatches = Array.isArray(refreshed)
-          ? refreshed
-          : Array.isArray(refreshed?.items)
-            ? refreshed.items
-            : Array.isArray(refreshed?.data)
-              ? refreshed.data
-              : [];
+          }).catch(() => null);
+        }
 
-        const sourceMatches = refreshedMatches.length > 0 ? refreshedMatches : matches;
-
-        const listings = sourceMatches
-          .map((match) => (match.property ? mapPropertyToListing(match.property) : null))
-          .filter((listing): listing is Listing => Boolean(listing));
-
-        if (listings.length === 0) return false;
-
-        const nextMap = listings.reduce<Record<string, Listing>>((acc, listing) => {
-          acc[listing.id] = listing;
-          return acc;
-        }, {});
-        const queue = listings.map((listing) => listing.id);
+        const clearedPropertyIds = recyclableMatches.map(m => toIdString(m.property?._id) || toIdString(m.property?.id)).filter(Boolean);
 
         set({
-          listingsById: { ...get().listingsById, ...nextMap },
-          exploreQueue: queue,
-          selectedListingId: queue[0] ?? null,
+          passedIds: get().passedIds.filter(id => !clearedPropertyIds.includes(id)),
+          likedIds: get().likedIds.filter(id => !clearedPropertyIds.includes(id)),
         });
+
         return true;
       },
       loadMapMatches: async (filters) => {
@@ -1421,11 +1454,27 @@ export const useAppStore = create<AppState>()(
           set({ mapMatches: [] });
           return;
         }
+        const tenantPrefs = state.user?.preferences?.tenant;
+        const preferredDistance =
+          filters?.preferredDistance ??
+          (typeof tenantPrefs?.preferredDistance === "number" &&
+            Number.isFinite(tenantPrefs.preferredDistance)
+            ? tenantPrefs.preferredDistance
+            : undefined) ??
+          (typeof tenantPrefs?.maxCommuteRadius === "number" &&
+            Number.isFinite(tenantPrefs.maxCommuteRadius)
+            ? tenantPrefs.maxCommuteRadius
+            : undefined);
+        const preferredState =
+          (typeof filters?.preferredState === "string" && filters.preferredState.trim()) ||
+          (typeof tenantPrefs?.preferredState === "string" && tenantPrefs.preferredState.trim()) ||
+          undefined;
         const monthlyBudget =
           filters?.budget !== undefined ? Math.round(filters.budget / 12) : undefined;
         const query = buildQuery({
           budget: monthlyBudget,
-          distanceKm: filters?.distance,
+          distanceKm: filters?.distance ?? preferredDistance,
+          state: preferredState,
           propertyType: filters?.propertyType,
           listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,
@@ -1436,18 +1485,23 @@ export const useAppStore = create<AppState>()(
           nonOwner: filters?.toggles?.nonOwner,
         });
 
-        const matched = await apiFetch<ApiProperty[]>(
+        const matched = await apiFetchWithRetry<ApiProperty[]>(
           `/api/properties/matches/map?${query}`,
           {
             token: state.authToken,
-          }
+          },
+          2
         );
         const fallback =
           matched && matched.length
             ? matched
-            : await apiFetch<ApiProperty[]>(`/api/properties/explore?${query}`, {
-              token: state.authToken,
-            });
+            : await apiFetchWithRetry<ApiProperty[]>(
+                `/api/properties/explore?${query}`,
+                {
+                  token: state.authToken,
+                },
+                2
+              );
 
         const listings = (fallback ?? []).map(mapPropertyToListing);
         set((prev) => {
@@ -1825,14 +1879,14 @@ export const useAppStore = create<AppState>()(
           set({ landlordDraft: emptyLandlordDraft });
         }
       },
-      saveLandlordDraft: async (payload) => {
+      saveLandlordDraft: async (payload, duplicateAction) => {
         const state = get();
         if (!state.authToken) return null;
         const draft: LandlordDraft = {
           ...state.landlordDraft,
           ...payload,
         };
-        const requestPayload = buildLandlordPayload(draft);
+        const requestPayload = buildLandlordPayload(draft, duplicateAction);
         if (!Object.keys(requestPayload).length) {
           return draft;
         }
@@ -1857,9 +1911,9 @@ export const useAppStore = create<AppState>()(
 
         return draft;
       },
-      publishLandlordDraft: async () => {
+      publishLandlordDraft: async (duplicateAction) => {
         const state = get();
-        return state.saveLandlordDraft({ status: "Listed" });
+        return state.saveLandlordDraft({ status: "Listed" }, duplicateAction);
       },
       uploadLandlordImage: async (file) => {
         const state = get();

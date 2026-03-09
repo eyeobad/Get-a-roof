@@ -25,6 +25,8 @@ const options = [
 
 function TenantOnboardingContent() {
   const [selectedValues, setSelectedValues] = useState<string[]>(["SharedApartment"]);
+  const [preferredState, setPreferredState] = useState("");
+  const [commuteRadius, setCommuteRadius] = useState(25);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const authToken = useAppStore((state) => state.authToken);
@@ -42,6 +44,34 @@ function TenantOnboardingContent() {
         const lookingFor = (
           user?.preferences as { tenant?: { lookingFor?: string[] } } | undefined
         )?.tenant?.lookingFor;
+        const tenantPrefs = (
+          user?.preferences as
+            | {
+                tenant?: {
+                  preferredState?: string;
+                  preferredDistance?: number;
+                  maxCommuteRadius?: number;
+                };
+              }
+            | undefined
+        )?.tenant;
+
+        if (tenantPrefs?.preferredState) {
+          setPreferredState(String(tenantPrefs.preferredState));
+        }
+
+        const preferredDistance =
+          typeof tenantPrefs?.preferredDistance === "number" &&
+          Number.isFinite(tenantPrefs.preferredDistance)
+            ? tenantPrefs.preferredDistance
+            : typeof tenantPrefs?.maxCommuteRadius === "number" &&
+                Number.isFinite(tenantPrefs.maxCommuteRadius)
+              ? tenantPrefs.maxCommuteRadius
+              : undefined;
+        if (typeof preferredDistance === "number") {
+          setCommuteRadius(Math.round(preferredDistance));
+        }
+
         if (Array.isArray(lookingFor)) {
           const allowedValues = new Set(options.map((option) => option.value));
           const nextSelections = lookingFor.filter((item) => allowedValues.has(item));
@@ -69,7 +99,14 @@ function TenantOnboardingContent() {
 
   const handleNext = async () => {
     const lookingFor = selectedValues;
-    await updatePreferences({ tenant: { lookingFor } });
+    await updatePreferences({
+      tenant: {
+        lookingFor,
+        preferredState: preferredState || undefined,
+        preferredDistance: commuteRadius,
+        maxCommuteRadius: commuteRadius,
+      },
+    });
     if (returnTo === "review") {
       router.push("/tenant-onboarding/review");
       return;
@@ -165,6 +202,50 @@ function TenantOnboardingContent() {
               );
             })}
           </div>
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-2xl text-primary">location_on</span>
+              <h2 className="text-lg font-semibold text-text-main-light dark:text-text-main-dark">
+                Preferred State
+              </h2>
+            </div>
+            <select
+              value={preferredState}
+              onChange={(event) => setPreferredState(event.target.value)}
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-base font-medium"
+            >
+              <option value="">Any state</option>
+              <option value="Lagos">Lagos</option>
+              <option value="Abuja">Abuja</option>
+            </select>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-icons-round text-2xl text-primary">tune</span>
+                <h2 className="text-lg font-semibold text-text-main-light dark:text-text-main-dark">
+                  Max Distance
+                </h2>
+              </div>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-primary">
+                {commuteRadius} km
+              </span>
+            </div>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              value={commuteRadius}
+              onChange={(event) => setCommuteRadius(Number(event.target.value))}
+              className="w-full accent-primary"
+            />
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>5 km</span>
+              <span>100 km</span>
+            </div>
+          </section>
         </main>
 
         <div className="mt-4 pt-4 pb-2">
