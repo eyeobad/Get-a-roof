@@ -181,7 +181,6 @@ function MessagesContent() {
   const loadConversations = useAppStore((state) => state.loadConversations);
   const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
   const sendMessageToApi = useAppStore((state) => state.sendMessage);
-  const markMatchRead = useAppStore((state) => state.markMatchRead);
   const setSelectedThreadId = useAppStore((state) => state.setSelectedThreadId);
   const userId = useAppStore((state) => state.userId);
   const authToken = useAppStore((state) => state.authToken);
@@ -254,7 +253,6 @@ function MessagesContent() {
       setMobileView("chat");
     }
     void loadMessagesForMatch(id);
-    void markMatchRead(id);
   };
 
   const sendMessage = async () => {
@@ -418,13 +416,11 @@ function MessagesContent() {
     if (activeConversationId && !messagesByMatch[activeConversationId]) {
       setSelectedThreadId(activeConversationId);
       void loadMessagesForMatch(activeConversationId);
-      void markMatchRead(activeConversationId);
     }
   }, [
     activeConversationId,
     messagesByMatch,
     loadMessagesForMatch,
-    markMatchRead,
     setSelectedThreadId,
   ]);
 

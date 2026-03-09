@@ -19,6 +19,7 @@ const websockets_2 = require("@nestjs/websockets");
 const chat_service_1 = require("./chat.service");
 const create_chat_dto_1 = require("./dto/create-chat.dto");
 const jwt_1 = require("@nestjs/jwt");
+const workspace_service_1 = require("../common/services/workspace.service");
 const defaultCorsOrigins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -38,9 +39,10 @@ const socketCorsOrigins = (() => {
     return origins;
 })();
 let ChatGateway = class ChatGateway {
-    constructor(chatService, jwtService) {
+    constructor(chatService, jwtService, workspaceService) {
         this.chatService = chatService;
         this.jwtService = jwtService;
+        this.workspaceService = workspaceService;
     }
     handleConnection(client) {
         const token = this.extractToken(client);
@@ -107,16 +109,7 @@ let ChatGateway = class ChatGateway {
         if (!body?.matchId) {
             throw new websockets_2.WsException("matchId is required");
         }
-        try {
-            const participants = await this.chatService.getParticipantIds(body.matchId);
-            const isParticipant = senderId === participants.tenantId || senderId === participants.landlordId;
-            if (!isParticipant) {
-                throw new websockets_2.WsException("Access denied");
-            }
-        }
-        catch (error) {
-            throw new websockets_2.WsException(error instanceof Error ? error.message : "Unable to validate participant");
-        }
+        await this.assertParticipant(body.matchId, client);
         this.server.to(body.matchId).emit("typing", {
             matchId: body.matchId,
             senderId,
@@ -163,8 +156,11 @@ let ChatGateway = class ChatGateway {
         }
         try {
             const participants = await this.chatService.getParticipantIds(matchId);
-            const isParticipant = senderId === participants.tenantId || senderId === participants.landlordId;
-            if (!isParticipant) {
+            if (senderId === participants.tenantId || senderId === participants.landlordId) {
+                return;
+            }
+            const canManage = await this.workspaceService.canActorManageProperty(senderId, participants.property);
+            if (!canManage) {
                 throw new websockets_2.WsException("Access denied");
             }
         }
@@ -222,5 +218,6 @@ exports.ChatGateway = ChatGateway = __decorate([
         },
     }),
     __metadata("design:paramtypes", [chat_service_1.ChatService,
-        jwt_1.JwtService])
+        jwt_1.JwtService,
+        workspace_service_1.WorkspaceService])
 ], ChatGateway);

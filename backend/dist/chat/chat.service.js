@@ -478,7 +478,7 @@ let ChatService = class ChatService {
         if (!tenantId || !landlordId) {
             throw new common_1.NotFoundException("Property not found");
         }
-        return { tenantId, landlordId };
+        return { tenantId, landlordId, property };
     }
     async assertChatParticipant(matchId, senderId, receiverId) {
         const { match, property } = await this.assertMatchMembership(matchId, senderId);

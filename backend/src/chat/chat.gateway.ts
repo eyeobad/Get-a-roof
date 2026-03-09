@@ -12,6 +12,7 @@ import { WsException } from "@nestjs/websockets";
 import { ChatService } from "./chat.service";
 import { CreateChatDto } from "./dto/create-chat.dto";
 import { JwtService } from "@nestjs/jwt";
+import { WorkspaceService } from "../common/services/workspace.service";
 
 const defaultCorsOrigins = [
   "http://localhost:3000",
@@ -42,7 +43,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly chatService: ChatService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly workspaceService: WorkspaceService
   ) {}
 
   handleConnection(client: Socket) {
@@ -131,18 +133,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException("matchId is required");
     }
 
-    try {
-      const participants = await this.chatService.getParticipantIds(body.matchId);
-      const isParticipant =
-        senderId === participants.tenantId || senderId === participants.landlordId;
-      if (!isParticipant) {
-        throw new WsException("Access denied");
-      }
-    } catch (error) {
-      throw new WsException(
-        error instanceof Error ? error.message : "Unable to validate participant"
-      );
-    }
+    await this.assertParticipant(body.matchId, client);
 
     this.server.to(body.matchId).emit("typing", {
       matchId: body.matchId,
@@ -198,9 +189,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     try {
       const participants = await this.chatService.getParticipantIds(matchId);
-      const isParticipant =
-        senderId === participants.tenantId || senderId === participants.landlordId;
-      if (!isParticipant) {
+      if (senderId === participants.tenantId || senderId === participants.landlordId) {
+        return;
+      }
+
+      const canManage = await this.workspaceService.canActorManageProperty(
+        senderId,
+        participants.property
+      );
+      if (!canManage) {
         throw new WsException("Access denied");
       }
     } catch (error) {

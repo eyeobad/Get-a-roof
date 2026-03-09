@@ -538,7 +538,7 @@ export class ChatService {
     if (!tenantId || !landlordId) {
       throw new NotFoundException("Property not found");
     }
-    return { tenantId, landlordId };
+    return { tenantId, landlordId, property };
   }
 
   private async assertChatParticipant(

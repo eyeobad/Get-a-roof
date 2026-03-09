@@ -133,12 +133,38 @@ export default function ExploreCards() {
 
   const controls = useAnimation();
 
+  const renderableQueue = useMemo(
+    () => exploreQueue.filter((id) => Boolean(listingsById[id])),
+    [exploreQueue, listingsById]
+  );
+
   const visibleCards = useMemo(() => {
-    return exploreQueue
+    return renderableQueue
       .slice(0, 3)
       .map((id) => listingsById[id])
       .filter((listing): listing is Listing => Boolean(listing));
-  }, [exploreQueue, listingsById]);
+  }, [renderableQueue, listingsById]);
+
+  useEffect(() => {
+    if (renderableQueue.length === exploreQueue.length) return;
+
+    useAppStore.setState((state) => {
+      const nextQueue = state.exploreQueue.filter((id) => Boolean(state.listingsById[id]));
+      if (nextQueue.length === state.exploreQueue.length) {
+        return state;
+      }
+
+      const nextSelected =
+        state.selectedListingId && nextQueue.includes(state.selectedListingId)
+          ? state.selectedListingId
+          : nextQueue[0] ?? null;
+
+      return {
+        exploreQueue: nextQueue,
+        selectedListingId: nextSelected,
+      };
+    });
+  }, [exploreQueue.length, renderableQueue.length]);
 
   const resetDeck = () => {
     const next = {
@@ -255,6 +281,10 @@ export default function ExploreCards() {
             toggles: filters.toggles,
           });
           setIsLoadingListings(false);
+          const nextQueueLength = useAppStore.getState().exploreQueue.length;
+          if (nextQueueLength === 0) {
+            setRecycleAttempted(true);
+          }
         }
       })
       .catch(() => {
@@ -472,7 +502,7 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {exploreQueue.length === 0 && isLoadingListings && (
+        {visibleCards.length === 0 && isLoadingListings && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">hourglass_empty</span>
             <h3 className="text-xl font-bold text-gray-700">Loading listings</h3>
@@ -480,7 +510,7 @@ export default function ExploreCards() {
           </div>
         )}
 
-        {exploreQueue.length === 0 && recycleAttempted && !isLoadingListings && (
+        {visibleCards.length === 0 && recycleAttempted && !isLoadingListings && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>
