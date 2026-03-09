@@ -362,7 +362,10 @@ type AppState = {
   resetExploreQueue: () => void;
   ensureMatchForListing: (listingId: string) => Promise<void>;
   ensureThreadForListing: (listingId: string) => Promise<string | null>;
-  loadExploreListings: (filters?: ExploreFilters) => Promise<void>;
+  loadExploreListings: (
+    filters?: ExploreFilters,
+    options?: { append?: boolean }
+  ) => Promise<void>;
   loadRecycledIntoExplore: () => Promise<boolean>;
   loadMapMatches: (filters?: ExploreFilters) => Promise<void>;
   loadMatches: () => Promise<void>;
@@ -1346,7 +1349,7 @@ export const useAppStore = create<AppState>()(
 
         return response.matchId;
       },
-      loadExploreListings: async (filters) => {
+      loadExploreListings: async (filters, options) => {
         const state = get();
         if (!state.authToken) {
           set({ listingsById: listingMap, exploreQueue: initialQueue });
@@ -1396,11 +1399,31 @@ export const useAppStore = create<AppState>()(
         }, {});
 
         const queue = listings.map((listing) => listing.id);
+        const append = Boolean(options?.append);
 
-        set({
-          listingsById: nextMap,
-          exploreQueue: queue,
-          selectedListingId: queue[0] ?? null,
+        set((prev) => {
+          if (!append) {
+            return {
+              listingsById: nextMap,
+              exploreQueue: queue,
+              selectedListingId: queue[0] ?? null,
+            };
+          }
+
+          const existingQueue = prev.exploreQueue;
+          const existingIds = new Set(existingQueue);
+          const appendedIds = queue.filter((id) => !existingIds.has(id));
+          const nextQueue = [...existingQueue, ...appendedIds];
+          const nextSelected =
+            prev.selectedListingId && nextQueue.includes(prev.selectedListingId)
+              ? prev.selectedListingId
+              : nextQueue[0] ?? null;
+
+          return {
+            listingsById: { ...prev.listingsById, ...nextMap },
+            exploreQueue: nextQueue,
+            selectedListingId: nextSelected,
+          };
         });
       },
       loadRecycledIntoExplore: async () => {

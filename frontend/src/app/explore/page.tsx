@@ -43,9 +43,21 @@ type ExploreFilterState = {
   toggles: Record<string, boolean>;
 };
 
-const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
 const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
+const PREFETCH_THRESHOLD = 6;
+const PRELOAD_LOOKAHEAD = 5;
+
+const preloadImage = async (src: string) => {
+  if (!src || typeof window === "undefined") return;
+  const img = new window.Image();
+  img.src = src;
+  try {
+    await img.decode();
+  } catch {
+    // Ignore decode errors; browser cache warm-up is still useful.
+  }
+};
 
 export default function ExploreCards() {
   const router = useRouter();
@@ -130,8 +142,28 @@ export default function ExploreCards() {
   const [recycleAttempted, setRecycleAttempted] = useState(false);
   const isRecyclingDeckRef = useRef(false);
   const hasLoopedFromMemoryRef = useRef(false);
+  const swipeLockRef = useRef(false);
+  const prefetchInFlightRef = useRef(false);
+  const preloadedImageUrlsRef = useRef(new Set<string>());
 
   const controls = useAnimation();
+
+  const activeExploreFilters = useMemo(
+    () => ({
+      budget: filters.budget,
+      distance: filters.distance,
+      propertyType: filters.propertyType,
+      listingIntent: filters.listingIntent,
+      toggles: filters.toggles,
+    }),
+    [
+      filters.budget,
+      filters.distance,
+      filters.propertyType,
+      filters.listingIntent,
+      filters.toggles,
+    ]
+  );
 
   const renderableQueue = useMemo(
     () => exploreQueue.filter((id) => Boolean(listingsById[id])),
@@ -175,6 +207,7 @@ export default function ExploreCards() {
     setFilters(next);
     setCardImageIndexes({});
     setRecycleAttempted(false);
+    swipeLockRef.current = false;
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
@@ -213,13 +246,7 @@ export default function ExploreCards() {
   useEffect(() => {
     let active = true;
     setIsLoadingListings(true);
-    void loadExploreListings({
-      budget: filters.budget,
-      distance: filters.distance,
-      propertyType: filters.propertyType,
-      listingIntent: filters.listingIntent,
-      toggles: filters.toggles,
-    })
+    void loadExploreListings(activeExploreFilters)
       .catch(() => {
         if (active) setRecycleAttempted(true);
       })
@@ -231,12 +258,48 @@ export default function ExploreCards() {
     };
   }, [
     loadExploreListings,
-    filters.budget,
-    filters.distance,
-    filters.propertyType,
-    filters.listingIntent,
-    filters.toggles,
+    activeExploreFilters,
   ]);
+
+  useEffect(() => {
+    if (
+      renderableQueue.length === 0 ||
+      renderableQueue.length > PREFETCH_THRESHOLD ||
+      isLoadingListings ||
+      recycleAttempted ||
+      isRecyclingDeckRef.current ||
+      prefetchInFlightRef.current
+    ) {
+      return;
+    }
+
+    prefetchInFlightRef.current = true;
+    void loadExploreListings(activeExploreFilters, { append: true }).finally(() => {
+      prefetchInFlightRef.current = false;
+    });
+  }, [
+    renderableQueue.length,
+    isLoadingListings,
+    recycleAttempted,
+    loadExploreListings,
+    activeExploreFilters,
+  ]);
+
+  useEffect(() => {
+    const upcomingCards = renderableQueue
+      .slice(3, 3 + PRELOAD_LOOKAHEAD)
+      .map((id) => listingsById[id])
+      .filter((listing): listing is Listing => Boolean(listing));
+
+    upcomingCards.forEach((card) => {
+      const candidates = (card.images?.length ? card.images : [card.image]).filter(Boolean);
+      candidates.forEach((src) => {
+        if (!src || preloadedImageUrlsRef.current.has(src)) return;
+        preloadedImageUrlsRef.current.add(src);
+        void preloadImage(src);
+      });
+    });
+  }, [renderableQueue, listingsById]);
 
   useEffect(() => {
     if (exploreQueue.length > 0) {
@@ -314,32 +377,36 @@ export default function ExploreCards() {
   ]);
 
   const handleSwipe = async (direction: "left" | "right") => {
-    if (isSwipeAnimating || visibleCards.length === 0) return;
+    if (swipeLockRef.current || isSwipeAnimating || visibleCards.length === 0) return;
 
     const topListing = visibleCards[0];
     if (!topListing) return;
 
+    swipeLockRef.current = true;
     setIsSwipeAnimating(true);
 
-    await controls.start({
-      x: direction === "left" ? -420 : 420,
-      rotate: direction === "left" ? -18 : 18,
-      opacity: 0,
-      transition: { duration: 0.35 },
-    });
+    try {
+      await controls.start({
+        x: direction === "left" ? -420 : 420,
+        rotate: direction === "left" ? -18 : 18,
+        opacity: 0,
+        transition: { duration: 0.35 },
+      });
 
-    if (direction === "right") {
-      likeListing(topListing.id);
-      setSelectedListingId(topListing.id);
-      router.push(`/property-details/${topListing.id}`);
-    } else {
-      passListing(topListing.id);
+      if (direction === "right") {
+        void likeListing(topListing.id);
+        setSelectedListingId(topListing.id);
+        router.push(`/property-details/${topListing.id}`);
+      } else {
+        void passListing(topListing.id);
+      }
+
+      advanceQueue();
+      controls.set({ x: 0, rotate: 0, opacity: 1 });
+    } finally {
+      swipeLockRef.current = false;
+      setIsSwipeAnimating(false);
     }
-
-    advanceQueue();
-
-    controls.set({ x: 0, rotate: 0, opacity: 1 });
-    setIsSwipeAnimating(false);
   };
 
   const resolveCardImages = (card: Listing) => {
@@ -357,7 +424,7 @@ export default function ExploreCards() {
     }));
   };
 
-  const cardBody = (card: Listing) => {
+  const cardBody = (card: Listing, isFront: boolean) => {
     const intentLabel = card.listingIntent === "Shortlet" ? "SHORTLET" : "FOR RENT";
     const images = resolveCardImages(card);
     const activeImageIndex =
@@ -375,6 +442,7 @@ export default function ExploreCards() {
               fill
               sizes="(max-width:768px) 90vw, 640px"
               className="object-cover"
+              priority={isFront}
             />
           </div>
 
@@ -495,7 +563,7 @@ export default function ExploreCards() {
                   controls={controls}
                   onSwipe={handleSwipe}
                 >
-                  {cardBody(card)}
+                  {cardBody(card, index === 0)}
                 </CardItem>
               ))}
             </AnimatePresence>
@@ -582,20 +650,21 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
 
   const handleDragEnd = async (_: unknown, info: PanInfo) => {
+    if (!isFront) return;
     const offset = info.offset.x;
     const velocity = info.velocity.x;
-    const power = swipePower(offset, velocity);
+    const directionalSwipe = offset * velocity;
 
     const distanceThreshold = 120;
-    const powerThreshold = 900;
+    const powerThreshold = 10_000;
 
-    if (offset > distanceThreshold || power > powerThreshold) {
+    if (offset > distanceThreshold || directionalSwipe > powerThreshold) {
       await onSwipe("right");
       x.set(0);
       return;
     }
 
-    if (offset < -distanceThreshold || power > powerThreshold) {
+    if (offset < -distanceThreshold || directionalSwipe < -powerThreshold) {
       await onSwipe("left");
       x.set(0);
       return;
@@ -607,14 +676,14 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
 
   return (
     <motion.div
-      className="absolute inset-0 flex items-center justify-center px-2"
+      className="absolute inset-0 flex items-center justify-center px-2 transform-gpu"
       style={{
         zIndex: isFront ? 50 : 40 - index,
         x,
         rotate,
         scale: isFront ? 1 : 1 - index * 0.04,
         y: isFront ? 0 : index * 24,
-        willChange: "transform",
+        willChange: isFront ? "transform" : "auto",
       }}
       animate={isFront ? controls : undefined}
       drag={isFront ? "x" : false}
