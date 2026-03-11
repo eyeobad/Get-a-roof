@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import {
@@ -142,6 +142,7 @@ export default function ExploreCards() {
   const [recycleAttempted, setRecycleAttempted] = useState(false);
   const isRecyclingDeckRef = useRef(false);
   const hasLoopedFromMemoryRef = useRef(false);
+  const hasRecycledOnceRef = useRef(false);
   const swipeLockRef = useRef(false);
   const prefetchInFlightRef = useRef(false);
   const preloadedImageUrlsRef = useRef(new Set<string>());
@@ -221,6 +222,7 @@ export default function ExploreCards() {
     setFilters(next);
     setCardImageIndexes({});
     setRecycleAttempted(false);
+    hasRecycledOnceRef.current = false;
     swipeLockRef.current = false;
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
@@ -235,6 +237,7 @@ export default function ExploreCards() {
     };
     setFilters(nextFilters);
     setRecycleAttempted(false);
+    hasRecycledOnceRef.current = false;
     resetExploreQueue();
     void loadExploreListings(nextFilters);
     setFiltersOpen(false);
@@ -248,6 +251,7 @@ export default function ExploreCards() {
     setDraftFilters(next);
     setFilters(next);
     setRecycleAttempted(false);
+    hasRecycledOnceRef.current = false;
     resetExploreQueue();
     void loadExploreListings(next);
     setFiltersOpen(false);
@@ -333,6 +337,12 @@ export default function ExploreCards() {
     }
     if (isRecyclingDeckRef.current || recycleAttempted) return;
 
+    // Already recycled once — don't loop the same passed listings again
+    if (hasRecycledOnceRef.current) {
+      setRecycleAttempted(true);
+      return;
+    }
+
     let active = true;
     setIsLoadingListings(true);
     isRecyclingDeckRef.current = true;
@@ -341,6 +351,7 @@ export default function ExploreCards() {
       .then(async (restored) => {
         if (!active) return;
         if (restored) {
+          hasRecycledOnceRef.current = true;
           await loadExploreListings(activeExploreFilters, { append: true });
           if (!active) return;
           setIsLoadingListings(false);
@@ -584,10 +595,23 @@ export default function ExploreCards() {
         </div>
 
         {cardsToRender.length === 0 && isLoadingListings && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
-            <span className="material-symbols-outlined text-6xl text-gray-300">hourglass_empty</span>
-            <h3 className="text-xl font-bold text-gray-700">Loading listings</h3>
-            <p className="text-gray-500">Please wait...</p>
+          <div className="absolute inset-0 px-2">
+            <div className="h-full w-full rounded-[2rem] border border-slate-100 bg-white shadow-card overflow-hidden">
+              <div className="app-skeleton h-[58%] w-full" />
+              <div className="bg-primary px-4 py-4 md:px-6 md:py-5 h-[42%]">
+                <div className="space-y-3">
+                  <div className="app-skeleton h-8 w-40 rounded-full bg-white/20" />
+                  <div className="app-skeleton h-3 w-28 rounded-full bg-white/20" />
+                  <div className="grid grid-cols-3 gap-2 pt-2">
+                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
+                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
+                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
+                  </div>
+                  <div className="app-skeleton h-4 w-3/4 rounded-full bg-white/20" />
+                  <div className="app-skeleton h-4 w-1/2 rounded-full bg-white/20" />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
