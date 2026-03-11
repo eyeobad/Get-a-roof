@@ -62,6 +62,8 @@ const exploreProjection = {
     description: 1,
     status: 1,
 };
+const buildPublicLocationLabel = (property) => [property.neighborhood, property.address?.city].filter(Boolean).join(", ") ||
+    [property.address?.city, property.address?.state].filter(Boolean).join(", ");
 let PropertiesService = class PropertiesService {
     constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage, workspaceService) {
         this.propertyModel = propertyModel;
@@ -284,7 +286,7 @@ let PropertiesService = class PropertiesService {
             .lean()
             .exec();
         const validProperties = await this.excludeOrphanedProperties(properties);
-        const result = await this.applyScoringAndFilters(validProperties, options);
+        const result = (await this.applyScoringAndFilters(validProperties, options)).map((property) => this.toPublicExploreProperty(property));
         exploreQueryCache.set(cacheKey, result);
         return result;
     }
@@ -323,24 +325,10 @@ let PropertiesService = class PropertiesService {
         const results = await this.applyScoringAndFilters(validProperties, options);
         const routeAccessMap = await this.getTenantRouteAccessMap(options?.userId, results.map((property) => property._id));
         const mapped = results.map((property) => ({
+            ...this.toPublicExploreProperty(property),
             ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
                 routeAccessStatus: enums_1.RouteAccessStatus.None,
             }),
-            _id: property._id,
-            address: property.address,
-            monthlyPrice: property.monthlyPrice,
-            propertyType: property.propertyType,
-            listingIntent: property.listingIntent,
-            bedCount: property.bedCount,
-            bathCount: property.bathCount,
-            sqFt: property.sqFt,
-            neighborhood: property.neighborhood,
-            amenities: property.amenities,
-            images: property.images,
-            matchScore: property.matchScore,
-            preferencesMatchPercentage: property.preferencesMatchPercentage,
-            apartmentPreferenceMatchPercentage: property.apartmentPreferenceMatchPercentage,
-            distanceKm: property.distanceKm,
         }));
         exploreQueryCache.set(cacheKey, mapped);
         return mapped;
@@ -619,6 +607,22 @@ let PropertiesService = class PropertiesService {
             }
         });
         return keep;
+    }
+    toPublicExploreProperty(property) {
+        const safeAddress = property.address
+            ? {
+                ...property.address,
+                street: undefined,
+            }
+            : property.address;
+        return {
+            ...property,
+            address: safeAddress,
+            publicLocationLabel: buildPublicLocationLabel({
+                neighborhood: property.neighborhood,
+                address: property.address,
+            }),
+        };
     }
 };
 exports.PropertiesService = PropertiesService;

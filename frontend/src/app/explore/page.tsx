@@ -24,6 +24,7 @@ import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import type { Listing } from "@/lib/listings";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
+import { getCitiesForState, NIGERIA_STATES } from "@/lib/nigeriaLocations";
 
 type FilterModalProps = {
   isOpen: boolean;
@@ -38,6 +39,8 @@ type FilterModalProps = {
 type ExploreFilterState = {
   budget: number;
   distance: number;
+  state: string;
+  city: string;
   propertyType: string;
   listingIntent: "" | "Rent" | "Shortlet";
   toggles: Record<string, boolean>;
@@ -78,6 +81,7 @@ export default function ExploreCards() {
     const tenantPrefs = (useAppStore.getState().user?.preferences?.tenant ?? {}) as {
       preferredDistance?: number;
       maxCommuteRadius?: number;
+      preferredState?: string;
     };
     if (
       typeof tenantPrefs.preferredDistance === "number" &&
@@ -98,6 +102,11 @@ export default function ExploreCards() {
     () => ({
       budget: BASE_BUDGET,
       distance: initialPreferredDistance,
+      state:
+        (((useAppStore.getState().user?.preferences?.tenant ?? {}) as {
+          preferredState?: string;
+        }).preferredState || "").trim(),
+      city: "",
       propertyType: "",
       listingIntent: "",
       toggles: toggleOptions.reduce<Record<string, boolean>>(
@@ -116,6 +125,8 @@ export default function ExploreCards() {
     if (
       filters.budget !== defaultFilters.budget ||
       filters.distance !== defaultFilters.distance ||
+      filters.state !== defaultFilters.state ||
+      filters.city !== defaultFilters.city ||
       filters.propertyType !== defaultFilters.propertyType ||
       filters.listingIntent !== defaultFilters.listingIntent
     ) {
@@ -150,10 +161,17 @@ export default function ExploreCards() {
 
   const controls = useAnimation();
 
+  const getRenderableCount = () => {
+    const state = useAppStore.getState();
+    return state.exploreQueue.filter((id) => Boolean(state.listingsById[id])).length;
+  };
+
   const activeExploreFilters = useMemo(
     () => ({
       budget: filters.budget,
       distance: filters.distance,
+      state: filters.state,
+      city: filters.city,
       propertyType: filters.propertyType,
       listingIntent: filters.listingIntent,
       toggles: filters.toggles,
@@ -161,6 +179,8 @@ export default function ExploreCards() {
     [
       filters.budget,
       filters.distance,
+      filters.state,
+      filters.city,
       filters.propertyType,
       filters.listingIntent,
       filters.toggles,
@@ -333,6 +353,7 @@ export default function ExploreCards() {
   useEffect(() => {
     if (renderableQueue.length > 0) {
       hasLoopedFromMemoryRef.current = false;
+      setRecycleAttempted(false);
       return;
     }
     if (isRecyclingDeckRef.current || recycleAttempted) return;
@@ -355,6 +376,9 @@ export default function ExploreCards() {
           await loadExploreListings(activeExploreFilters, { append: true });
           if (!active) return;
           setIsLoadingListings(false);
+          if (getRenderableCount() === 0) {
+            setRecycleAttempted(true);
+          }
           return;
         }
 
@@ -363,16 +387,17 @@ export default function ExploreCards() {
           if (cachedIds.length > 0 && !hasLoopedFromMemoryRef.current) {
             hasLoopedFromMemoryRef.current = true;
             resetExploreQueue();
+            setIsLoadingListings(false);
+            if (getRenderableCount() === 0) {
+              setRecycleAttempted(true);
+            }
             return;
           }
           setIsLoadingListings(true);
           await loadExploreListings(activeExploreFilters);
           if (!active) return;
           setIsLoadingListings(false);
-          const nextRenderableQueueLength = useAppStore
-            .getState()
-            .exploreQueue.filter((id) => Boolean(useAppStore.getState().listingsById[id]))
-            .length;
+          const nextRenderableQueueLength = getRenderableCount();
           if (nextRenderableQueueLength === 0) {
             setRecycleAttempted(true);
           }
@@ -420,7 +445,6 @@ export default function ExploreCards() {
       if (direction === "right") {
         void likeListing(topListing.id);
         setSelectedListingId(topListing.id);
-        router.push(`/property-details/${topListing.id}`);
       } else {
         void passListing(topListing.id);
       }
@@ -525,7 +549,9 @@ export default function ExploreCards() {
             </span>
 
             <div className="flex flex-col gap-1">
-              <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">{card.address}</p>
+              <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">
+                {card.publicLocationLabel || card.neighborhood || card.address}
+              </p>
               <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
                 <span className="material-symbols-outlined text-sm">villa</span>
                 <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
@@ -586,6 +612,10 @@ export default function ExploreCards() {
                   isFront={index === 0}
                   controls={controls}
                   onSwipe={handleSwipe}
+                  onOpen={() => {
+                    setSelectedListingId(card.id);
+                    router.push(`/property-details/${card.id}`);
+                  }}
                 >
                   {cardBody(card, index === 0)}
                 </CardItem>
@@ -595,23 +625,11 @@ export default function ExploreCards() {
         </div>
 
         {cardsToRender.length === 0 && isLoadingListings && (
-          <div className="absolute inset-0 px-2">
-            <div className="h-full w-full rounded-[2rem] border border-slate-100 bg-white shadow-card overflow-hidden">
-              <div className="app-skeleton h-[58%] w-full" />
-              <div className="bg-primary px-4 py-4 md:px-6 md:py-5 h-[42%]">
-                <div className="space-y-3">
-                  <div className="app-skeleton h-8 w-40 rounded-full bg-white/20" />
-                  <div className="app-skeleton h-3 w-28 rounded-full bg-white/20" />
-                  <div className="grid grid-cols-3 gap-2 pt-2">
-                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
-                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
-                    <div className="app-skeleton h-16 rounded-2xl bg-white/20" />
-                  </div>
-                  <div className="app-skeleton h-4 w-3/4 rounded-full bg-white/20" />
-                  <div className="app-skeleton h-4 w-1/2 rounded-full bg-white/20" />
-                </div>
-              </div>
-            </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-primary" />
+            <p className="text-base font-semibold text-slate-600">
+              Loading listings...
+            </p>
           </div>
         )}
 
@@ -634,8 +652,8 @@ export default function ExploreCards() {
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
-          disabled={isSwipeAnimating || cardsToRender.length === 0}
-          className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isSwipeAnimating || isLoadingListings || cardsToRender.length === 0}
+          className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-200"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
           <span className="text-lg font-bold tracking-wide">PASS</span>
@@ -643,8 +661,8 @@ export default function ExploreCards() {
 
         <button
           onClick={() => handleSwipe("right")}
-          disabled={isSwipeAnimating || cardsToRender.length === 0}
-          className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-70"
+          disabled={isSwipeAnimating || isLoadingListings || cardsToRender.length === 0}
+          className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
         </button>
@@ -675,12 +693,14 @@ type CardItemProps = {
   isFront: boolean;
   controls: ReturnType<typeof useAnimation>;
   onSwipe: (direction: "left" | "right") => Promise<void>;
+  onOpen: () => void;
   children: ReactNode;
 };
 
-function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps) {
+function CardItem({ index, isFront, controls, onSwipe, onOpen, children }: CardItemProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
+  const suppressClickRef = useRef(false);
 
   // NEW: premium swipe overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
@@ -691,6 +711,7 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
     const offset = info.offset.x;
     const velocity = info.velocity.x;
     const directionalSwipe = offset * Math.abs(velocity);
+    suppressClickRef.current = Math.abs(offset) > 8;
 
     const distanceThreshold = 120;
     const powerThreshold = 10_000;
@@ -709,6 +730,9 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
 
     // snap back
     x.set(0);
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
   };
 
   return (
@@ -732,7 +756,13 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
       transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1.05 }}
       exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.2 } }}
     >
-      <div className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y">
+      <div
+        className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y"
+        onClick={() => {
+          if (!isFront || suppressClickRef.current) return;
+          onOpen();
+        }}
+      >
         {/* NEW: Like / Nope overlays */}
         {isFront && (
           <>
@@ -765,6 +795,7 @@ function FilterModal({
   toggleOptions,
 }: FilterModalProps) {
   if (!isOpen) return null;
+  const cityOptions = filters.state ? getCitiesForState(filters.state) : [];
 
   return (
     <div className="fixed inset-0 z-70 flex">
@@ -784,6 +815,60 @@ function FilterModal({
           </div>
 
           <div className="space-y-6">
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-gray-900 block">State</label>
+              <div className="relative">
+                <select
+                  value={filters.state}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      state: event.target.value,
+                      city: "",
+                    }))
+                  }
+                  className="w-full py-3.5 pl-4 pr-10 text-sm font-medium bg-gray-50 rounded-xl text-gray-900 focus:ring-2 focus:ring-active-blue focus:border-active-blue appearance-none transition-shadow"
+                >
+                  <option value="">All states</option>
+                  {NIGERIA_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="material-symbols-outlined text-gray-500">expand_more</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-gray-900 block">City</label>
+              <div className="relative">
+                <select
+                  value={filters.city}
+                  onChange={(event) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      city: event.target.value,
+                    }))
+                  }
+                  disabled={!filters.state}
+                  className="w-full py-3.5 pl-4 pr-10 text-sm font-medium bg-gray-50 rounded-xl text-gray-900 focus:ring-2 focus:ring-active-blue focus:border-active-blue appearance-none transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="">{filters.state ? "All cities" : "Select a state first"}</option>
+                  {cityOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="material-symbols-outlined text-gray-500">expand_more</span>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-3">
               <div className="flex justify-between items-baseline">
                 <label className="text-sm font-bold text-gray-900">Budget</label>

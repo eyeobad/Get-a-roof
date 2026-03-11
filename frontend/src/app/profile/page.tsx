@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastError } from "@/hooks/useToastError";
+import { NIGERIA_STATES } from "@/lib/nigeriaLocations";
 
 // --- Types ---
 type Option = { label: string };
@@ -884,8 +885,11 @@ export default function ProfilePage() {
                       className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     >
                       <option value="">Any state</option>
-                      <option value="Lagos">Lagos</option>
-                      <option value="Abuja">Abuja</option>
+                      {NIGERIA_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

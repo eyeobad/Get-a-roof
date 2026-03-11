@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import { NIGERIA_STATES } from "@/lib/nigeriaLocations";
 
 const options = [
   {
@@ -216,8 +217,11 @@ function TenantOnboardingContent() {
               className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-base font-medium"
             >
               <option value="">Any state</option>
-              <option value="Lagos">Lagos</option>
-              <option value="Abuja">Abuja</option>
+              {NIGERIA_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
             </select>
           </section>
 

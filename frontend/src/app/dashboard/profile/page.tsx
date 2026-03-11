@@ -52,17 +52,6 @@ export default function DashboardProfilePage() {
   const uploadProfilePhoto = useAppStore((state) => state.uploadProfilePhoto);
   const deleteAccount = useAppStore((state) => state.deleteAccount);
   const clearAuth = useAppStore((state) => state.clearAuth);
-  const landlordProperties = useAppStore((state) => state.landlordProperties);
-  const landlordPropertiesWithMatches = useAppStore(
-    (state) => state.landlordPropertiesWithMatches
-  );
-  const conversations = useAppStore((state) => state.conversations);
-  const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
-  const loadLandlordPropertiesWithMatches = useAppStore(
-    (state) => state.loadLandlordPropertiesWithMatches
-  );
-  const loadConversations = useAppStore((state) => state.loadConversations);
-
   // --- Local State ---
   const [isLoading, setIsLoading] = useState(true);
   
@@ -107,19 +96,6 @@ export default function DashboardProfilePage() {
   }, [fetchUserProfile, authToken, userId]);
 
   useEffect(() => {
-    if (!authToken || !userId) return;
-    void loadLandlordProperties();
-    void loadLandlordPropertiesWithMatches({ sort: "newDesc" });
-    void loadConversations();
-  }, [
-    authToken,
-    userId,
-    loadLandlordProperties,
-    loadLandlordPropertiesWithMatches,
-    loadConversations,
-  ]);
-
-  useEffect(() => {
     if (isPhotoModalOpen && user) {
       setPhotoDraft(user.photoUrl ?? "");
       setPhotoFile(null);
@@ -135,60 +111,12 @@ export default function DashboardProfilePage() {
     ? `${String(roleValue).charAt(0).toUpperCase()}${String(roleValue).slice(1).toLowerCase()}`
     : "Landlord";
   const photoUrl = user?.photoUrl || "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P";
-  
-  const listingsCount = landlordProperties.length || user?.listingsCount || 0;
-  const matchesCount =
-    landlordPropertiesWithMatches.reduce(
-      (sum, property) => sum + (property.matchCount ?? property.matches ?? 0),
-      0
-    ) || user?.matchesCount || 0;
-  const unreadMessages =
-    conversations.reduce((sum, conversation) => sum + (conversation.unreadCount ?? 0), 0) ||
-    user?.unreadMessages ||
-    0;
-
-  const cards = useMemo(
-    () => [
-      {
-        icon: "domain",
-        label: "My Listings",
-        value: listingsCount,
-        href: "/dashboard/properties",
-      },
-      {
-        icon: "handshake",
-        label: "Total Matches",
-        value: matchesCount,
-        href: "/dashboard/matches",
-      },
-      {
-        icon: "chat_bubble",
-        label: "Unread Messages",
-        value: unreadMessages,
-        hasBadge: unreadMessages > 0,
-        href: "/dashboard/messages",
-      },
-    ],
-    [listingsCount, matchesCount, unreadMessages]
-  );
 
   const sections = useMemo(() => [
     { 
         icon: "person", 
         title: "Personal Information", 
         description: [user?.email, user?.phoneNumber].filter(Boolean).join(", ") || "Email, Phone",
-    },
-    { 
-        icon: "info", 
-        title: "More About You", 
-        description: "Preferences, Annual Earnings",
-        action: () => router.push("/add-property-requirements"),
-    },
-    { 
-        icon: "home_work", 
-        title: "Apartment Preferences", 
-        description: "Property styles, size, rules",
-        action: () => router.push("/add-property-requirements"),
     },
     { 
         icon: "verified_user", 
@@ -297,10 +225,9 @@ export default function DashboardProfilePage() {
                 backgroundImage: `url('${photoUrl}')`,
               }}
             />
-             {/* Edit Photo Overlay (Visual only for now) */}
              <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
                 <span className="material-symbols-outlined text-white">edit</span>
-             </div>
+            </div>
 
             {isVerified && (
                 <div className="absolute bottom-0 right-0 bg-white rounded-full p-1 shadow-sm border border-slate-100">
@@ -330,46 +257,6 @@ export default function DashboardProfilePage() {
       {/* --- Main Content --- */}
       <main className="flex-1 space-y-8 px-6 pt-8 max-w-2xl mx-auto w-full">
         
-        {/* Stats Cards */}
-        <section>
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-slate-400 text-lg">dashboard</span>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Dashboard Overview</h2>
-            </div>
-          </div>
-          <div className="flex overflow-x-auto gap-4 pb-4 no-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 sm:overflow-visible">
-            {isLoading
-              ? Array.from({ length: 3 }).map((_, index) => (
-                  <div
-                    key={`skeleton-${index}`}
-                    className="min-w-[160px] rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-                  >
-                    <div className="h-6 w-6 rounded bg-slate-200 animate-pulse" />
-                    <div className="mt-4 h-8 w-14 rounded bg-slate-200 animate-pulse" />
-                    <div className="mt-2 h-4 w-24 rounded bg-slate-200 animate-pulse" />
-                  </div>
-                ))
-              : cards.map((card) => (
-                  <button
-                    key={card.label}
-                    type="button"
-                    onClick={() => router.push(card.href)}
-                    className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className="material-symbols-outlined text-primary text-3xl">{card.icon}</span>
-                      {card.hasBadge && <span className="h-3 w-3 rounded-full bg-red-500 ring-2 ring-white" />}
-                    </div>
-                    <div>
-                      <div className="text-3xl font-bold text-slate-900">{card.value}</div>
-                      <div className="text-sm font-medium text-slate-500">{card.label}</div>
-                    </div>
-                  </button>
-                ))}
-          </div>
-        </section>
-
         {/* Settings Links */}
         <section className="space-y-4">
           <div className="mb-2 flex items-center justify-between">
@@ -440,29 +327,37 @@ export default function DashboardProfilePage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-500">
-            Upload a new photo or paste an image URL. Files are stored securely.
+            Upload a new photo from your device. Files are stored securely.
           </p>
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-500">Photo URL</label>
-            <input
-              type="url"
-              value={photoDraft}
-              onChange={(e) => setPhotoDraft(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-              placeholder="https://example.com/avatar.jpg"
-            />
-          </div>
+          {photoDraft ? (
+            <div className="flex justify-center">
+              <div
+                className="h-28 w-28 rounded-full bg-slate-200 bg-cover bg-center border border-slate-200"
+                style={{ backgroundImage: `url('${photoDraft}')` }}
+              />
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">Upload from device</label>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex flex-col items-center gap-3">
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-700 hover:border-primary hover:text-primary transition-colors"
+                className="flex h-20 w-20 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-slate-600 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                aria-label="Upload photo from device"
               >
-                Choose file
+                <span className="material-symbols-outlined text-[32px]">
+                  upload
+                </span>
               </button>
-              {photoFile && <span className="text-sm text-slate-500">{photoFile.name}</span>}
+              <p className="text-xs font-medium text-slate-500 text-center">
+                Tap to choose a photo
+              </p>
+              {photoFile ? (
+                <span className="text-sm text-slate-500 text-center break-all">
+                  {photoFile.name}
+                </span>
+              ) : null}
             </div>
             <input
               ref={photoInputRef}

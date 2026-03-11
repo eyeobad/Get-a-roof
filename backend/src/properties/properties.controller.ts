@@ -263,6 +263,13 @@ export class PropertiesController {
       }
     }
 
+    if (query.city) {
+      const normalizedCity = query.city.trim();
+      if (normalizedCity) {
+        filters["address.city"] = new RegExp(`^${normalizedCity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+      }
+    }
+
     if (query.landlordId) {
       filters.landlordId = query.landlordId as any;
     }

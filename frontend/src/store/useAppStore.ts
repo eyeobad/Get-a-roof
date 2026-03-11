@@ -211,6 +211,7 @@ type ApiProperty = {
   newCount?: number;
   coverUrl?: string;
   area?: string;
+  publicLocationLabel?: string;
   routeAccessStatus?: RouteAccessStatus;
   routeOriginLat?: number;
   routeOriginLng?: number;
@@ -273,6 +274,8 @@ type ExploreFilters = {
   propertyType?: string;
   listingIntent?: "Rent" | "Shortlet" | "";
   preferredState?: string;
+  state?: string;
+  city?: string;
   toggles?: Record<string, boolean>;
   lat?: number;
   lng?: number;
@@ -662,6 +665,10 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
   ].filter(Boolean);
 
   const address = addressParts.join(", ");
+  const publicLocationLabel =
+    property?.publicLocationLabel ||
+    [property?.neighborhood, property?.address?.city].filter(Boolean).join(", ") ||
+    [property?.address?.city, property?.address?.state].filter(Boolean).join(", ");
 
   const bedrooms = property?.bedCount ?? 0;
   const bathrooms = property?.bathCount ?? 0;
@@ -686,6 +693,7 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
       { icon: "square_foot", label: `${formatNumber(sqftValue)} sqft` },
     ],
     address: address || property?.neighborhood || "",
+    publicLocationLabel: publicLocationLabel || address || property?.neighborhood || "",
     highlight: property?.propertyType ?? "Listing",
     listingIntent: property?.listingIntent ?? "Rent",
     tag: property?.status ?? "Listing",
@@ -1374,6 +1382,7 @@ export const useAppStore = create<AppState>()(
             ? tenantPrefs.maxCommuteRadius
             : undefined);
         const preferredState =
+          (typeof filters?.state === "string" && filters.state.trim()) ||
           (typeof filters?.preferredState === "string" && filters.preferredState.trim()) ||
           (typeof tenantPrefs?.preferredState === "string" && tenantPrefs.preferredState.trim()) ||
           undefined;
@@ -1383,6 +1392,7 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance ?? preferredDistance,
           state: preferredState,
+          city: filters?.city,
           propertyType: filters?.propertyType,
           listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,
@@ -1527,6 +1537,7 @@ export const useAppStore = create<AppState>()(
             ? tenantPrefs.maxCommuteRadius
             : undefined);
         const preferredState =
+          (typeof filters?.state === "string" && filters.state.trim()) ||
           (typeof filters?.preferredState === "string" && filters.preferredState.trim()) ||
           (typeof tenantPrefs?.preferredState === "string" && tenantPrefs.preferredState.trim()) ||
           undefined;
@@ -1536,6 +1547,7 @@ export const useAppStore = create<AppState>()(
           budget: monthlyBudget,
           distanceKm: filters?.distance ?? preferredDistance,
           state: preferredState,
+          city: filters?.city,
           propertyType: filters?.propertyType,
           listingIntent: filters?.listingIntent || undefined,
           lat: filters?.lat ?? state.userLocation?.lat,

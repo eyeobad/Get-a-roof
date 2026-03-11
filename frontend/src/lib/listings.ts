@@ -11,6 +11,7 @@ export type Listing = {
   period: string;
   stats: ListingStat[];
   address: string;
+  publicLocationLabel?: string;
   highlight: string;
   listingIntent?: "Rent" | "Shortlet";
   tag: string;

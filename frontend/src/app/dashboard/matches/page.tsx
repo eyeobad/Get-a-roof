@@ -75,7 +75,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
       active={active}
       chatHref="/dashboard/messages"
       rootClassName="h-20"
-      containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
+      containerClassName="max-w-md lg:max-w-6xl h-full w-full mx-auto flex items-center justify-between px-5"
     />
   );
 }

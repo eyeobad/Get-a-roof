@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
-type NavItemId = "properties" | "matches" | "chat" | "profile";
+type NavItemId = "overview" | "properties" | "matches" | "chat" | "profile";
 
 type DashboardBottomNavProps = {
   active?: NavItemId;
@@ -21,6 +21,7 @@ const iconStyle: CSSProperties = {
 };
 
 const NAV_ITEMS: Array<{ id: NavItemId; label: string; icon: string; href: string }> = [
+  { id: "overview", label: "Overview", icon: "insights", href: "/dashboard/overview" },
   { id: "properties", label: "Properties", icon: "dashboard", href: "/dashboard/properties" },
   { id: "matches", label: "Matches", icon: "handshake", href: "/dashboard/matches" },
   { id: "chat", label: "Chat", icon: "chat_bubble", href: "/dashboard/messages" },
@@ -40,7 +41,7 @@ export default function DashboardBottomNav({
   const loadConversations = useAppStore((state) => state.loadConversations);
   const current =
     active ??
-    (pathname?.startsWith("/dashboard/matches") ? "matches" : pathname?.startsWith("/dashboard/properties") ? "properties" : pathname?.startsWith("/dashboard/profile") ? "profile" : pathname?.startsWith("/dashboard/messages") ? "chat" : undefined) ??
+    (pathname?.startsWith("/dashboard/overview") ? "overview" : pathname?.startsWith("/dashboard/matches") ? "matches" : pathname?.startsWith("/dashboard/properties") ? "properties" : pathname?.startsWith("/dashboard/profile") ? "profile" : pathname?.startsWith("/dashboard/messages") ? "chat" : undefined) ??
     (pathname === "/messages" ? "chat" : undefined);
 
   useEffect(() => {

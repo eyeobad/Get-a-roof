@@ -76,7 +76,7 @@ export default function LoginPage() {
       if (isAdmin) {
         router.push("/admin");
       } else if (isLandlord) {
-        router.push("/dashboard/properties");
+        router.push("/dashboard/overview");
       } else if (needsTenantOnboarding) {
         router.push("/tenant-onboarding");
       } else {
@@ -128,7 +128,7 @@ export default function LoginPage() {
       if (isAdmin) {
         router.push("/admin");
       } else if (isLandlord) {
-        router.push("/dashboard/properties");
+        router.push("/dashboard/overview");
       } else if (needsTenantOnboarding) {
         router.push("/tenant-onboarding");
       } else {

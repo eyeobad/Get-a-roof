@@ -1,25 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useAppStore } from "@/store/useAppStore";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
-import { showToast } from "@/lib/alerts";
 import { useToastError } from "@/hooks/useToastError";
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-} from "chart.js";
-import { Doughnut, Bar } from "react-chartjs-2";
-
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
+import { showToast } from "@/lib/alerts";
+import { useAppStore } from "@/store/useAppStore";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 600, "GRAD" 0, "opsz" 24',
@@ -36,7 +24,7 @@ type Property = {
   price: number;
   beds: number;
   baths: number;
-  matches?: number; // only for listed
+  matches?: number;
   newCount?: number;
   coverUrl: string;
 };
@@ -51,19 +39,21 @@ function Money({ value }: { value: number }) {
       }).format(value),
     [value]
   );
+
   return <>{formatted}</>;
 }
 
 function StatusPill({ status }: { status: PropertyStatus }) {
   if (status === "Listed") {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800">
+      <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-[11px] font-bold text-green-800">
         Listed
       </span>
     );
   }
+
   return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-700">
+    <span className="inline-flex items-center rounded-full bg-gray-200 px-2.5 py-0.5 text-[11px] font-bold text-gray-700">
       Draft
     </span>
   );
@@ -72,7 +62,10 @@ function StatusPill({ status }: { status: PropertyStatus }) {
 function IconStat({ icon, value }: { icon: string; value: number }) {
   return (
     <div className="flex items-center gap-1.5 text-gray-600">
-      <span className="material-symbols-outlined text-[18px]" style={solidIconStyle}>
+      <span
+        className="material-symbols-outlined text-[18px]"
+        style={solidIconStyle}
+      >
         {icon}
       </span>
       <span className="text-[13px] font-semibold">{value}</span>
@@ -81,126 +74,176 @@ function IconStat({ icon, value }: { icon: string; value: number }) {
 }
 
 function PropertyCard({
-  p,
+  property,
   onEdit,
   onMatches,
   onContinue,
   onDelete,
   isDeleting,
 }: {
-  p: Property;
+  property: Property;
   onEdit: (id: string) => void;
   onMatches: (id: string) => void;
   onContinue: (id: string) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
 }) {
-  const isDraft = p.status === "Draft";
+  const isDraft = property.status === "Draft";
   const matchesLabel =
-    typeof p.matches === "number" ? `${p.matches} Matches` : "Matches";
+    typeof property.matches === "number"
+      ? `${property.matches} Matches`
+      : "Matches";
 
   return (
-    <article className={["bg-white rounded-2xl border border-[#dbe1ea] shadow-[0_2px_8px_rgba(15,23,42,0.05)] overflow-hidden", isDraft ? "opacity-90" : ""].join(" ")}>
-      <div className="flex flex-col sm:flex-row">
+    <article
+      className={[
+        "flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]",
+        isDraft ? "opacity-90" : "",
+      ].join(" ")}
+    >
+      <div className="flex gap-4 p-4">
         <div
-          className={["relative h-44 sm:h-auto sm:w-[260px] shrink-0 bg-gray-200 bg-cover bg-center", isDraft ? "grayscale" : ""].join(" ")}
-          style={{ backgroundImage: `url('${p.coverUrl}')` }}
-          aria-label={`${p.title} cover`}
-        >
-          <div className="absolute left-3 top-3">
-            <StatusPill status={p.status} />
-          </div>
-        </div>
+          className={[
+            "h-28 w-28 shrink-0 rounded-xl bg-gray-200 bg-cover bg-center",
+            isDraft ? "grayscale" : "",
+          ].join(" ")}
+          style={{ backgroundImage: `url('${property.coverUrl}')` }}
+          aria-label={`${property.title} cover`}
+        />
 
-        <div className="flex-1 p-4 sm:p-5 flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[34px] leading-none font-extrabold text-[#111827]">
-                <Money value={p.price} />
-              </p>
-              <h2 className="mt-2 text-[30px] leading-tight font-bold text-[#111827]">
-                {p.title}
-              </h2>
-            </div>
+        <div className="flex flex-1 flex-col justify-center gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <StatusPill status={property.status} />
             <button
               type="button"
-              onClick={() => onDelete(p.id)}
+              onClick={() => onDelete(property.id)}
               disabled={isDeleting}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-red-600 hover:bg-red-50 disabled:opacity-50"
               aria-label="Delete listing"
-              title="Delete listing"
             >
-              <span className="material-symbols-outlined text-[22px]" style={solidIconStyle}>
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={solidIconStyle}
+              >
                 delete
               </span>
             </button>
           </div>
 
-          <p className="flex items-center gap-2 text-[16px] text-[#64748b]">
-            <span className="material-symbols-outlined text-[18px]">location_on</span>
-            {p.area || "Address pending"}
-          </p>
+          <h2 className="text-[18px] font-bold leading-tight text-gray-900">
+            {property.title}
+          </h2>
 
-          <div className="flex flex-wrap items-center gap-5">
-            <IconStat icon="bed" value={p.beds} />
-            <IconStat icon="bathtub" value={p.baths} />
-            <IconStat icon="person_search" value={p.matches ?? 0} />
+          <div className="flex items-baseline gap-1">
+            <span className="text-[20px] font-extrabold text-[#0a44b8]">
+              <Money value={property.price} />
+            </span>
+            <span className="text-[14px] font-medium text-gray-500">/ yr</span>
           </div>
 
-          {!isDraft ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-[#e7edf4] pt-3">
-              <button
-                type="button"
-                onClick={() => onEdit(p.id)}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#d6deea] px-3 py-2 text-[14px] font-bold text-[#334155] hover:bg-gray-50"
-              >
-                <span className="material-symbols-outlined text-[18px]" style={solidIconStyle}>
-                  edit
-                </span>
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => onMatches(p.id)}
-                className={[
-                  "inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[14px] font-bold",
-                  (p.matches ?? 0) > 0
-                    ? "bg-[#0a44b8]/10 text-[#0a44b8] hover:bg-[#0a44b8]/15"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200",
-                ].join(" ")}
-              >
-                <span className="material-symbols-outlined text-[18px]" style={solidIconStyle}>
-                  {(p.matches ?? 0) > 0 ? "person_search" : "visibility"}
-                </span>
-                {matchesLabel}
-              </button>
-            </div>
-          ) : (
-            <div className="mt-1 border-t border-[#e7edf4] pt-3">
-              <button
-                type="button"
-                onClick={() => onContinue(p.id)}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0a44b8] px-3 py-2 text-[14px] font-bold text-white hover:bg-[#093a99]"
-              >
-                <span className="material-symbols-outlined text-[18px]" style={solidIconStyle}>
-                  arrow_forward
-                </span>
-                Continue Editing
-              </button>
-            </div>
-          )}
+          <div className="mt-0.5 flex items-center gap-4">
+            <IconStat icon="bed" value={property.beds} />
+            <IconStat icon="bathtub" value={property.baths} />
+          </div>
         </div>
+      </div>
+
+      {!isDraft ? (
+        <div className="flex h-14 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => onEdit(property.id)}
+            className="flex flex-1 items-center justify-center gap-2 font-bold text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
+          >
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={solidIconStyle}
+            >
+              edit
+            </span>
+            Edit
+          </button>
+          <div className="w-px bg-gray-100" />
+          <button
+            type="button"
+            onClick={() => onMatches(property.id)}
+            className={[
+              "flex flex-1 items-center justify-center gap-2 font-bold transition-colors",
+              (property.matches ?? 0) > 0
+                ? "bg-[#0a44b8]/5 text-[#0a44b8] hover:bg-[#0a44b8]/10 active:bg-[#0a44b8]/15"
+                : "bg-gray-50 text-gray-500 hover:bg-gray-100 active:bg-gray-200",
+            ].join(" ")}
+          >
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={solidIconStyle}
+            >
+              {(property.matches ?? 0) > 0 ? "person_search" : "visibility"}
+            </span>
+            {matchesLabel}
+          </button>
+        </div>
+      ) : (
+        <div className="flex h-14 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => onContinue(property.id)}
+            className="flex w-full items-center justify-center gap-2 font-bold text-[#0a44b8] transition-colors hover:bg-gray-50 active:bg-gray-100"
+          >
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={solidIconStyle}
+            >
+              arrow_forward
+            </span>
+            Continue Editing
+          </button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function PropertyCardSkeleton() {
+  return (
+    <article className="overflow-hidden rounded-2xl bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] animate-pulse">
+      <div className="flex gap-4 p-4">
+        <div className="h-28 w-28 shrink-0 rounded-xl bg-slate-200" />
+        <div className="flex flex-1 flex-col justify-center gap-3">
+          <div className="flex items-center justify-between">
+            <div className="h-6 w-16 rounded-full bg-slate-200" />
+            <div className="h-8 w-8 rounded-full bg-slate-200" />
+          </div>
+          <div className="h-5 w-4/5 rounded-full bg-slate-200" />
+          <div className="h-5 w-2/5 rounded-full bg-slate-200" />
+          <div className="flex gap-3">
+            <div className="h-4 w-12 rounded-full bg-slate-200" />
+            <div className="h-4 w-12 rounded-full bg-slate-200" />
+          </div>
+        </div>
+      </div>
+      <div className="flex h-14 border-t border-gray-100">
+        <div className="flex-1 bg-slate-100" />
+        <div className="w-px bg-gray-100" />
+        <div className="flex-1 bg-slate-100" />
       </div>
     </article>
   );
 }
 
-
-function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "profile" }) {
+function BottomNav({
+  active,
+}: {
+  active: "overview" | "properties" | "matches" | "chat" | "profile";
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromParam = searchParams?.get("from") ?? "";
-  const dashboardSources = new Set(["/dashboard/properties", "/dashboard/matches"]);
+  const dashboardSources = new Set([
+    "/dashboard/overview",
+    "/dashboard/properties",
+    "/dashboard/matches",
+  ]);
   const isDashboardRoute =
     pathname?.startsWith("/dashboard/") || pathname === "/dashboard";
   const showDashboardNav =
@@ -210,7 +253,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
 
   if (!showDashboardNav) {
     return (
-      <nav className="fixed bottom-0 left-0 w-full h-16 bg-white border-t border-gray-200 flex items-center justify-around z-50">
+      <nav className="fixed bottom-0 left-0 z-50 flex h-16 w-full items-center justify-around border-t border-gray-200 bg-white">
         <Link href="/messages">
           <span className="material-symbols-outlined">chat_bubble</span>
         </Link>
@@ -229,7 +272,7 @@ function BottomNav({ active }: { active: "properties" | "matches" | "chat" | "pr
       active={active}
       chatHref={chatHref}
       rootClassName="h-20"
-      containerClassName="max-w-md h-full w-full mx-auto flex items-center justify-between px-4"
+      containerClassName="mx-auto flex h-full w-full max-w-md lg:max-w-6xl items-center justify-between px-5"
     />
   );
 }
@@ -244,37 +287,47 @@ function LandlordDashboardContent() {
   const [isInviting, setIsInviting] = useState(false);
   const [showAgents, setShowAgents] = useState(false);
   const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [propertyScope, setPropertyScope] = useState<"mine" | "all">("mine");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   useToastError(error);
+
   const router = useRouter();
   const authToken = useAppStore((state) => state.authToken);
   const user = useAppStore((state) => state.user);
+  const userId = useAppStore((state) => state.userId);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const landlordProperties = useAppStore((state) => state.landlordProperties);
-  const loadLandlordProperties = useAppStore((state) => state.loadLandlordProperties);
-  const loadLandlordDraftById = useAppStore((state) => state.loadLandlordDraftById);
+  const loadLandlordProperties = useAppStore(
+    (state) => state.loadLandlordProperties
+  );
+  const loadLandlordDraftById = useAppStore(
+    (state) => state.loadLandlordDraftById
+  );
   const clearLandlordDraft = useAppStore((state) => state.clearLandlordDraft);
-  const deleteLandlordProperty = useAppStore((state) => state.deleteLandlordProperty);
+  const deleteLandlordProperty = useAppStore(
+    (state) => state.deleteLandlordProperty
+  );
   const orgAgents = useAppStore((state) => state.orgAgents);
   const inviteAgent = useAppStore((state) => state.inviteAgent);
   const loadOrgAgents = useAppStore((state) => state.loadOrgAgents);
   const removeAgent = useAppStore((state) => state.removeAgent);
-  const orgStats = useAppStore((state) => state.orgStats);
-  const loadOrgStats = useAppStore((state) => state.loadOrgStats);
-  const [agentFilter, setAgentFilter] = useState<string>("all");
-  const [propertyScope, setPropertyScope] = useState<"mine" | "all">("mine");
-  const userId = useAppStore((state) => state.userId);
 
-  const userRole = Array.isArray(user?.role) ? user?.role[0] : user?.role;
+  const userRole = Array.isArray(user?.role) ? user.role[0] : user?.role;
   const isOrgOwner = userRole === "Organisation";
   const isOrgAgent = userRole === "Landlord" && Boolean(user?.agentOrgId);
   const orgId = isOrgOwner ? userId : (user?.agentOrgId as string | undefined);
   const orgName =
     (user as Record<string, unknown> | null)?.orgProfile
-      ? ((user as Record<string, unknown>).orgProfile as { orgName?: string })?.orgName
+      ? (
+          (user as Record<string, unknown>).orgProfile as {
+            orgName?: string;
+          }
+        )?.orgName
       : undefined;
   const isOrgContext = isOrgOwner || isOrgAgent;
   const canManageOrgMembers = isOrgOwner;
-  const isOrgScopeEnabled = isOrgContext;
 
   const mappedProperties: Property[] = useMemo(
     () =>
@@ -294,165 +347,105 @@ function LandlordDashboardContent() {
     [landlordProperties]
   );
 
-  /* Memoized chart data to avoid Chart.js re-render loop */
-  const donutData = useMemo(() => {
-    if (!orgStats) return null;
-    return {
-      labels: [
-        orgName ?? "You",
-        ...orgStats.listingsByAgent.map((a) => a.name),
-      ],
-      datasets: [{
-        data: [
-          orgStats.ownerListingCount,
-          ...orgStats.listingsByAgent.map((a) => a.count),
-        ],
-        backgroundColor: ["#0a44b8", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"],
-        borderWidth: 2,
-        borderColor: "#f5f6f8",
-      }],
-    };
-  }, [orgStats, orgName]);
-
-  const barData = useMemo(() => {
-    if (!orgStats) return null;
-    return {
-      labels: orgStats.matchesByMonth.map((m) => m.month),
-      datasets: [{
-        label: "Matches",
-        data: orgStats.matchesByMonth.map((m) => m.count),
-        backgroundColor: "#0a44b8",
-        borderRadius: 8,
-        barThickness: 18,
-      }],
-    };
-  }, [orgStats]);
-
   const memberOptions = useMemo(() => {
     if (!isOrgContext) return [];
+
     const options: Array<{ id: string; label: string }> = [];
     const seen = new Set<string>();
 
     if (userId) {
-      const ownerLabel = isOrgOwner ? orgName ?? "Owner" : "You";
-      options.push({ id: userId, label: ownerLabel });
+      options.push({
+        id: userId,
+        label: isOrgOwner ? orgName ?? "Owner" : "You",
+      });
       seen.add(userId);
     }
 
-    const candidates = orgStats?.listingsByAgent?.length
-      ? orgStats.listingsByAgent
-      : orgAgents.map((agent) => ({
-        agentId: (agent.id ?? agent._id) as string | undefined,
-        name: [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim(),
-        email: agent.email,
-      }));
-
-    candidates.forEach((agent) => {
-      if (!agent.agentId) return;
-      if (seen.has(agent.agentId)) return;
-      seen.add(agent.agentId);
-      const label = [agent.name, agent.email].filter(Boolean).join(" | ");
-      options.push({ id: agent.agentId, label: label || "Agent" });
+    orgAgents.forEach((agent) => {
+      const agentId = (agent.id ?? agent._id) as string | undefined;
+      if (!agentId || seen.has(agentId)) return;
+      seen.add(agentId);
+      const label = [agent.firstName, agent.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      options.push({
+        id: agentId,
+        label: label || agent.email || "Agent",
+      });
     });
 
     return options;
-  }, [isOrgContext, isOrgOwner, orgAgents, orgName, orgStats, userId]);
+  }, [isOrgContext, isOrgOwner, orgAgents, orgName, userId]);
 
   const agentListingCountById = useMemo(() => {
-    if (!isOrgContext) return new Map<string, number>();
-    const map = new Map<string, number>();
-    if (orgStats) {
-      orgStats.listingsByAgent.forEach((agent) => {
-        map.set(agent.agentId, agent.count ?? 0);
-      });
-      if (orgId) {
-        map.set(orgId, orgStats.ownerListingCount ?? 0);
-      }
-    } else {
-      landlordProperties.forEach((property) => {
-        const landlordId = property.landlordId;
-        if (!landlordId) return;
-        map.set(landlordId, (map.get(landlordId) ?? 0) + 1);
-      });
-    }
-    return map;
-  }, [isOrgContext, landlordProperties, orgId, orgStats]);
+    const counts = new Map<string, number>();
 
-  const donutOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: true,
-      animation: false as const,
-      plugins: {
-        legend: {
-          position: "bottom" as const,
-          labels: { boxWidth: 12, font: { size: 11, weight: "bold" as const } },
-        },
-      },
-      cutout: "60%",
-    }),
-    []
-  );
+    landlordProperties.forEach((property) => {
+      const landlordId = property.landlordId;
+      if (!landlordId) return;
+      counts.set(landlordId, (counts.get(landlordId) ?? 0) + 1);
+    });
 
-  const barOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false as const,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { stepSize: 1, font: { size: 11 } },
-          grid: { color: "#f0f0f0" },
-        },
-        x: {
-          ticks: { font: { size: 11, weight: "bold" as const } },
-          grid: { display: false },
-        },
-      },
-    }),
-    []
-  );
+    return counts;
+  }, [landlordProperties]);
 
   useEffect(() => {
     if (!isOrgContext) {
       setPropertyScope("mine");
       return;
     }
+
     if (isOrgAgent) {
       setPropertyScope("mine");
     } else if (isOrgOwner) {
       setPropertyScope("all");
     }
-  }, [isOrgAgent, isOrgOwner, isOrgContext]);
+  }, [isOrgAgent, isOrgContext, isOrgOwner]);
 
   useEffect(() => {
-    if (!authToken) return;
-    void loadLandlordProperties({ scope: propertyScope });
-  }, [authToken, loadLandlordProperties, propertyScope]);
+    let mounted = true;
 
-  useEffect(() => {
-    if (authToken && !user?.photoUrl) {
-      void fetchUserProfile();
-    }
-  }, [authToken, user?.photoUrl, fetchUserProfile]);
+    const bootstrap = async () => {
+      if (!authToken) {
+        if (mounted) setIsInitialLoading(false);
+        return;
+      }
+
+      try {
+        await Promise.all([
+          loadLandlordProperties({ scope: propertyScope }),
+          user?.photoUrl ? Promise.resolve() : fetchUserProfile(),
+          isOrgContext && orgId ? loadOrgAgents(orgId) : Promise.resolve(),
+        ]);
+      } finally {
+        if (mounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    authToken,
+    fetchUserProfile,
+    isOrgContext,
+    loadLandlordProperties,
+    loadOrgAgents,
+    orgId,
+    propertyScope,
+    user?.photoUrl,
+  ]);
 
   useEffect(() => {
     if (!isOrgContext || propertyScope === "mine") {
       setAgentFilter("all");
     }
   }, [isOrgContext, propertyScope]);
-
-  const orgStatsLoadedRef = useRef(false);
-  useEffect(() => {
-    if (!authToken || !isOrgContext || !orgId) return;
-    void loadOrgAgents(orgId);
-    if (isOrgOwner && !orgStatsLoadedRef.current) {
-      orgStatsLoadedRef.current = true;
-      void loadOrgStats(orgId);
-    }
-  }, [authToken, isOrgContext, isOrgOwner, orgId, loadOrgAgents, loadOrgStats]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -462,30 +455,30 @@ function LandlordDashboardContent() {
         scope: propertyScope,
       });
     }, 300);
+
     return () => clearTimeout(timer);
-  }, [authToken, q, loadLandlordProperties, propertyScope]);
+  }, [authToken, loadLandlordProperties, propertyScope, q]);
 
   const filtered = useMemo(() => {
     let result = mappedProperties;
-    const s = q.trim().toLowerCase();
-    if (s) {
-      result = result.filter((p) => p.title.toLowerCase().includes(s));
+    const search = q.trim().toLowerCase();
+
+    if (search) {
+      result = result.filter((property) =>
+        property.title.toLowerCase().includes(search)
+      );
     }
+
     if (isOrgContext && propertyScope === "all" && agentFilter !== "all") {
-      result = result.filter((p) => p.landlordId === agentFilter);
+      result = result.filter((property) => property.landlordId === agentFilter);
     }
+
     if (isOrgContext && propertyScope === "mine") {
-      result = result.filter((p) => p.landlordId === userId);
+      result = result.filter((property) => property.landlordId === userId);
     }
+
     return result;
-  }, [
-    agentFilter,
-    isOrgContext,
-    mappedProperties,
-    propertyScope,
-    q,
-    userId,
-  ]);
+  }, [agentFilter, isOrgContext, mappedProperties, propertyScope, q, userId]);
 
   const openDraft = async (id: string) => {
     if (authToken) {
@@ -534,164 +527,205 @@ function LandlordDashboardContent() {
     }
   };
 
-  const getEmptyState = () => {
+  const emptyState = useMemo(() => {
     if (!authToken) {
-      return {
-        title: "Sign in to load your properties.",
-        ctaLabel: null as string | null,
-      };
+      return { title: "Sign in to load your properties.", helper: null };
     }
+
     if (!isOrgContext) {
       return {
         title: "No properties yet. Start by adding your first listing.",
-        ctaLabel: "Add Property",
+        helper: null,
       };
     }
+
     if (propertyScope === "mine") {
       return isOrgOwner
         ? {
-          title: "No listings under your owner profile yet.",
-          ctaLabel: "Add Property",
-          helper: "Create your first property to appear in the workspace.",
-        }
+            title: "No listings under your owner profile yet.",
+            helper: "Create your first property to appear in the workspace.",
+          }
         : {
-          title: "No properties created by you yet.",
-          ctaLabel: "Add Property",
-          helper: "Add a listing to build your contribution to this org.",
-        };
+            title: "No properties created by you yet.",
+            helper: "Add a listing to build your contribution to this organisation.",
+          };
     }
+
     if (agentFilter !== "all") {
       return {
-        title: "No properties match this agent filter.",
-        ctaLabel: null as string | null,
-        helper: "Try selecting another agent or switch to My Listings.",
+        title: "No properties match this member filter.",
+        helper: "Try another member or switch back to My Listings.",
       };
     }
-    return isOrgOwner
-      ? {
-        title: "This organisation has no listings yet.",
-        ctaLabel: "Add Property",
-        helper: "Create one listing to start collaborating with your agents.",
-      }
-      : {
-        title: `${orgName ?? "This organisation"} has no listings yet.`,
-        ctaLabel: null,
-        helper: "Ask your owner or teammates to add listings first.",
-      };
-  };
-  const useSplitLayout = isOrgOwner;
+
+    return {
+      title: `${orgName ?? "This organisation"} has no listings yet.`,
+      helper: canManageOrgMembers
+        ? "Add your first listing to start the workspace."
+        : "Ask your organisation owner or teammates to add listings first.",
+    };
+  }, [
+    agentFilter,
+    authToken,
+    canManageOrgMembers,
+    isOrgContext,
+    isOrgOwner,
+    orgName,
+    propertyScope,
+  ]);
 
   return (
-    <div className="min-h-screen bg-[#f5f6f8] text-gray-900 pb-24">
-      {/* Main */}
-      <main
-        className={
-          useSplitLayout
-            ? "px-5 pt-6 grid gap-6 max-w-7xl mx-auto w-full lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] lg:items-start"
-            : "px-5 pt-6 flex flex-col gap-6 max-w-md lg:max-w-6xl mx-auto w-full"
-        }
-      >
+    <div className="min-h-screen bg-[#f5f6f8] pb-24 text-gray-900">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-gray-200 bg-[#f5f6f8]/95 px-5 py-4 backdrop-blur-sm">
+        <div>
+          <h1 className="text-[28px] font-extrabold leading-none tracking-tight text-[#0a44b8]">
+            {isOrgContext ? orgName ?? "Property Dashboard" : "My Properties"}
+          </h1>
+          <p className="mt-1 text-[18px] font-medium text-gray-600">
+            {isOrgOwner
+              ? "Organisation Workspace"
+              : isOrgAgent
+                ? "Agent Workspace"
+                : "Dashboard"}
+          </p>
+        </div>
 
-        {/* ═══════════ ORG STATS & CHARTS ═══════════ */}
-        {isOrgOwner && orgStats && (
-          <div className="flex flex-col gap-4 lg:col-start-1 lg:sticky lg:top-6 lg:max-h-[calc(100vh-48px)] lg:overflow-y-auto lg:pr-1">
-            {/* Overview Cards */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "Listings", value: orgStats.totalListings, icon: "home_work", color: "#0a44b8" },
-                { label: "Matches", value: orgStats.totalMatches, icon: "handshake", color: "#10b981" },
-                { label: "Agents", value: orgStats.activeAgents, icon: "group", color: "#6366f1" },
-              ].map((card) => (
-                <div key={card.label} className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4 flex flex-col items-center gap-2">
-                  <span className="material-symbols-outlined text-[28px]" style={{ ...solidIconStyle, color: card.color }}>
-                    {card.icon}
-                  </span>
-                  <span className="text-[26px] font-extrabold text-gray-900">{card.value}</span>
-                  <span className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">{card.label}</span>
-                </div>
-              ))}
-            </div>
+        <div className="relative h-12 w-12 overflow-hidden rounded-full bg-gray-200">
+          <Image
+            alt="Profile avatar"
+            src={
+              user?.photoUrl ||
+              "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P"
+            }
+            fill
+            className="object-cover"
+          />
+        </div>
+      </header>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 gap-4">
-              {/* Donut — Listings per Member */}
-              <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4">
-                <h3 className="text-[14px] font-bold text-gray-700 mb-3">Listings by Member</h3>
-                {donutData && (orgStats.listingsByAgent.length > 0 || orgStats.ownerListingCount > 0) ? (
-                  <div className="w-full aspect-square max-w-[230px] mx-auto">
-                    <Doughnut
-                      data={donutData}
-                      options={donutOptions}
-                    />
-                  </div>
-                ) : (
-                  <p className="text-center text-gray-400 text-[13px] py-6">No listings yet</p>
-                )}
-              </div>
-
-              {/* Bar — Matches over 6 months */}
-              <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] p-4">
-                <h3 className="text-[14px] font-bold text-gray-700 mb-3">Matches (6 months)</h3>
-                {barData && (
-                  <div className="h-[220px]">
-                    <Bar
-                      data={barData}
-                      options={barOptions}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Search */}
-        <div className={useSplitLayout ? "relative lg:col-start-2" : "relative"}>
+      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-5 pt-6">
+        <div className="relative">
           <span
-            className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-[24px]"
+            className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[24px] text-gray-500"
             style={solidIconStyle}
           >
             search
           </span>
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="w-full pl-12 pr-4 h-14 rounded-2xl border border-gray-300 bg-white text-[18px] shadow-sm focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8]"
+            onChange={(event) => setQ(event.target.value)}
+            className="h-14 w-full rounded-2xl border border-gray-300 bg-white pl-12 pr-4 text-[18px] shadow-sm focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]"
             placeholder="Search properties..."
             type="text"
           />
         </div>
 
-        {/* Agent Management Panel (Org only) */}
-        {isOrgScopeEnabled && canManageOrgMembers && (
-          <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] overflow-hidden lg:col-start-1">
+        {isOrgContext ? (
+          <section className="space-y-4 rounded-2xl bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[18px] font-bold text-gray-900">
+                  {isOrgOwner ? "Organisation" : "Agent"} Controls
+                </p>
+                <p className="text-sm text-gray-500">
+                  Switch listing scope and manage member visibility.
+                </p>
+              </div>
+
+              <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setPropertyScope("mine")}
+                  className={[
+                    "h-9 rounded-lg px-3 text-sm font-bold transition-colors",
+                    propertyScope === "mine"
+                      ? "bg-[#0a44b8] text-white shadow"
+                      : "text-gray-600 hover:bg-gray-100",
+                  ].join(" ")}
+                >
+                  My Listings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPropertyScope("all")}
+                  disabled={!isOrgOwner}
+                  className={[
+                    "h-9 rounded-lg px-3 text-sm font-bold transition-colors",
+                    propertyScope === "all"
+                      ? "bg-[#0a44b8] text-white shadow"
+                      : "text-gray-600 hover:bg-gray-100",
+                    !isOrgOwner ? "cursor-not-allowed opacity-50" : "",
+                  ].join(" ")}
+                >
+                  All Organisation Listings
+                </button>
+              </div>
+            </div>
+
+            {propertyScope === "all" && isOrgOwner ? (
+              <div className="flex items-center gap-3">
+                <label
+                  htmlFor="agent-filter"
+                  className="text-sm font-semibold text-gray-700"
+                >
+                  Filter by member
+                </label>
+                <select
+                  id="agent-filter"
+                  value={agentFilter}
+                  onChange={(event) => setAgentFilter(event.target.value)}
+                  className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:border-[#0a44b8] focus:outline-none"
+                >
+                  <option value="all">All members</option>
+                  {memberOptions.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {canManageOrgMembers ? (
+          <section className="overflow-hidden rounded-2xl bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
             <button
               type="button"
-              onClick={() => setShowAgents((prev) => !prev)}
-              className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              onClick={() => setShowAgents((current) => !current)}
+              className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[24px] text-[#0a44b8]" style={solidIconStyle}>group</span>
-                <span className="text-[18px] font-bold text-gray-900">Agents</span>
-                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[12px] font-bold bg-[#0a44b8]/10 text-[#0a44b8]">
+                <span
+                  className="material-symbols-outlined text-[24px] text-[#0a44b8]"
+                  style={solidIconStyle}
+                >
+                  group
+                </span>
+                <span className="text-[18px] font-bold text-gray-900">
+                  Agents
+                </span>
+                <span className="inline-flex items-center justify-center rounded-full bg-[#0a44b8]/10 px-2 py-0.5 text-[12px] font-bold text-[#0a44b8]">
                   {orgAgents.length}
                 </span>
               </div>
-              <span className="material-symbols-outlined text-gray-500 transition-transform" style={{ transform: showAgents ? 'rotate(180deg)' : undefined }}>
+              <span
+                className="material-symbols-outlined text-gray-500 transition-transform"
+                style={{ transform: showAgents ? "rotate(180deg)" : undefined }}
+              >
                 expand_more
               </span>
             </button>
 
-            {showAgents && (
-              <div className="px-5 pb-5 space-y-4">
-                {/* Invite Form */}
+            {showAgents ? (
+              <div className="space-y-4 px-5 pb-5">
                 <div className="flex gap-2">
                   <input
                     type="email"
                     placeholder="Agent email address"
                     value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="flex-1 h-12 rounded-xl border border-gray-300 bg-white px-4 text-[16px] focus:ring-2 focus:ring-[#0a44b8] focus:border-[#0a44b8]"
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    className="h-12 flex-1 rounded-xl border border-gray-300 bg-white px-4 text-[16px] focus:border-[#0a44b8] focus:ring-2 focus:ring-[#0a44b8]"
                   />
                   <button
                     type="button"
@@ -701,25 +735,36 @@ function LandlordDashboardContent() {
                       setIsInviting(true);
                       try {
                         await inviteAgent(orgId, inviteEmail.trim());
-                        showToast({ title: "Invite sent!", text: `Invitation sent to ${inviteEmail.trim()}`, variant: "success" });
+                        showToast({
+                          title: "Invite sent",
+                          text: `Invitation sent to ${inviteEmail.trim()}`,
+                          variant: "success",
+                        });
                         setInviteEmail("");
                       } catch (err) {
-                        const msg = err instanceof Error ? err.message : "Failed to send invite";
-                        showToast({ title: "Invite failed", text: msg, variant: "error" });
+                        showToast({
+                          title: "Invite failed",
+                          text:
+                            err instanceof Error
+                              ? err.message
+                              : "Failed to send invite",
+                          variant: "error",
+                        });
                       } finally {
                         setIsInviting(false);
                       }
                     }}
-                    className="h-12 px-5 rounded-xl bg-[#0a44b8] text-white font-bold text-[15px] hover:bg-[#082485] disabled:opacity-50 transition-colors flex items-center gap-2"
+                    className="flex h-12 items-center gap-2 rounded-xl bg-[#0a44b8] px-5 text-[15px] font-bold text-white transition-colors hover:bg-[#082485] disabled:opacity-50"
                   >
-                    <span className="material-symbols-outlined text-[20px]">send</span>
+                    <span className="material-symbols-outlined text-[20px]">
+                      send
+                    </span>
                     {isInviting ? "Sending..." : "Invite"}
                   </button>
                 </div>
 
-                {/* Agent List */}
                 {orgAgents.length === 0 ? (
-                  <p className="text-center text-gray-500 text-[15px] py-4">
+                  <p className="py-4 text-center text-[15px] text-gray-500">
                     No agents yet. Invite your team members above.
                   </p>
                 ) : (
@@ -729,16 +774,25 @@ function LandlordDashboardContent() {
                       return (
                         <div
                           key={agentId}
-                          className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 rounded-xl bg-gray-50 p-3 transition-colors hover:bg-gray-100"
                         >
-                          <div className="w-10 h-10 rounded-full bg-[#0a44b8]/10 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-[20px] text-[#0a44b8]" style={solidIconStyle}>person</span>
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0a44b8]/10">
+                            <span
+                              className="material-symbols-outlined text-[20px] text-[#0a44b8]"
+                              style={solidIconStyle}
+                            >
+                              person
+                            </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[15px] font-semibold text-gray-900 truncate">
-                              {agent.firstName ?? ""} {agent.lastName ?? ""}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[15px] font-semibold text-gray-900">
+                              {[agent.firstName, agent.lastName]
+                                .filter(Boolean)
+                                .join(" ") || "Agent"}
                             </p>
-                            <p className="text-[13px] text-gray-500 truncate">{agent.email}</p>
+                            <p className="truncate text-[13px] text-gray-500">
+                              {agent.email}
+                            </p>
                           </div>
                           <span className="inline-flex items-center justify-center rounded-full bg-[#0a44b8]/10 px-2.5 py-1 text-[11px] font-bold text-[#0a44b8]">
                             {agentListingCountById.get(agentId) ?? 0} listings
@@ -751,18 +805,31 @@ function LandlordDashboardContent() {
                               setRemovingAgentId(agentId);
                               try {
                                 await removeAgent(orgId, agentId);
-                                showToast({ title: "Agent removed", variant: "success" });
+                                showToast({
+                                  title: "Agent removed",
+                                  variant: "success",
+                                });
                               } catch (err) {
-                                const msg = err instanceof Error ? err.message : "Failed";
-                                showToast({ title: msg, variant: "error" });
+                                showToast({
+                                  title:
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Failed to remove agent",
+                                  variant: "error",
+                                });
                               } finally {
                                 setRemovingAgentId(null);
                               }
                             }}
-                            className="h-9 w-9 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
-                            aria-label={`Remove ${agent.firstName ?? "agent"}`}
+                            className="flex h-9 w-9 items-center justify-center rounded-full text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
+                            aria-label="Remove agent"
                           >
-                            <span className="material-symbols-outlined text-[20px]" style={solidIconStyle}>person_remove</span>
+                            <span
+                              className="material-symbols-outlined text-[20px]"
+                              style={solidIconStyle}
+                            >
+                              person_remove
+                            </span>
                           </button>
                         </div>
                       );
@@ -770,123 +837,67 @@ function LandlordDashboardContent() {
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            ) : null}
+          </section>
+        ) : null}
 
-        {/* Cards */}
-        <div className={useSplitLayout ? "flex flex-col gap-6 lg:col-start-2" : "flex flex-col gap-6"}>
-          {isOrgScopeEnabled ? (
+        <div className="flex flex-col gap-6">
+          {isInitialLoading ? (
             <>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <p className="text-sm font-semibold text-gray-700">Viewing scope</p>
-                <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
-                  <button
-                    type="button"
-                    onClick={() => setPropertyScope("mine")}
-                    className={[
-                      "h-9 px-3 rounded-lg text-sm font-bold transition-colors",
-                      propertyScope === "mine"
-                        ? "bg-[#0a44b8] text-white shadow"
-                        : "text-gray-600 hover:bg-gray-100",
-                    ].join(" ")}
-                  >
-                    My Listings
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPropertyScope("all")}
-                    className={[
-                      "h-9 px-3 rounded-lg text-sm font-bold transition-colors",
-                      propertyScope === "all"
-                        ? "bg-[#0a44b8] text-white shadow"
-                        : "text-gray-600 hover:bg-gray-100",
-                    ].join(" ")}
-                  >
-                    All Organisation Listings
-                  </button>
-                </div>
-              </div>
-
-              {propertyScope === "all" ? (
-                <div className="flex items-center gap-3">
-                  <label htmlFor="agent-filter" className="text-sm font-semibold text-gray-700">
-                    Filter by member
-                  </label>
-                  <select
-                    id="agent-filter"
-                    value={agentFilter}
-                    onChange={(event) => setAgentFilter(event.target.value)}
-                    className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 focus:border-[#0a44b8] focus:outline-none"
-                  >
-                    <option value="all">All members</option>
-                    {memberOptions.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
+              <PropertyCardSkeleton />
+              <PropertyCardSkeleton />
+              <PropertyCardSkeleton />
             </>
-          ) : null}
-          <div className={useSplitLayout ? "flex flex-col gap-6 lg:max-h-[calc(100vh-190px)] lg:overflow-y-auto lg:pr-1" : "flex flex-col gap-6"}>
-            {filtered.length ? (
-              filtered.map((p) => (
-                <PropertyCard
-                  key={p.id}
-                  p={p}
-                  onEdit={onEdit}
-                  onMatches={onMatches}
-                  onContinue={onContinue}
-                  onDelete={onDelete}
-                  isDeleting={isDeletingId === p.id}
-                />
-              ))
-            ) : authToken ? (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 space-y-4">
-                <p>{getEmptyState().title}</p>
-                {getEmptyState().helper ? (
-                  <p className="text-sm text-gray-400">{getEmptyState().helper}</p>
-                ) : null}
-                {getEmptyState().ctaLabel ? (
-                  <button
-                    type="button"
-                    onClick={goAddProperty}
-                    className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] text-white text-sm font-bold px-5 py-2.5 shadow-sm cursor-pointer"
-                  >
-                    {getEmptyState().ctaLabel}
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
-                {getEmptyState().title}
-              </div>
-            )}
-          </div>
+          ) : filtered.length ? (
+            filtered.map((property) => (
+              <PropertyCard
+                key={property.id}
+                property={property}
+                onEdit={onEdit}
+                onMatches={onMatches}
+                onContinue={onContinue}
+                onDelete={onDelete}
+                isDeleting={isDeletingId === property.id}
+              />
+            ))
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+              <p>{emptyState.title}</p>
+              {emptyState.helper ? (
+                <p className="text-sm text-gray-400">{emptyState.helper}</p>
+              ) : null}
+              {authToken ? (
+                <button
+                  type="button"
+                  onClick={goAddProperty}
+                  className="inline-flex items-center justify-center rounded-full bg-[#0a44b8] px-5 py-2.5 text-sm font-bold text-white shadow-sm"
+                >
+                  Add Property
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
 
         <div className="h-20" />
       </main>
 
-      {/* Floating Add Property */}
       <div className="fixed bottom-24 right-5 z-40">
         <button
           type="button"
           onClick={goAddProperty}
-          className="h-16 pl-5 pr-7 bg-[#0a44b8] hover:brightness-95 text-white rounded-full shadow-lg flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 ring-[#0a44b8]/30 cursor-pointer"
+          className="flex h-16 items-center gap-3 rounded-full bg-[#0a44b8] pl-5 pr-7 text-white shadow-lg transition-transform hover:scale-105 hover:brightness-95 active:scale-95"
         >
-          <span className="material-symbols-outlined text-[30px]" style={solidIconStyle}>
+          <span
+            className="material-symbols-outlined text-[30px]"
+            style={solidIconStyle}
+          >
             add
           </span>
-          <span className="text-[18px] font-bold">
-            Add Property
-          </span>
+          <span className="text-[18px] font-bold">Add Property</span>
         </button>
       </div>
 
-      {/* Bottom Nav */}
       <BottomNav active="properties" />
     </div>
   );

@@ -1,8 +1,243 @@
-# GET A ROOF — Security Architecture & Developer Guide
+# GET A ROOF
 
+GET A ROOF is a real-estate matching platform with two applications in one repository:
+
+- `frontend/`: Next.js 16, React 19, Zustand, Tailwind CSS 4
+- `backend/`: NestJS 11, MongoDB, JWT auth, Firebase Admin SDK, Resend, reCAPTCHA
+
+This `README.md` is now the single project document. It starts with setup and local running, then moves into the full security, architecture, matching, and implementation guide that used to live in `SECURITY.md`.
+
+---
+
+## Table of Contents
+
+1. [Project Overview](#project-overview)
+2. [Repository Layout](#repository-layout)
+3. [Prerequisites](#prerequisites)
+4. [Installation](#installation)
+5. [Environment Variables](#environment-variables)
+6. [Running Locally](#running-locally)
+7. [Database Seed & Maintenance](#database-seed--maintenance)
+8. [Build, Lint, and Test Commands](#build-lint-and-test-commands)
+9. [Deployment Notes](#deployment-notes)
+10. [Detailed Architecture, Security, Matching, and Implementation Guide](#detailed-architecture-security-matching-and-implementation-guide)
+
+---
+
+## Project Overview
+
+GET A ROOF supports:
+
+- tenant onboarding, matching, map search, route-request messaging, and swipe-style exploration
+- landlord listing creation, property management, match review, messaging, and profile management
+- admin moderation, listing review, user actions, and operational oversight
+- Google sign-in via Firebase, email/password auth, OTP verification, JWT session cookies, and role-based access control
+
+The frontend talks to the backend over REST APIs. MongoDB stores users, properties, matches, messages, and moderation state. Firebase is used for Google identity verification. Resend is used for email delivery. reCAPTCHA is used for signup bot protection.
+
+## Repository Layout
+
+```text
+GET A ROOF/
+  backend/    NestJS API, Mongo models, auth, matching, admin logic, seed scripts
+  frontend/   Next.js app, Zustand store, route UI, dashboard UI, map/explore flows
+```
+
+Key application entry points:
+
+- `backend/src/main.ts`: NestJS bootstrap, validation, security middleware, CORS
+- `backend/src/app.module.ts`: backend module composition
+- `frontend/src/app/layout.tsx`: global app shell
+- `frontend/src/store/useAppStore.ts`: main client state, auth state, listing/match actions
+
+## Prerequisites
+
+You need:
+
+- `Node.js` 20 or newer
+- `npm`
+- MongoDB Atlas or a reachable MongoDB instance
+- Firebase project for Google auth
+- Google reCAPTCHA v3 keys
+- Resend API key for production email sending
+- Mapbox public token for map view
+
+## Installation
+
+### Backend
+
+```powershell
+cd backend
+npm install
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm install
+```
+
+## Environment Variables
+
+### Backend: `backend/.env`
+
+Required core variables:
+
+```env
+MONGODB_URI=
+JWT_SECRET=
+PORT=3001
+OTP_SECRET=
+RECAPTCHA_SECRET_KEY=
+RESEND_API_KEY=
+RESEND_FROM=
+```
+
+Firebase Admin variables:
+
+```env
+FIREBASE_PROJECT_ID=
+FIREBASE_CLIENT_EMAIL=
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
+
+Recommended operational variables:
+
+```env
+THROTTLE_TTL=60
+THROTTLE_LIMIT=100
+CORS_ORIGINS=http://localhost:3000,https://your-frontend-domain.example
+MAIL_FROM=no-reply@get-a-roof.com
+```
+
+Optional platform/service variables already used in this codebase include Appwrite storage, Termii, and mail fallbacks depending on environment.
+
+### Frontend: `frontend/.env.local`
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_MAPBOX_TOKEN=
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+```
+
+Notes:
+
+- `NEXT_PUBLIC_API_URL` should point to the backend base URL.
+- `NEXT_PUBLIC_MAPBOX_TOKEN` is required for map rendering and route requests.
+- Firebase web config must match the Firebase project used by the backend.
+- reCAPTCHA frontend and backend keys must be the same project/key pair and the correct version.
+
+## Running Locally
+
+### Start backend
+
+```powershell
+cd backend
+npm run start:dev
+```
+
+Backend default URL:
+
+```text
+http://localhost:3001
+```
+
+### Start frontend
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Frontend default URL:
+
+```text
+http://localhost:3000
+```
+
+Recommended local startup order:
+
+1. Start the backend first and confirm MongoDB connection.
+2. Start the frontend and confirm `NEXT_PUBLIC_API_URL` points at the backend.
+3. Log in with a seeded or existing account.
+4. Exercise core routes: `/explore`, `/matches`, `/messages`, `/dashboard/*`, `/admin/*`.
+
+## Database Seed & Maintenance
+
+Seed script:
+
+```powershell
+cd backend
+npm run seed
+```
+
+Common maintenance scripts:
+
+```powershell
+npm run cleanup:orphans
+npm run verify:listings
+```
+
+If seeding large datasets on Windows causes memory pressure, use a larger Node heap temporarily:
+
+```powershell
+$env:NODE_OPTIONS="--max-old-space-size=6144"
+npm run seed
+```
+
+Seeded credentials depend on the current seed file, but common development accounts used in this repository have included:
+
+- Landlord: `seunv0619@gmail.com / Victor1@seun`
+- Tenant: `tenant@getaroof.dev / Victor1@seun`
+- Tenant 2: `tenant2@getaroof.dev / Victor1@seun`
+
+Check `backend/src/seed.ts` if you need the exact current values.
+
+## Build, Lint, and Test Commands
+
+### Backend
+
+```powershell
+cd backend
+npm run build
+npm run test
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+Use these as the minimum validation set before pushing or deploying changes.
+
+## Deployment Notes
+
+Current deployment shape used in this project has included:
+
+- frontend on Vercel
+- backend on Render
+- MongoDB Atlas for persistence
+
+Production notes:
+
+- Render free instances can cold-start; they are functional but not ideal for low-latency production workloads.
+- In-memory caches help but reset on restart.
+- For stable performance, use an always-on backend and external cache if traffic grows.
+- Ensure frontend and backend origins are aligned in `CORS_ORIGINS` and frontend env values.
+
+## Detailed Architecture, Security, Matching, and Implementation Guide
 > **Audience**: Backend and frontend developers working on this codebase.  
 > **Last Updated**: March 2026  
-> **Stack**: NestJS (backend) · Next.js (frontend) · MongoDB · Firebase Admin SDK · JWT (Passport.js)
+> **Stack**: NestJS (backend) � Next.js (frontend) � MongoDB � Firebase Admin SDK � JWT (Passport.js)
 
 ---
 
@@ -41,8 +276,8 @@ GET A ROOF supports two authentication methods:
 Both methods issue a **signed JWT** upon success, which the frontend stores in an `HttpOnly`-equivalent cookie (`gar_session`) via a Next.js API route and also in memory (Zustand store) for API calls.
 
 ```
-User → Firebase (Google popup) → Firebase ID Token → POST /api/auth/google → JWT
-User → Email + Password Form  →                    → POST /api/auth/login  → JWT
+User ? Firebase (Google popup) ? Firebase ID Token ? POST /api/auth/google ? JWT
+User ? Email + Password Form  ?                    ? POST /api/auth/login  ? JWT
 ```
 
 ---
@@ -62,7 +297,7 @@ User → Email + Password Form  →                    → POST /api/auth/login 
 3. **Backend** (`backend/src/auth/firebase-admin.ts`) calls `getFirebaseAuth().verifyIdToken(token)`. This:
    - Validates the token's **cryptographic signature** against Firebase's public keys.
    - Verifies the token is not expired.
-   - Checks the `email_verified` claim — **unverified Google emails are rejected** with a 401.
+   - Checks the `email_verified` claim � **unverified Google emails are rejected** with a 401.
    - Extracts `email`, `name`, and `uid` from the decoded payload.
 
 4. Backend then upserts the user in MongoDB and issues a JWT.
@@ -74,24 +309,24 @@ User → Email + Password Form  →                    → POST /api/auth/login 
 | Token is authentic | Firebase Admin SDK verifies the RS256 signature |
 | Email is verified | `decoded.email_verified` is checked and enforced |
 | Token cannot be forged | Private key is never sent to the client |
-| `firebaseIdToken` is mandatory | DTO uses `@IsString() @IsNotEmpty()` — requests without it are rejected with 400 |
+| `firebaseIdToken` is mandatory | DTO uses `@IsString() @IsNotEmpty()` � requests without it are rejected with 400 |
 
 ### Key Files
 
-- `backend/src/auth/firebase-admin.ts` — initialises Firebase Admin SDK; handles private key parsing from `.env`
-- `backend/src/auth/auth.service.ts` → `resolveFirebaseIdentity()` — verifies token and extracts identity
-- `backend/src/auth/dto/google-login.dto.ts` — DTO requiring `firebaseIdToken`
-- `frontend/src/lib/firebase.ts` — client-side Firebase SDK and token retrieval
+- `backend/src/auth/firebase-admin.ts` � initialises Firebase Admin SDK; handles private key parsing from `.env`
+- `backend/src/auth/auth.service.ts` ? `resolveFirebaseIdentity()` � verifies token and extracts identity
+- `backend/src/auth/dto/google-login.dto.ts` � DTO requiring `firebaseIdToken`
+- `frontend/src/lib/firebase.ts` � client-side Firebase SDK and token retrieval
 
 ### Common Pitfall: Private Key Format
 
 The `FIREBASE_PRIVATE_KEY` in `.env` must be wrapped in double quotes with literal `\n` sequences:
 
 ```env
-# ✅ Correct
+# ? Correct
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----"
 
-# ❌ Wrong — double-escaped, key will be corrupted at runtime
+# ? Wrong � double-escaped, key will be corrupted at runtime
 FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\\nMIIE...
 ```
 
@@ -105,28 +340,28 @@ FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\\nMIIE...
 
 ```
 POST /api/users  (CreateUserDto)
-  └─ reCAPTCHA token verified (all roles)
-  └─ Email uniqueness checked
-  └─ Password bcrypt-hashed (cost factor 10)
-  └─ User saved with emailVerified: false
-  └─ Signup verification token (HMAC-SHA256) generated and emailed
-  └─ Returns PENDING_VERIFICATION response
+  +- reCAPTCHA token verified (all roles)
+  +- Email uniqueness checked
+  +- Password bcrypt-hashed (cost factor 10)
+  +- User saved with emailVerified: false
+  +- Signup verification token (HMAC-SHA256) generated and emailed
+  +- Returns PENDING_VERIFICATION response
 
-→ User submits OTP from email
+? User submits OTP from email
 POST /api/auth/verification/verify-email-otp
-  └─ Verifies OTP hash
-  └─ Sets emailVerified: true
-  └─ Issues JWT
+  +- Verifies OTP hash
+  +- Sets emailVerified: true
+  +- Issues JWT
 ```
 
 ### Login Flow
 
 ```
 POST /api/auth/login  (LoginDto: { email, password })
-  └─ User fetched by email (case-insensitive)
-  └─ bcrypt.compare(password, user.loginCredentials.passwordHash)
-  └─ Suspension check
-  └─ JWT issued
+  +- User fetched by email (case-insensitive)
+  +- bcrypt.compare(password, user.loginCredentials.passwordHash)
+  +- Suspension check
+  +- JWT issued
 ```
 
 ### Password Storage
@@ -158,13 +393,13 @@ JWTs are signed with `HS256` using the `JWT_SECRET` environment variable. The pa
 
 | Field | Purpose |
 |-------|---------|
-| `sub` | MongoDB User `_id` — used to fetch the user on every request |
+| `sub` | MongoDB User `_id` � used to fetch the user on every request |
 | `role` | User's role for RBAC checks |
-| `tv` | Token version — used for instant revocation (see §9) |
+| `tv` | Token version � used for instant revocation (see �9) |
 
 ### Token Expiry
 
-Tokens expire after **7 days** (configured in `backend/src/auth/auth.module.ts`). There is no refresh token mechanism — the user must re-authenticate after expiry.
+Tokens expire after **7 days** (configured in `backend/src/auth/auth.module.ts`). There is no refresh token mechanism � the user must re-authenticate after expiry.
 
 > If you add a refresh token system in the future, store the refresh token as a hashed value in MongoDB (same pattern as password reset tokens) and rotate on each use.
 
@@ -174,11 +409,11 @@ Every protected endpoint triggers `JwtStrategy.validate()` (`backend/src/auth/jw
 
 1. Extracts `sub` (userId) from the payload.
 2. **Fetches the user from MongoDB** (live check, not just token claims).
-3. **Rejects suspended users immediately** — `isSuspended: true` returns 401.
-4. **Checks token version** — if `payload.tv !== user.tokenVersion`, the token has been revoked.
+3. **Rejects suspended users immediately** � `isSuspended: true` returns 401.
+4. **Checks token version** � if `payload.tv !== user.tokenVersion`, the token has been revoked.
 5. Returns the user context (`sub`, `email`, `role`) to the request object.
 
-This live DB check on every request is intentional — it enables server-driven security (instant suspension/revocation) at the cost of one DB read per request.
+This live DB check on every request is intentional � it enables server-driven security (instant suspension/revocation) at the cost of one DB read per request.
 
 ---
 
@@ -194,11 +429,11 @@ OTPs are used for:
 | Property | Implementation |
 |----------|---------------|
 | **Not stored in plaintext** | HMAC-SHA256 hash stored: `createHmac("sha256", OTP_SECRET).update("email:{userId}:{otp}").digest("hex")` |
-| **6-digit, random** | `randomInt(100000, 1000000)` — uses `crypto.randomInt`, not `Math.random` |
-| **10-minute TTL** | `otpTtlMs = 10 * 60 * 1000` — expired OTPs are cleared on first access |
+| **6-digit, random** | `randomInt(100000, 1000000)` � uses `crypto.randomInt`, not `Math.random` |
+| **10-minute TTL** | `otpTtlMs = 10 * 60 * 1000` � expired OTPs are cleared on first access |
 | **Rate-limited attempts** | Max 5 attempts; after 5 wrong guesses the OTP is invalidated |
-| **Timing-safe comparison** | `timingSafeEqual()` used — prevents timing attacks |
-| **Channel scoping** | Hash includes channel (`email` / `phone`) — prevents cross-channel replay |
+| **Timing-safe comparison** | `timingSafeEqual()` used � prevents timing attacks |
+| **Channel scoping** | Hash includes channel (`email` / `phone`) � prevents cross-channel replay |
 
 ### OTP Secret
 
@@ -210,17 +445,17 @@ Set `OTP_SECRET` in `.env`. If unset, it falls back to `JWT_SECRET`. The fallbac
 
 ```
 POST /api/auth/request-password-reset  (email)
-  └─ User looked up silently (no error if email not found — prevents enumeration)
-  └─ Cryptographically random 32-char hex token generated
-  └─ Token HASHED with HMAC-SHA256 before DB storage
-  └─ Reset URL with raw token emailed to user
-  └─ Token expires in 1 hour
+  +- User looked up silently (no error if email not found � prevents enumeration)
+  +- Cryptographically random 32-char hex token generated
+  +- Token HASHED with HMAC-SHA256 before DB storage
+  +- Reset URL with raw token emailed to user
+  +- Token expires in 1 hour
 
 POST /api/auth/reset-password  (token, newPassword)
-  └─ Token hashed and looked up in DB (findByResetTokenHash)
-  └─ Expiry checked
-  └─ New password bcrypt-hashed
-  └─ Token cleared from DB
+  +- Token hashed and looked up in DB (findByResetTokenHash)
+  +- Expiry checked
+  +- New password bcrypt-hashed
+  +- Token cleared from DB
 ```
 
 ### Why Tokens Are Hashed
@@ -287,9 +522,9 @@ const recaptchaToken = await grecaptcha.execute(siteKey, { action: "tenant_signu
 
 `UsersService.assertRecaptchaToken()` (`backend/src/users/users.service.ts`):
 1. POSTs the token to Google's verification endpoint.
-2. Checks `result.success` — if false, throws 400.
-3. Checks `result.action` — must be `tenant_signup` or `landlord_signup` (configurable via `RECAPTCHA_EXPECTED_ACTION`).
-4. Checks `result.score` — must be ≥ 0.5 (configurable via `RECAPTCHA_MIN_SCORE`).
+2. Checks `result.success` � if false, throws 400.
+3. Checks `result.action` � must be `tenant_signup` or `landlord_signup` (configurable via `RECAPTCHA_EXPECTED_ACTION`).
+4. Checks `result.score` � must be = 0.5 (configurable via `RECAPTCHA_MIN_SCORE`).
 
 ### Environment Variables
 
@@ -334,8 +569,8 @@ New JWTs issued after the increment will carry `tv: 1` and will pass validation.
 ### Backend
 
 Two guards work together:
-- `JwtAuthGuard` (`backend/src/common/guards/jwt-auth.guard.ts`) — validates the JWT and populates `req.user`.
-- `RolesGuard` (`backend/src/common/guards/roles.guard.ts`) — checks `req.user.role` against the `@Roles()` decorator.
+- `JwtAuthGuard` (`backend/src/common/guards/jwt-auth.guard.ts`) � validates the JWT and populates `req.user`.
+- `RolesGuard` (`backend/src/common/guards/roles.guard.ts`) � checks `req.user.role` against the `@Roles()` decorator.
 
 Usage pattern:
 
@@ -355,7 +590,7 @@ Available roles (`backend/src/common/enums.ts`): `Tenant`, `Landlord`, `Admin`, 
 2. Redirects unauthenticated users to `/login`.
 3. Enforces role-based routing (e.g., landlords can't access `/explore`, tenants can't access `/dashboard`).
 
-> The frontend middleware is a UX guard only. **Always enforce permissions on the backend** — the frontend can be bypassed.
+> The frontend middleware is a UX guard only. **Always enforce permissions on the backend** � the frontend can be bypassed.
 
 ---
 
@@ -411,7 +646,7 @@ Profile photo uploads (`POST /api/users/:id/photo`) are validated in `UsersServi
 
 - **MIME type whitelist**: Only `image/jpeg`, `image/png`, `image/webp`, `image/gif` are accepted.
 - **Size limit**: Multer is configured with a maximum file size.
-- Files are uploaded to **Appwrite Storage** — they are never stored on the backend server's filesystem.
+- Files are uploaded to **Appwrite Storage** � they are never stored on the backend server's filesystem.
 
 ---
 
@@ -421,14 +656,14 @@ Profile photo uploads (`POST /api/users/:id/photo`) are validated in `UsersServi
 
 | Variable | Purpose | Required |
 |----------|---------|----------|
-| `JWT_SECRET` | Signs and verifies JWTs | ✅ |
-| `MONGODB_URI` | Database connection string | ✅ |
-| `FIREBASE_PROJECT_ID` | Firebase Admin SDK | ✅ |
-| `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK | ✅ |
-| `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK | ✅ |
-| `RECAPTCHA_SECRET_KEY` | reCAPTCHA v3 verification | ✅ |
+| `JWT_SECRET` | Signs and verifies JWTs | ? |
+| `MONGODB_URI` | Database connection string | ? |
+| `FIREBASE_PROJECT_ID` | Firebase Admin SDK | ? |
+| `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK | ? |
+| `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK | ? |
+| `RECAPTCHA_SECRET_KEY` | reCAPTCHA v3 verification | ? |
 | `OTP_SECRET` | HMAC key for OTP hashing | Recommended |
-| `RESEND_API_KEY` | Transactional email | ✅ |
+| `RESEND_API_KEY` | Transactional email | ? |
 | `THROTTLE_TTL` | Rate limit window in seconds | Optional (default: 60) |
 | `THROTTLE_LIMIT` | Max requests per window | Optional (default: 100) |
 
@@ -442,7 +677,7 @@ Profile photo uploads (`POST /api/users/:id/photo`) are validated in `UsersServi
 
 ### Rules
 
-- **Never commit `.env` files** — both `.gitignore` files exclude them correctly.
+- **Never commit `.env` files** � both `.gitignore` files exclude them correctly.
 - **Never expose `FIREBASE_PRIVATE_KEY` or `JWT_SECRET` to the client**.
 - Rotate `JWT_SECRET` by incrementing all users' `tokenVersion` first (to invalidate existing tokens), changing the secret, then deploying.
 
@@ -463,7 +698,7 @@ When the backend returns `401` or `403`, `apiFetch()` in `frontend/src/lib/api.t
 
 ### Location Permission
 
-Location is requested via `navigator.geolocation` after login. This is **optional** — if the user denies it, they can still use the app. Location denial is silently caught and the redirect to `/explore` or `/dashboard` proceeds normally. Location-based features (nearby listings, map view) will simply not show distance-sorted results.
+Location is requested via `navigator.geolocation` after login. This is **optional** � if the user denies it, they can still use the app. Location denial is silently caught and the redirect to `/explore` or `/dashboard` proceeds normally. Location-based features (nearby listings, map view) will simply not show distance-sorted results.
 
 ---
 
@@ -484,54 +719,54 @@ When adding a new backend endpoint, go through this checklist:
 ## Appendix: Architecture Diagram
 
 ```
-                        ┌─────────────────────────────┐
-                        │        FRONTEND (Next.js)    │
-                        │                              │
-                        │  Pages → Zustand Store       │
-                        │  middleware.ts (JWT verify)  │
-                        │  /api/auth/session (cookie)  │
-                        └────────────┬────────────────┘
-                                     │ HTTPS
-                        ┌────────────▼────────────────┐
-                        │       BACKEND (NestJS)       │
-                        │                              │
-                        │  ThrottlerGuard (rate limit) │
-                        │  ValidationPipe (DTO)        │
-                        │  mongo-sanitize (NoSQL)      │
-                        │  Helmet (HTTP headers)       │
-                        │                              │
-                        │  ┌──────────────────────┐   │
-                        │  │  AuthController       │   │
-                        │  │  - POST /login        │   │
-                        │  │  - POST /google       │   │
-                        │  │  - POST /otp          │   │
-                        │  │  - POST /reset        │   │
-                        │  └──────────┬───────────┘   │
-                        │             │               │
-                        │  ┌──────────▼───────────┐   │
-                        │  │  JwtStrategy          │   │
-                        │  │  - DB user fetch      │   │
-                        │  │  - Suspension check   │   │
-                        │  │  - TokenVersion check │   │
-                        │  └──────────┬───────────┘   │
-                        │             │               │
-                        │  ┌──────────▼───────────┐   │
-                        │  │  Match Engine         │   │
-                        │  │  - 5-dim scoring      │   │
-                        │  │  - State machine      │   │
-                        │  │  - Smart recycling    │   │
-                        │  │  - Pagination         │   │
-                        │  └──────────┬───────────┘   │
-                        └────────────┼────────────────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                       │
-   ┌──────────▼──────────┐  ┌───────▼────────┐  ┌─────────▼────────┐
-   │   MongoDB (Mongoose) │  │ Firebase Admin │  │  Google reCAPTCHA│
-   │   - Users            │  │ (token verify) │  │  (bot protection)│
-   │   - Properties       │  └────────────────┘  └──────────────────┘
-   │   - Matches          │
-   └─────────────────────┘
+                        +-----------------------------+
+                        �        FRONTEND (Next.js)    �
+                        �                              �
+                        �  Pages ? Zustand Store       �
+                        �  middleware.ts (JWT verify)  �
+                        �  /api/auth/session (cookie)  �
+                        +-----------------------------+
+                                     � HTTPS
+                        +------------?----------------+
+                        �       BACKEND (NestJS)       �
+                        �                              �
+                        �  ThrottlerGuard (rate limit) �
+                        �  ValidationPipe (DTO)        �
+                        �  mongo-sanitize (NoSQL)      �
+                        �  Helmet (HTTP headers)       �
+                        �                              �
+                        �  +----------------------+   �
+                        �  �  AuthController       �   �
+                        �  �  - POST /login        �   �
+                        �  �  - POST /google       �   �
+                        �  �  - POST /otp          �   �
+                        �  �  - POST /reset        �   �
+                        �  +----------------------+   �
+                        �             �               �
+                        �  +----------?-----------+   �
+                        �  �  JwtStrategy          �   �
+                        �  �  - DB user fetch      �   �
+                        �  �  - Suspension check   �   �
+                        �  �  - TokenVersion check �   �
+                        �  +----------------------+   �
+                        �             �               �
+                        �  +----------?-----------+   �
+                        �  �  Match Engine         �   �
+                        �  �  - 5-dim scoring      �   �
+                        �  �  - State machine      �   �
+                        �  �  - Smart recycling    �   �
+                        �  �  - Pagination         �   �
+                        �  +----------------------+   �
+                        +------------+----------------+
+                                     �
+              +----------------------+----------------------+
+              �                      �                       �
+   +----------?----------+  +-------?--------+  +---------?--------+
+   �   MongoDB (Mongoose) �  � Firebase Admin �  �  Google reCAPTCHA�
+   �   - Users            �  � (token verify) �  �  (bot protection)�
+   �   - Properties       �  +----------------+  +------------------+
+   �   - Matches          �
+   +---------------------+
 ```
 
 ---
@@ -544,7 +779,7 @@ This section documents the matching algorithm used to score tenant-property comp
 
 | File | Purpose |
 |------|---------|
-| `backend/src/common/utils/match.utils.ts` | Core scoring engine — all score computations |
+| `backend/src/common/utils/match.utils.ts` | Core scoring engine � all score computations |
 | `backend/src/matches/matches.service.ts` | Match CRUD, state machine, recycling logic |
 | `backend/src/matches/matches.controller.ts` | REST endpoints |
 | `backend/src/matches/schemas/match.schema.ts` | MongoDB schema with indexes |
@@ -557,11 +792,11 @@ This section documents the matching algorithm used to score tenant-property comp
 Every match is scored across **five weighted dimensions**:
 
 ```
-matchScore = preferences × 0.30
-           + apartmentType × 0.20
-           + location × 0.25
-           + amenity × 0.10
-           + affordability × 0.15
+matchScore = preferences � 0.30
+           + apartmentType � 0.20
+           + location � 0.25
+           + amenity � 0.10
+           + affordability � 0.15
 ```
 
 Weights are configurable via the `DEFAULT_MATCH_WEIGHTS` constant in `match.utils.ts`.
@@ -592,13 +827,13 @@ Uses the **haversine formula** to calculate the great-circle distance (in km) be
 
 | Distance (% of max radius) | Score |
 |-----------------------------|-------|
-| ≤ 25% | **100** — very close |
-| ≤ 50% | **85** |
-| ≤ 75% | **65** |
-| ≤ 100% | **40** — at the edge |
-| ≤ 150% | **20** — slightly beyond |
-| > 150% | **10** — far |
-| No coordinates available | **50** — neutral (no penalty) |
+| = 25% | **100** � very close |
+| = 50% | **85** |
+| = 75% | **65** |
+| = 100% | **40** � at the edge |
+| = 150% | **20** � slightly beyond |
+| > 150% | **10** � far |
+| No coordinates available | **50** � neutral (no penalty) |
 
 Default max radius: 20 km if tenant has not specified `maxCommuteRadius`.
 
@@ -607,7 +842,7 @@ Default max radius: 20 km if tenant has not specified `maxCommuteRadius`.
 Compares the tenant's `desiredAmenities` list against the property's `amenities` array:
 
 ```
-amenityScore = (matching amenities / total desired amenities) × 100
+amenityScore = (matching amenities / total desired amenities) � 100
 ```
 
 | Scenario | Score |
@@ -619,14 +854,14 @@ amenityScore = (matching amenities / total desired amenities) × 100
 
 #### 17.1.4 Affordability Gradient
 
-Based on the **rent-to-income ratio** (monthly rent ÷ (annual earnings / 12 / 3)):
+Based on the **rent-to-income ratio** (monthly rent � (annual earnings / 12 / 3)):
 
 | Ratio of rent to affordable threshold | Score | Meaning |
 |---------------------------------------|-------|---------|
-| ≤ 80% | **100** | Comfortably affordable |
-| ≤ 100% | **80** | Affordable |
-| ≤ 120% | **50** | Stretch |
-| ≤ 150% | **20** | Difficult |
+| = 80% | **100** | Comfortably affordable |
+| = 100% | **80** | Affordable |
+| = 120% | **50** | Stretch |
+| = 150% | **20** | Difficult |
 | > 150% | **0** | Unaffordable |
 | No income/price data | **50** | Neutral |
 
@@ -634,7 +869,7 @@ Based on the **rent-to-income ratio** (monthly rent ÷ (annual earnings / 12 / 3
 
 Compares landlord's `idealTenantPreferences` against the tenant's profile across: `employmentStatus`, `maritalStatus`, `vehicles`, `smokingHabits`, `drinkingHabits`, `religionPreference`, `educationLevel`, `socialHabits`, `hasChildren`. Also checks income range and pet compatibility.
 
-Score = `(matched criteria / considered criteria) × 100`. If no requirements are set, defaults to 100%.
+Score = `(matched criteria / considered criteria) � 100`. If no requirements are set, defaults to 100%.
 
 ---
 
@@ -643,25 +878,25 @@ Score = `(matched criteria / considered criteria) × 100`. If no requirements ar
 Matches follow a strict state machine. Invalid transitions are rejected with `400 Bad Request`.
 
 ```
-                    ┌─────────────────┐
-                    │   TenantLiked   │
-                    └──┬──────┬───┬──┘
-                       │      │   │
-         ┌─────────────▼──┐   │   │
-         │ LandlordQualified│   │   │
-         └──┬─────────────┘   │   │
-            │                 │   │
-    ┌───────▼──────┐         │   │
-    │ ChatInitiated │◄────────┘   │
-    └──────┬───────┘              │
-           │                      │
-    ┌──────▼──────────────────────▼──┐
-    │           Dismissed            │
-    │   (Soft → recyclable)          │
-    │   (Hard → permanent block)     │
-    └────────────┬──────────────────┘
-                 │ recycle (Soft only)
-                 ▼
+                    +-----------------+
+                    �   TenantLiked   �
+                    +----------------+
+                       �      �   �
+         +-------------?--+   �   �
+         � LandlordQualified�   �   �
+         +----------------+   �   �
+            �                 �   �
+    +-------?------+         �   �
+    � ChatInitiated �?--------+   �
+    +--------------+              �
+           �                      �
+    +------?----------------------?--+
+    �           Dismissed            �
+    �   (Soft ? recyclable)          �
+    �   (Hard ? permanent block)     �
+    +-------------------------------+
+                 � recycle (Soft only)
+                 ?
            TenantLiked (recycled)
 ```
 
@@ -672,7 +907,7 @@ Matches follow a strict state machine. Invalid transitions are rejected with `40
 | `ChatInitiated` | `Dismissed` |
 | `Dismissed` | `TenantLiked` (recycling path only) |
 
-**Auto-qualification**: If a tenant likes a property and the `matchScore ≥ 70`, the status is automatically set to `LandlordQualified` (skipping the landlord review step).
+**Auto-qualification**: If a tenant likes a property and the `matchScore = 70`, the status is automatically set to `LandlordQualified` (skipping the landlord review step).
 
 ---
 
@@ -685,7 +920,7 @@ When a tenant runs out of new properties to swipe, dismissed listings can be rec
 | Type | Enum | Behaviour |
 |------|------|-----------|
 | **Soft dismiss** | `DismissReason.Soft` | Recyclable after a 14-day cooldown |
-| **Hard block** | `DismissReason.Hard` | Permanently excluded — never re-shown |
+| **Hard block** | `DismissReason.Hard` | Permanently excluded � never re-shown |
 
 Default dismiss is `Soft` unless the tenant explicitly calls the hard-block endpoint.
 
@@ -701,11 +936,11 @@ Within each tier, matches are sorted by `matchScore` descending.
 #### Recycling Flow
 
 ```
-Tenant dismisses property → dismissedAt = now, dismissReason = Soft
+Tenant dismisses property ? dismissedAt = now, dismissReason = Soft
   ... 14+ days pass ...
-GET /api/matches/tenant/recycled → returns recyclable matches
-  → Tenant decides to re-like
-POST /api/matches/:id/recycle → status → TenantLiked, recycleCount++
+GET /api/matches/tenant/recycled ? returns recyclable matches
+  ? Tenant decides to re-like
+POST /api/matches/:id/recycle ? status ? TenantLiked, recycleCount++
 ```
 
 Each match tracks `recycleCount` to monitor how many times it has been re-shown.
@@ -719,12 +954,12 @@ Each match tracks `recycleCount` to monitor how many times it has been re-shown.
 | `tenantId` | ObjectId | Tenant who swiped |
 | `propertyId` | ObjectId | Property that was swiped |
 | `status` | MatchStatus | Current state (see state machine) |
-| `matchScore` | Number | Composite weighted score (0–100) |
+| `matchScore` | Number | Composite weighted score (0�100) |
 | `preferencesMatchPercentage` | Number | Landlord requirement match % |
 | `apartmentPreferenceMatchPercentage` | Number | Property type match % |
-| `locationScore` | Number | Geo proximity score (0–100) |
-| `amenityScore` | Number | Amenity overlap score (0–100) |
-| `affordabilityScore` | Number | Rent-to-income affordability (0–100) |
+| `locationScore` | Number | Geo proximity score (0�100) |
+| `amenityScore` | Number | Amenity overlap score (0�100) |
+| `affordabilityScore` | Number | Rent-to-income affordability (0�100) |
 | `dismissedAt` | Date | When the match was dismissed |
 | `dismissReason` | DismissReason | Soft (recyclable) or Hard (permanent) |
 | `recycleCount` | Number | How many times this match was recycled |
@@ -760,12 +995,12 @@ All list endpoints support **pagination** (`?page=1&limit=20`, max 100 per page)
 
 All match queries use **native ObjectId comparisons** (not `$toString`/`$expr`), which allows MongoDB to fully utilise the compound indexes defined above. This is critical for query performance at scale.
 
-**Before** (slow — full collection scan):
+**Before** (slow � full collection scan):
 ```javascript
 $expr: { $eq: [{ $toString: "$propertyId" }, propertyIdString] }
 ```
 
-**After** (fast — uses index):
+**After** (fast � uses index):
 ```javascript
 { propertyId: new Types.ObjectId(propertyId) }
 ```

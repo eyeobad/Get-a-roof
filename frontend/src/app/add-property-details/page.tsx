@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 import { useToastError } from "@/hooks/useToastError";
+import { getCitiesForState, NIGERIA_STATES } from "@/lib/nigeriaLocations";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -21,6 +22,8 @@ export default function AddPropertyDetailsPage() {
 
   const [initialized, setInitialized] = useState(false);
   const [location, setLocation] = useState("");
+  const [stateValue, setStateValue] = useState("");
+  const [cityValue, setCityValue] = useState("");
   const [rent, setRent] = useState("");
   const [propertyType, setPropertyType] = useState("");
   const [listingIntent, setListingIntent] = useState<"Rent" | "Shortlet">("Rent");
@@ -49,6 +52,7 @@ export default function AddPropertyDetailsPage() {
 
   const bedOptions = useMemo(() => [1, 2, 3, 4, 5], []);
   const bathOptions = useMemo(() => [1, 2, 3, 4], []);
+  const cityOptions = useMemo(() => getCitiesForState(stateValue), [stateValue]);
   
   const amenityOptions = useMemo(() => [
     { label: "Local Laundry Service", icon: "local_laundry_service" },
@@ -66,6 +70,8 @@ export default function AddPropertyDetailsPage() {
     if (initialized) return;
 
     if (draft.address?.street) setLocation(draft.address.street);
+    if (draft.address?.state) setStateValue(draft.address.state);
+    if (draft.address?.city) setCityValue(draft.address.city);
     if (draft.monthlyPrice) setRent(String(Math.round(draft.monthlyPrice * 12)));
     if (draft.propertyType) setPropertyType(draft.propertyType);
     if (draft.listingIntent === "Shortlet" || draft.listingIntent === "Rent") {
@@ -120,7 +126,17 @@ export default function AddPropertyDetailsPage() {
     const isAdvancing = Boolean(nextPath);
     if (isAdvancing) {
       if (!location.trim()) {
-        setError("Location is required.");
+        setError("Street address is required.");
+        setIsSaving(false);
+        return;
+      }
+      if (!stateValue.trim()) {
+        setError("State is required.");
+        setIsSaving(false);
+        return;
+      }
+      if (!cityValue.trim()) {
+        setError("City is required.");
         setIsSaving(false);
         return;
       }
@@ -163,6 +179,8 @@ export default function AddPropertyDetailsPage() {
       amenities: amenities.length ? amenities : undefined,
       address: {
         street: location || undefined,
+        city: cityValue || undefined,
+        state: stateValue || undefined,
         lat: isNaN(latNum) ? undefined : latNum,
         lng: isNaN(lngNum) ? undefined : lngNum,
       },
@@ -250,11 +268,48 @@ export default function AddPropertyDetailsPage() {
                 <span className="pl-4 pr-2 text-[#0a44b8] material-symbols-outlined text-2xl" style={solidIconStyle}>location_on</span>
                 <input
                   type="text"
-                  placeholder="Street address, City"
+                  placeholder="Street address"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full bg-transparent py-4 pr-4 outline-none text-lg font-medium"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="relative input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                  <select
+                    value={stateValue}
+                    onChange={(e) => {
+                      setStateValue(e.target.value);
+                      setCityValue("");
+                    }}
+                    className="w-full bg-transparent py-4 px-5 outline-none text-base font-medium cursor-pointer"
+                  >
+                    <option value="">Select state</option>
+                    {NIGERIA_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-gray-400">expand_more</span>
+                </div>
+                <div className="relative input-active-ring rounded-2xl bg-gray-50 border border-gray-200">
+                  <select
+                    value={cityValue}
+                    onChange={(e) => setCityValue(e.target.value)}
+                    disabled={!stateValue}
+                    className="w-full bg-transparent py-4 px-5 outline-none text-base font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">{stateValue ? "Select city" : "Select state first"}</option>
+                    {cityOptions.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined pointer-events-none text-gray-400">expand_more</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

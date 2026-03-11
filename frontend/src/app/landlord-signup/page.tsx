@@ -51,7 +51,7 @@ function SignUpContent() {
         return;
       }
       captureUserLocation().catch(() => { });
-      router.push("/dashboard/properties");
+      router.push("/dashboard/overview");
     } catch (err) {
       if (!hasShownErrorToast(err)) {
         showToast({ title: getApiErrorMessage(err), variant: "error" });
