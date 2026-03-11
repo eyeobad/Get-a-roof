@@ -145,6 +145,7 @@ export default function ExploreCards() {
   const swipeLockRef = useRef(false);
   const prefetchInFlightRef = useRef(false);
   const preloadedImageUrlsRef = useRef(new Set<string>());
+  const lastVisibleCardsRef = useRef<Listing[]>([]);
 
   const controls = useAnimation();
 
@@ -176,6 +177,19 @@ export default function ExploreCards() {
       .map((id) => listingsById[id])
       .filter((listing): listing is Listing => Boolean(listing));
   }, [renderableQueue, listingsById]);
+
+  useEffect(() => {
+    if (visibleCards.length > 0) {
+      lastVisibleCardsRef.current = visibleCards;
+    }
+  }, [visibleCards]);
+
+  const cardsToRender =
+    visibleCards.length > 0
+      ? visibleCards
+      : isLoadingListings && lastVisibleCardsRef.current.length > 0
+        ? lastVisibleCardsRef.current
+        : [];
 
   useEffect(() => {
     if (renderableQueue.length === exploreQueue.length) return;
@@ -286,6 +300,17 @@ export default function ExploreCards() {
   ]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (process.env.NODE_ENV !== "development") return;
+    console.debug("[explore-deck]", {
+      queueLength: exploreQueue.length,
+      renderableQueueLength: renderableQueue.length,
+      visibleCardsLength: visibleCards.length,
+      listingsCount: Object.keys(listingsById).length,
+    });
+  }, [exploreQueue.length, renderableQueue.length, visibleCards.length, listingsById]);
+
+  useEffect(() => {
     const upcomingCards = renderableQueue
       .slice(3, 3 + PRELOAD_LOOKAHEAD)
       .map((id) => listingsById[id])
@@ -302,18 +327,26 @@ export default function ExploreCards() {
   }, [renderableQueue, listingsById]);
 
   useEffect(() => {
-    if (exploreQueue.length > 0) {
+    if (renderableQueue.length > 0) {
       hasLoopedFromMemoryRef.current = false;
       return;
     }
     if (isRecyclingDeckRef.current || recycleAttempted) return;
 
     let active = true;
+    setIsLoadingListings(true);
     isRecyclingDeckRef.current = true;
 
     void loadRecycledIntoExplore()
       .then(async (restored) => {
         if (!active) return;
+        if (restored) {
+          await loadExploreListings(activeExploreFilters, { append: true });
+          if (!active) return;
+          setIsLoadingListings(false);
+          return;
+        }
+
         if (!restored) {
           const cachedIds = Object.keys(listingsById);
           if (cachedIds.length > 0 && !hasLoopedFromMemoryRef.current) {
@@ -322,30 +355,14 @@ export default function ExploreCards() {
             return;
           }
           setIsLoadingListings(true);
-          await loadExploreListings({
-            budget: filters.budget,
-            distance: filters.distance,
-            propertyType: filters.propertyType,
-            listingIntent: filters.listingIntent,
-            toggles: filters.toggles,
-          });
+          await loadExploreListings(activeExploreFilters);
+          if (!active) return;
           setIsLoadingListings(false);
-          const nextQueueLength = useAppStore.getState().exploreQueue.length;
-          if (nextQueueLength === 0) {
-            setRecycleAttempted(true);
-          }
-        } else {
-          setIsLoadingListings(true);
-          await loadExploreListings({
-            budget: filters.budget,
-            distance: filters.distance,
-            propertyType: filters.propertyType,
-            listingIntent: filters.listingIntent,
-            toggles: filters.toggles,
-          });
-          setIsLoadingListings(false);
-          const nextQueueLength = useAppStore.getState().exploreQueue.length;
-          if (nextQueueLength === 0) {
+          const nextRenderableQueueLength = useAppStore
+            .getState()
+            .exploreQueue.filter((id) => Boolean(useAppStore.getState().listingsById[id]))
+            .length;
+          if (nextRenderableQueueLength === 0) {
             setRecycleAttempted(true);
           }
         }
@@ -363,23 +380,19 @@ export default function ExploreCards() {
       active = false;
     };
   }, [
-    exploreQueue.length,
+    renderableQueue.length,
     recycleAttempted,
     loadRecycledIntoExplore,
     loadExploreListings,
     resetExploreQueue,
     listingsById,
-    filters.budget,
-    filters.distance,
-    filters.propertyType,
-    filters.listingIntent,
-    filters.toggles,
+    activeExploreFilters,
   ]);
 
   const handleSwipe = async (direction: "left" | "right") => {
-    if (swipeLockRef.current || isSwipeAnimating || visibleCards.length === 0) return;
+    if (swipeLockRef.current || isSwipeAnimating || cardsToRender.length === 0) return;
 
-    const topListing = visibleCards[0];
+    const topListing = cardsToRender[0];
     if (!topListing) return;
 
     swipeLockRef.current = true;
@@ -555,7 +568,7 @@ export default function ExploreCards() {
         <div className="relative w-full h-[min(68dvh,680px)] min-h-[500px] md:h-[650px]">
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence>
-              {visibleCards.map((card, index) => (
+              {cardsToRender.map((card, index) => (
                 <CardItem
                   key={card.id}
                   index={index}
@@ -570,7 +583,7 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {visibleCards.length === 0 && isLoadingListings && (
+        {cardsToRender.length === 0 && isLoadingListings && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">hourglass_empty</span>
             <h3 className="text-xl font-bold text-gray-700">Loading listings</h3>
@@ -578,7 +591,7 @@ export default function ExploreCards() {
           </div>
         )}
 
-        {visibleCards.length === 0 && recycleAttempted && !isLoadingListings && (
+        {cardsToRender.length === 0 && recycleAttempted && !isLoadingListings && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>
@@ -597,7 +610,7 @@ export default function ExploreCards() {
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
-          disabled={isSwipeAnimating || visibleCards.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0}
           className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
@@ -606,7 +619,7 @@ export default function ExploreCards() {
 
         <button
           onClick={() => handleSwipe("right")}
-          disabled={isSwipeAnimating || visibleCards.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0}
           className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-70"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>

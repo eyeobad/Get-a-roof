@@ -560,6 +560,8 @@ const formatTime = (value?: string) => {
 };
 
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
+let exploreRequestSequence = 0;
+let latestExploreReplaceRequestId = 0;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const apiFetchWithRetry = async <T>(
@@ -673,7 +675,7 @@ const mapPropertyToListing = (property: ApiProperty): Listing => {
 
   return {
     id: propertyId,
-    image: property?.images?.[0] ?? "/hero.png",
+    image: property?.images?.[0] || "/hero.png",
     images: property?.images ?? undefined,
     amenities: property?.amenities ?? undefined,
     price: formatCurrency(annualPrice),
@@ -1355,6 +1357,11 @@ export const useAppStore = create<AppState>()(
           set({ listingsById: listingMap, exploreQueue: initialQueue });
           return;
         }
+        const requestId = ++exploreRequestSequence;
+        const append = Boolean(options?.append);
+        if (!append) {
+          latestExploreReplaceRequestId = requestId;
+        }
         const tenantPrefs = state.user?.preferences?.tenant;
         const preferredDistance =
           filters?.preferredDistance ??
@@ -1399,7 +1406,13 @@ export const useAppStore = create<AppState>()(
         }, {});
 
         const queue = listings.map((listing) => listing.id);
-        const append = Boolean(options?.append);
+
+        if (!append && requestId !== latestExploreReplaceRequestId) {
+          return;
+        }
+        if (append && requestId < latestExploreReplaceRequestId) {
+          return;
+        }
 
         set((prev) => {
           if (!append) {
@@ -1462,11 +1475,36 @@ export const useAppStore = create<AppState>()(
           }).catch(() => null);
         }
 
-        const clearedPropertyIds = recyclableMatches.map(m => toIdString(m.property?._id) || toIdString(m.property?.id)).filter(Boolean);
+        const recycledListings = recyclableMatches
+          .map((match) => (match.property ? mapPropertyToListing(match.property) : null))
+          .filter((listing): listing is Listing => Boolean(listing));
+        if (recycledListings.length === 0) {
+          return false;
+        }
 
-        set({
-          passedIds: get().passedIds.filter(id => !clearedPropertyIds.includes(id)),
-          likedIds: get().likedIds.filter(id => !clearedPropertyIds.includes(id)),
+        const recycledIds = recycledListings.map((listing) => listing.id);
+        const recycledMap = recycledListings.reduce<Record<string, Listing>>((acc, listing) => {
+          acc[listing.id] = listing;
+          return acc;
+        }, {});
+
+        set((prev) => {
+          const filteredExistingQueue = prev.exploreQueue.filter(
+            (id) => !recycledIds.includes(id)
+          );
+          const nextQueue = [...recycledIds, ...filteredExistingQueue];
+          const nextSelected =
+            nextQueue.includes(prev.selectedListingId ?? "")
+              ? prev.selectedListingId
+              : nextQueue[0] ?? null;
+
+          return {
+            listingsById: { ...prev.listingsById, ...recycledMap },
+            exploreQueue: nextQueue,
+            selectedListingId: nextSelected,
+            passedIds: prev.passedIds.filter((id) => !recycledIds.includes(id)),
+            likedIds: prev.likedIds.filter((id) => !recycledIds.includes(id)),
+          };
         });
 
         return true;
