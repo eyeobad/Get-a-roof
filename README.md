@@ -1151,3 +1151,20 @@ Relevant files:
 - `frontend/src/store/useAppStore.ts`
 - `backend/src/properties/properties.controller.ts`
 - `backend/src/properties/properties.service.ts`
+
+### 18.8 Explore Swipe Stability, Recycle Caps, and Deterministic Map Loading
+
+Long swipe sessions were hardened to prevent deck deadlocks and card-stack corruption, and map loading placeholders were made deterministic to satisfy React purity and linting.
+
+Implemented:
+
+- Fixed Explore recycle lock cleanup so background recycle/load cannot leave actions permanently disabled
+- Capped recycle loops (`MAX_RECYCLE_CYCLES = 2`) to avoid endless recycling while still extending long sessions
+- Stabilized front-card transitions by resetting motion/lock state on top-card identity change
+- Removed stale-card fallback rendering and ensured top-stack IDs are unique to prevent duplicate/stacked ghost cards
+- Improved Explore skeleton card with richer, card-accurate placeholders and shimmer loading treatment
+- Replaced render-time `Math.random()` usage in Map View with deterministic hash-based values for stable skeleton marker placement and similarity sorting
+
+Relevant files:
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/app/map-view/page.tsx`

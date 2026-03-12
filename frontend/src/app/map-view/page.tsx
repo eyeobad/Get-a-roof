@@ -108,6 +108,7 @@ const buildDisplayAddress = (address: string, neighborhood?: string) => {
 
 const randomizedSimilaritySort = <
   T extends {
+    id?: string;
     matchScore?: number;
     preferencesMatchPercentage?: number;
     apartmentPreferenceMatchPercentage?: number;
@@ -123,17 +124,18 @@ const randomizedSimilaritySort = <
     0;
 
   return [...items]
-    .map((item) => {
+    .map((item, index) => {
       const score =
         item.matchScore ??
         item.preferencesMatchPercentage ??
         item.apartmentPreferenceMatchPercentage ??
         0;
       const diff = Math.abs(score - targetScore);
+      const stableId = item.id ?? `idx-${index}`;
       return {
         item,
         bucket: Math.floor(diff / 5),
-        tieBreaker: Math.random(),
+        tieBreaker: hashString(`${stableId}:${score}`),
       };
     })
     .sort((a, b) => {
@@ -174,25 +176,104 @@ function EmptyState({
 function LoadingState({ label = "Loading properties..." }: { label?: string }) {
   return (
     <div className="w-full p-4">
-      <div className="mx-auto w-full max-w-sm animate-pulse rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm">
-        <div className="h-40 w-full rounded-2xl bg-slate-200" />
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="space-y-2">
-            <div className="h-6 w-28 rounded-full bg-slate-200" />
-            <div className="h-4 w-36 rounded-full bg-slate-100" />
+      <div className="mx-auto w-full max-w-md overflow-hidden rounded-[28px] border border-slate-200 bg-white/95 shadow-xl">
+        <div className="animate-pulse">
+          <div className="relative h-48 w-full overflow-hidden bg-slate-200">
+            <div className="absolute left-4 top-4 h-8 w-24 rounded-full bg-white/70" />
+            <div className="absolute right-4 top-4 flex flex-col gap-2">
+              <div className="h-10 w-10 rounded-full bg-white/70" />
+              <div className="h-10 w-10 rounded-full bg-white/60" />
+            </div>
+            <div className="absolute bottom-4 left-4 h-24 w-24 rounded-full bg-[#0a44b8]/10 blur-xl" />
           </div>
-          <div className="h-10 w-10 rounded-full bg-slate-100" />
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <div className="h-12 rounded-2xl bg-slate-100" />
-          <div className="h-12 rounded-2xl bg-slate-100" />
-          <div className="h-12 rounded-2xl bg-slate-100" />
-        </div>
-        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-slate-400">
-          <div className="h-2 w-2 rounded-full bg-slate-300" />
-          <span>{label}</span>
+          <div className="space-y-4 p-4">
+            <div className="flex items-start gap-3">
+              <div className="h-16 w-16 shrink-0 rounded-2xl bg-slate-200" />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-6 w-32 rounded-full bg-slate-200" />
+                <div className="h-4 w-40 rounded-full bg-slate-100" />
+                <div className="flex gap-2 pt-1">
+                  <div className="h-6 w-14 rounded-full bg-slate-100" />
+                  <div className="h-6 w-14 rounded-full bg-slate-100" />
+                  <div className="h-6 w-16 rounded-full bg-slate-100" />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-11 rounded-full bg-slate-200" />
+              <div className="h-11 rounded-full bg-slate-100" />
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-1 text-xs font-semibold text-slate-400">
+              <div className="h-2 w-2 rounded-full bg-slate-300" />
+              <span>{label}</span>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MapSkeleton({ isMobile }: { isMobile?: boolean }) {
+  const fakeMarkers = useMemo(() => {
+    return Array.from({ length: 5 }).map((_, i) => ({
+      id: i,
+      top: `${20 + (hashString(`map-skeleton-top-${i}`) % 50)}%`,
+      left: `${15 + (hashString(`map-skeleton-left-${i}`) % 70)}%`,
+      delay: `${(hashString(`map-skeleton-delay-${i}`) % 150) / 100}s`,
+    }));
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-20 h-full w-full bg-[#E8EAED] overflow-hidden flex flex-col justify-between pointer-events-none">
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[#0a44b8]/[0.02] animate-pulse" />
+        
+        {fakeMarkers.map((marker) => (
+          <div
+            key={marker.id}
+            className="absolute z-10 size-[18px] rounded-full bg-[#0a44b8]/30 border-[3px] border-white shadow-md animate-pulse"
+            style={{ 
+              top: marker.top, 
+              left: marker.left,
+              animationDelay: marker.delay 
+            }}
+          />
+        ))}
+
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-sm flex items-center gap-2 border border-black/5">
+          <div className="size-2 rounded-full bg-[#0a44b8] animate-pulse" />
+          <span className="text-xs font-semibold tracking-wide text-[#1A1A1A]/70 uppercase">Loading Map...</span>
+        </div>
+      </div>
+
+      <div className="flex-1" />
+
+      {isMobile && (
+        <div className="absolute bottom-4 left-3 z-20 w-[78%] max-w-[340px]">
+          <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm">
+            <div className="space-y-2">
+              <div className="flex gap-3 items-start">
+                <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-[#F5F5F5] animate-pulse" />
+                <div className="flex-1 flex flex-col justify-between h-16 py-0.5 min-w-0">
+                  <div>
+                    <div className="h-4 w-20 bg-[#F5F5F5] rounded animate-pulse" />
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="h-3 w-8 bg-[#F5F5F5] rounded animate-pulse" />
+                      <div className="h-3 w-8 bg-[#F5F5F5] rounded animate-pulse" />
+                      <div className="h-3 w-10 bg-[#F5F5F5] rounded animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 h-8 bg-[#F5F5F5] rounded-full animate-pulse" />
+                <div className="flex-1 h-8 bg-[#F5F5F5] rounded-full animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -740,9 +821,16 @@ function MapViewContent() {
     const sorted = randomizedSimilaritySort(others, requestedAnchor).slice(0, 24);
     return [requestedAnchor, ...sorted];
   }, [mapMatches, listingsById, requestedPropertyId]);
+  const requestedAnchor =
+    (requestedPropertyId ? listingsById[requestedPropertyId] : undefined) ??
+    mapMatches.find((listing) => listing.id === requestedPropertyId);
+  const waitingForRequestedProperty = Boolean(
+    requestedPropertyId && authToken && !requestedAnchor && !mapError
+  );
   const showLoadingState =
+    waitingForRequestedProperty ||
     isBootstrappingPropertyView ||
-    (requestedPropertyId && sourceListings.length === 0 && !mapError);
+    Boolean(requestedPropertyId && sourceListings.length === 0 && !mapError);
   const showEmptyState = !showLoadingState && sourceListings.length === 0;
 
   const mapSourceListings = useMemo(() => {
@@ -1097,13 +1185,7 @@ function MapViewContent() {
               </div>
             )}
 
-            {showLoadingState && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
-                <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
-                  <LoadingState label="Loading similar properties..." />
-                </div>
-              </div>
-            )}
+            {showLoadingState && <MapSkeleton isMobile />}
 
             {showEmptyState && (
               <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
@@ -1308,13 +1390,7 @@ function MapViewContent() {
             </button>
           </div>
 
-          {showLoadingState && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
-              <div className="pointer-events-auto w-full max-w-sm rounded-2xl bg-white/95 shadow-xl border border-slate-200">
-                <LoadingState label="Loading similar properties..." />
-              </div>
-            </div>
-          )}
+          {showLoadingState && <MapSkeleton isMobile={false} />}
 
           {showEmptyState && (
             <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">

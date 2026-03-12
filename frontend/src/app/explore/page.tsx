@@ -13,7 +13,6 @@ import {
 import { useRouter } from "next/navigation";
 import {
   motion,
-  AnimatePresence,
   useAnimation,
   useMotionValue,
   useTransform,
@@ -50,6 +49,7 @@ const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
 const PREFETCH_THRESHOLD = 6;
 const PRELOAD_LOOKAHEAD = 5;
+const MAX_RECYCLE_CYCLES = 2;
 
 const preloadImage = async (src: string) => {
   if (!src || typeof window === "undefined") return;
@@ -153,11 +153,10 @@ export default function ExploreCards() {
   const [recycleAttempted, setRecycleAttempted] = useState(false);
   const isRecyclingDeckRef = useRef(false);
   const hasLoopedFromMemoryRef = useRef(false);
-  const hasRecycledOnceRef = useRef(false);
+  const recycleCycleCountRef = useRef(0);
   const swipeLockRef = useRef(false);
   const prefetchInFlightRef = useRef(false);
   const preloadedImageUrlsRef = useRef(new Set<string>());
-  const lastVisibleCardsRef = useRef<Listing[]>([]);
 
   const controls = useAnimation();
 
@@ -193,24 +192,21 @@ export default function ExploreCards() {
   );
 
   const visibleCards = useMemo(() => {
-    return renderableQueue
-      .slice(0, 3)
+    const seen = new Set<string>();
+    const uniqueTopIds = renderableQueue
+      .filter((id) => {
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .slice(0, 3);
+
+    return uniqueTopIds
       .map((id) => listingsById[id])
       .filter((listing): listing is Listing => Boolean(listing));
   }, [renderableQueue, listingsById]);
-
-  useEffect(() => {
-    if (visibleCards.length > 0) {
-      lastVisibleCardsRef.current = visibleCards;
-    }
-  }, [visibleCards]);
-
-  const cardsToRender =
-    visibleCards.length > 0
-      ? visibleCards
-      : isLoadingListings && lastVisibleCardsRef.current.length > 0
-        ? lastVisibleCardsRef.current
-        : [];
+  const cardsToRender = visibleCards;
+  const topCardId = cardsToRender[0]?.id ?? null;
 
   useEffect(() => {
     if (renderableQueue.length === exploreQueue.length) return;
@@ -233,6 +229,12 @@ export default function ExploreCards() {
     });
   }, [exploreQueue.length, renderableQueue.length]);
 
+  useEffect(() => {
+    controls.set({ x: 0, rotate: 0, opacity: 1 });
+    swipeLockRef.current = false;
+    setIsSwipeAnimating(false);
+  }, [topCardId, controls]);
+
   const resetDeck = () => {
     const next = {
       ...defaultFilters,
@@ -242,7 +244,7 @@ export default function ExploreCards() {
     setFilters(next);
     setCardImageIndexes({});
     setRecycleAttempted(false);
-    hasRecycledOnceRef.current = false;
+    recycleCycleCountRef.current = 0;
     swipeLockRef.current = false;
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
@@ -257,7 +259,7 @@ export default function ExploreCards() {
     };
     setFilters(nextFilters);
     setRecycleAttempted(false);
-    hasRecycledOnceRef.current = false;
+    recycleCycleCountRef.current = 0;
     resetExploreQueue();
     void loadExploreListings(nextFilters);
     setFiltersOpen(false);
@@ -271,7 +273,7 @@ export default function ExploreCards() {
     setDraftFilters(next);
     setFilters(next);
     setRecycleAttempted(false);
-    hasRecycledOnceRef.current = false;
+    recycleCycleCountRef.current = 0;
     resetExploreQueue();
     void loadExploreListings(next);
     setFiltersOpen(false);
@@ -358,8 +360,8 @@ export default function ExploreCards() {
     }
     if (isRecyclingDeckRef.current || recycleAttempted) return;
 
-    // Already recycled once — don't loop the same passed listings again
-    if (hasRecycledOnceRef.current) {
+    // Avoid endless recycle loops during long swipe sessions.
+    if (recycleCycleCountRef.current >= MAX_RECYCLE_CYCLES) {
       setRecycleAttempted(true);
       return;
     }
@@ -372,7 +374,7 @@ export default function ExploreCards() {
       .then(async (restored) => {
         if (!active) return;
         if (restored) {
-          hasRecycledOnceRef.current = true;
+          recycleCycleCountRef.current += 1;
           await loadExploreListings(activeExploreFilters, { append: true });
           if (!active) return;
           setIsLoadingListings(false);
@@ -409,7 +411,11 @@ export default function ExploreCards() {
         setRecycleAttempted(true);
       })
       .finally(() => {
-        if (active) isRecyclingDeckRef.current = false;
+        // Always release recycle lock. Effect cleanup can flip `active` to false
+        // before async work settles, and gating this reset by `active` can deadlock
+        // the deck in an empty state with disabled actions.
+        setIsLoadingListings(false);
+        isRecyclingDeckRef.current = false;
       });
 
     return () => {
@@ -620,48 +626,48 @@ export default function ExploreCards() {
 
         <div className="relative w-full h-[min(68dvh,680px)] min-h-[500px] md:h-[650px]">
           <div className="absolute inset-0 flex items-center justify-center">
-            <AnimatePresence>
-              {cardsToRender.map((card, index) => (
-                <CardItem
-                  key={card.id}
-                  index={index}
-                  isFront={index === 0}
-                  controls={controls}
-                  onSwipe={handleSwipe}
-                >
-                  {cardBody(card, index === 0)}
-                </CardItem>
-              ))}
-            </AnimatePresence>
+            {cardsToRender.map((card, index) => (
+              <CardItem
+                key={`${card.id}-${index}`}
+                index={index}
+                isFront={index === 0}
+                controls={controls}
+                onSwipe={handleSwipe}
+              >
+                {cardBody(card, index === 0)}
+              </CardItem>
+            ))}
           </div>
         </div>
 
         {cardsToRender.length === 0 && isLoadingListings && (
           <div className="absolute inset-0 flex items-center justify-center px-4">
-            <div className="w-full max-w-md animate-pulse rounded-[2rem] overflow-hidden border border-slate-200 bg-white shadow-card">
-              <div className="relative h-[58%] min-h-[320px] bg-slate-200">
-                <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-slate-300" />
+            <div className="w-full max-w-md rounded-[2rem] overflow-hidden border border-slate-200 bg-white shadow-card">
+              <div className="relative h-[58%] min-h-[320px] overflow-hidden bg-slate-200">
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300" />
+                <div className="skeleton-shimmer absolute inset-0" />
+                <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-white/65" />
                 <div className="absolute inset-x-0 top-4 flex justify-center gap-2">
-                  <div className="h-1.5 w-6 rounded-full bg-white/80" />
-                  <div className="h-1.5 w-2 rounded-full bg-white/60" />
-                  <div className="h-1.5 w-2 rounded-full bg-white/60" />
+                  <div className="h-1.5 w-6 rounded-full bg-white/90" />
+                  <div className="h-1.5 w-2 rounded-full bg-white/65" />
+                  <div className="h-1.5 w-2 rounded-full bg-white/65" />
                 </div>
               </div>
-              <div className="space-y-4 bg-primary px-4 py-5 md:px-6">
-                <div className="space-y-2 border-b border-white/10 pb-4">
-                  <div className="h-8 w-40 rounded-full bg-white/20" />
-                  <div className="h-3 w-24 rounded-full bg-white/15" />
+              <div className="space-y-4 bg-primary px-4 py-4 md:px-6 md:py-5">
+                <div className="space-y-2 border-b border-white/10 pb-3">
+                  <div className="h-8 w-44 rounded-full bg-white/25" />
+                  <div className="h-3 w-28 rounded-full bg-white/20" />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="h-14 rounded-xl bg-white/10" />
-                  <div className="h-14 rounded-xl bg-white/10" />
-                  <div className="h-14 rounded-xl bg-white/10" />
+                <div className="grid grid-cols-3 gap-2.5 md:gap-3">
+                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
+                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
+                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
                   <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
-                  <div className="space-y-2">
-                    <div className="h-4 w-40 rounded-full bg-white/15" />
-                    <div className="h-8 w-28 rounded-xl bg-white/10" />
+                  <div className="space-y-2 min-w-0">
+                    <div className="h-4 w-44 rounded-full bg-white/15" />
+                    <div className="h-7 w-24 rounded-lg border border-white/10 bg-white/10" />
                   </div>
                 </div>
               </div>
@@ -688,7 +694,7 @@ export default function ExploreCards() {
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
-          disabled={isSwipeAnimating || isLoadingListings || cardsToRender.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0}
           className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-200"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
@@ -697,7 +703,7 @@ export default function ExploreCards() {
 
         <button
           onClick={() => handleSwipe("right")}
-          disabled={isSwipeAnimating || isLoadingListings || cardsToRender.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0}
           className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
@@ -719,6 +725,19 @@ export default function ExploreCards() {
 
       <style>{`
         ::-webkit-scrollbar { width: 0px; background: transparent; }
+        @keyframes skeletonShimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .skeleton-shimmer {
+          background: linear-gradient(
+            100deg,
+            rgba(255,255,255,0) 20%,
+            rgba(255,255,255,0.42) 50%,
+            rgba(255,255,255,0) 80%
+          );
+          animation: skeletonShimmer 1.3s linear infinite;
+        }
       `}</style>
     </div>
   );
