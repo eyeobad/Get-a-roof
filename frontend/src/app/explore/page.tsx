@@ -506,7 +506,7 @@ export default function ExploreCards() {
                       event.stopPropagation();
                       setCardImageIndex(card.id, index, images.length);
                     }}
-                    className={`h-1.5 rounded-full transition-all ${index === activeImageIndex ? "w-6 bg-white" : "w-2 bg-white/50"
+                    className={`h-1.5 rounded-full transition-all ${index === activeImageIndex ? "w-6 bg-white" : "w-2 bg-white/50 md:w-6"
                       }`}
                     aria-label={`Show photo ${index + 1}`}
                   />
@@ -522,7 +522,7 @@ export default function ExploreCards() {
           <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary to-transparent" />
         </div>
 
-        <div className="flex-1 bg-primary text-white px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4 pointer-events-none">
+        <div className="flex-1 bg-primary text-white px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4">
           <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
             <div className="flex items-end gap-2">
               <h2 className="text-[2rem] md:text-4xl leading-none font-bold tracking-tight">{card.price}</h2>
@@ -543,23 +543,39 @@ export default function ExploreCards() {
             ))}
           </div>
 
-          <div className="flex items-start gap-2 md:gap-3">
-            <span className="material-symbols-outlined text-xl md:text-3xl mt-0.5 text-terracotta shrink-0">
-              location_on
-            </span>
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!isFront) return;
+              setSelectedListingId(card.id);
+              router.push(`/property-details/${card.id}`);
+            }}
+            className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-left backdrop-blur-sm transition hover:bg-white/10 active:bg-white/15"
+            aria-label={`Open details for ${card.highlight}`}
+          >
+            <div className="flex items-start gap-2 md:gap-3 min-w-0">
+              <span className="material-symbols-outlined text-xl md:text-3xl mt-0.5 text-terracotta shrink-0">
+                location_on
+              </span>
 
-            <div className="flex flex-col gap-1">
-              <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">
-                {card.publicLocationLabel || card.neighborhood || card.address}
-              </p>
-              <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
-                <span className="material-symbols-outlined text-sm">villa</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
-                  {intentLabel}
-                </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">
+                  {card.publicLocationLabel || card.neighborhood || card.address}
+                </p>
+                <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
+                  <span className="material-symbols-outlined text-sm">villa</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
+                    {intentLabel}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+            <span className="mt-1 shrink-0 text-sm font-bold uppercase tracking-[0.22em] text-white/80">
+              View
+            </span>
+          </button>
         </div>
       </>
     );
@@ -612,10 +628,6 @@ export default function ExploreCards() {
                   isFront={index === 0}
                   controls={controls}
                   onSwipe={handleSwipe}
-                  onOpen={() => {
-                    setSelectedListingId(card.id);
-                    router.push(`/property-details/${card.id}`);
-                  }}
                 >
                   {cardBody(card, index === 0)}
                 </CardItem>
@@ -625,11 +637,35 @@ export default function ExploreCards() {
         </div>
 
         {cardsToRender.length === 0 && isLoadingListings && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-primary" />
-            <p className="text-base font-semibold text-slate-600">
-              Loading listings...
-            </p>
+          <div className="absolute inset-0 flex items-center justify-center px-4">
+            <div className="w-full max-w-md animate-pulse rounded-[2rem] overflow-hidden border border-slate-200 bg-white shadow-card">
+              <div className="relative h-[58%] min-h-[320px] bg-slate-200">
+                <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-slate-300" />
+                <div className="absolute inset-x-0 top-4 flex justify-center gap-2">
+                  <div className="h-1.5 w-6 rounded-full bg-white/80" />
+                  <div className="h-1.5 w-2 rounded-full bg-white/60" />
+                  <div className="h-1.5 w-2 rounded-full bg-white/60" />
+                </div>
+              </div>
+              <div className="space-y-4 bg-primary px-4 py-5 md:px-6">
+                <div className="space-y-2 border-b border-white/10 pb-4">
+                  <div className="h-8 w-40 rounded-full bg-white/20" />
+                  <div className="h-3 w-24 rounded-full bg-white/15" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="h-14 rounded-xl bg-white/10" />
+                  <div className="h-14 rounded-xl bg-white/10" />
+                  <div className="h-14 rounded-xl bg-white/10" />
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-40 rounded-full bg-white/15" />
+                    <div className="h-8 w-28 rounded-xl bg-white/10" />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -693,14 +729,12 @@ type CardItemProps = {
   isFront: boolean;
   controls: ReturnType<typeof useAnimation>;
   onSwipe: (direction: "left" | "right") => Promise<void>;
-  onOpen: () => void;
   children: ReactNode;
 };
 
-function CardItem({ index, isFront, controls, onSwipe, onOpen, children }: CardItemProps) {
+function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
-  const suppressClickRef = useRef(false);
 
   // NEW: premium swipe overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
@@ -711,7 +745,6 @@ function CardItem({ index, isFront, controls, onSwipe, onOpen, children }: CardI
     const offset = info.offset.x;
     const velocity = info.velocity.x;
     const directionalSwipe = offset * Math.abs(velocity);
-    suppressClickRef.current = Math.abs(offset) > 8;
 
     const distanceThreshold = 120;
     const powerThreshold = 10_000;
@@ -730,9 +763,6 @@ function CardItem({ index, isFront, controls, onSwipe, onOpen, children }: CardI
 
     // snap back
     x.set(0);
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
   };
 
   return (
@@ -758,10 +788,6 @@ function CardItem({ index, isFront, controls, onSwipe, onOpen, children }: CardI
     >
       <div
         className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y"
-        onClick={() => {
-          if (!isFront || suppressClickRef.current) return;
-          onOpen();
-        }}
       >
         {/* NEW: Like / Nope overlays */}
         {isFront && (

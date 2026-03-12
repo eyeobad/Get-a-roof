@@ -1125,3 +1125,29 @@ Relevant files:
 - `backend/src/properties/properties.service.ts`
 - `backend/src/properties/properties.controller.ts`
 
+### 18.7 Canonical Nigeria Location Data, Explore Privacy, and Loading UX
+
+Location handling was tightened so state/city selection and public property display are consistent across tenant and landlord flows.
+
+Implemented:
+
+- Added a shared canonical Nigeria state/city dataset for frontend forms and filters
+- Updated tenant onboarding and tenant profile to use the shared state list
+- Updated landlord property creation to store structured `address.street`, `address.city`, and `address.state`
+- Added `city` support to Explore filtering and backend property queries
+- Added a safe public location label for Explore cards and stripped street-level address data from Explore/Map API responses
+- Replaced Map View text-only loading with a card-style skeleton
+- Refined Explore card interaction so swipe remains global, image dots remain isolated, and property details open from a dedicated `View` CTA instead of accidental whole-card taps
+- Improved desktop image carousel dots for easier use
+
+Relevant files:
+- `frontend/src/lib/nigeriaLocations.ts`
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/app/map-view/page.tsx`
+- `frontend/src/app/tenant-onboarding/page.tsx`
+- `frontend/src/app/profile/page.tsx`
+- `frontend/src/app/add-property-details/page.tsx`
+- `frontend/src/lib/listings.ts`
+- `frontend/src/store/useAppStore.ts`
+- `backend/src/properties/properties.controller.ts`
+- `backend/src/properties/properties.service.ts`

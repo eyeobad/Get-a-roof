@@ -173,9 +173,26 @@ function EmptyState({
 
 function LoadingState({ label = "Loading properties..." }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center gap-3 p-6">
-      <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-      <p className="text-sm font-semibold text-slate-700">{label}</p>
+    <div className="w-full p-4">
+      <div className="mx-auto w-full max-w-sm animate-pulse rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+        <div className="h-40 w-full rounded-2xl bg-slate-200" />
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="h-6 w-28 rounded-full bg-slate-200" />
+            <div className="h-4 w-36 rounded-full bg-slate-100" />
+          </div>
+          <div className="h-10 w-10 rounded-full bg-slate-100" />
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="h-12 rounded-2xl bg-slate-100" />
+          <div className="h-12 rounded-2xl bg-slate-100" />
+          <div className="h-12 rounded-2xl bg-slate-100" />
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-slate-400">
+          <div className="h-2 w-2 rounded-full bg-slate-300" />
+          <span>{label}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -724,7 +741,8 @@ function MapViewContent() {
     return [requestedAnchor, ...sorted];
   }, [mapMatches, listingsById, requestedPropertyId]);
   const showLoadingState =
-    isBootstrappingPropertyView && sourceListings.length === 0;
+    isBootstrappingPropertyView ||
+    (requestedPropertyId && sourceListings.length === 0 && !mapError);
   const showEmptyState = !showLoadingState && sourceListings.length === 0;
 
   const mapSourceListings = useMemo(() => {
