@@ -287,6 +287,7 @@ type AppState = {
   exploreQueue: string[];
   likedIds: string[];
   passedIds: string[];
+  suppressedMatchListingIds: string[];
   matchSummaries: MatchSummary[];
   recycledMatchSummaries: MatchSummary[];
   mapMatches: Listing[];
@@ -848,6 +849,7 @@ const buildSessionReset = (overrides: Partial<AppState> = {}) => ({
   exploreQueue: initialQueue,
   likedIds: [],
   passedIds: [],
+  suppressedMatchListingIds: [],
   matchSummaries: [],
   mapMatches: [],
   selectedListingId: initialQueue[0] ?? null,
@@ -871,6 +873,7 @@ export const useAppStore = create<AppState>()(
       exploreQueue: initialQueue,
       likedIds: [],
       passedIds: [],
+      suppressedMatchListingIds: [],
       matchSummaries: [],
       recycledMatchSummaries: [],
       mapMatches: [],
@@ -1229,6 +1232,9 @@ export const useAppStore = create<AppState>()(
 
         set({
           likedIds: [...state.likedIds, listingId],
+          suppressedMatchListingIds: state.suppressedMatchListingIds.filter(
+            (id) => id !== listingId
+          ),
           selectedListingId: listingId,
         });
 
@@ -1252,6 +1258,9 @@ export const useAppStore = create<AppState>()(
         const state = get();
         set({
           likedIds: state.likedIds.filter((id) => id !== listingId),
+          suppressedMatchListingIds: Array.from(
+            new Set([...state.suppressedMatchListingIds, listingId])
+          ),
           matchSummaries: state.matchSummaries.filter(
             (summary) => summary.listingId !== listingId
           ),
@@ -1273,6 +1282,7 @@ export const useAppStore = create<AppState>()(
           }
 
           await get().createMatchForListing(listingId, false, "Soft");
+          await get().loadMatches();
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -1600,6 +1610,13 @@ export const useAppStore = create<AppState>()(
 
         const summaries = (data ?? [])
           .filter((match) => match.status !== "Dismissed")
+          .filter((match) => {
+            const listingId =
+              toIdString(match.property?._id ?? match.property?.id) ??
+              toIdString(match.propertyId);
+            if (!listingId) return true;
+            return !state.suppressedMatchListingIds.includes(listingId);
+          })
           .map((match) => {
           const listing = match.property ? mapPropertyToListing(match.property) : null;
           if (listing) {

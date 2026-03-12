@@ -56,6 +56,7 @@ function MatchesSkeleton() {
 
 export default function MatchesPage() {
   const router = useRouter();
+  const authToken = useAppStore((state) => state.authToken);
   const matchSummaries = useAppStore((state) => state.matchSummaries);
   const listingsById = useAppStore((state) => state.listingsById);
   const loadMatches = useAppStore((state) => state.loadMatches);
@@ -86,6 +87,19 @@ export default function MatchesPage() {
       window.clearTimeout(timer);
     };
   }, [loadMatches]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    const refresh = () => {
+      void loadMatches();
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+    };
+  }, [authToken, loadMatches]);
 
   const matches = useMemo(() => {
     return matchSummaries

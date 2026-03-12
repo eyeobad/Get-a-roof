@@ -53,7 +53,7 @@ function VerifyIdentityContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F2EA] font-display text-[#1A1A1A] antialiased">
+    <div className="min-h-screen bg-white font-display text-[#1A1A1A] antialiased">
       <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden lg:px-8 lg:py-10">
         <div className="flex min-h-screen w-full flex-col lg:min-h-0 lg:max-w-[960px] lg:mx-auto">
           <header className="flex items-center justify-between p-6 pb-2 lg:px-8 lg:pt-8 lg:pb-4">

@@ -215,11 +215,18 @@ function LoadingState({ label = "Loading properties..." }: { label?: string }) {
 
 function MapSkeleton({ isMobile }: { isMobile?: boolean }) {
   const fakeMarkers = useMemo(() => {
-    return Array.from({ length: 5 }).map((_, i) => ({
+    const spread = [
+      { top: "22%", left: "18%" },
+      { top: "30%", left: "68%" },
+      { top: "47%", left: "42%" },
+      { top: "62%", left: "22%" },
+      { top: "70%", left: "74%" },
+    ];
+    return spread.map((position, i) => ({
       id: i,
-      top: `${20 + (hashString(`map-skeleton-top-${i}`) % 50)}%`,
-      left: `${15 + (hashString(`map-skeleton-left-${i}`) % 70)}%`,
-      delay: `${(hashString(`map-skeleton-delay-${i}`) % 150) / 100}s`,
+      top: position.top,
+      left: position.left,
+      delay: `${i * 0.18}s`,
     }));
   }, []);
 
