@@ -1598,7 +1598,9 @@ export const useAppStore = create<AppState>()(
           token: state.authToken,
         });
 
-        const summaries = (data ?? []).map((match) => {
+        const summaries = (data ?? [])
+          .filter((match) => match.status !== "Dismissed")
+          .map((match) => {
           const listing = match.property ? mapPropertyToListing(match.property) : null;
           if (listing) {
             set((prev) => ({
@@ -1620,7 +1622,7 @@ export const useAppStore = create<AppState>()(
             landlordReplied: Boolean(match.landlordReplied),
             routeAccessStatus: match.routeAccessStatus ?? "None",
           } as MatchSummary;
-        });
+          });
 
         set({ matchSummaries: summaries });
       },

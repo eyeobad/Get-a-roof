@@ -7,7 +7,6 @@ import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
-import { useToastError } from "@/hooks/useToastError";
 
 type ListingCard = {
   id: string;
@@ -730,11 +729,9 @@ function MapViewContent() {
   const [routeGeojson, setRouteGeojson] =
     useState<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
   const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
-  const [routingError, setRoutingError] = useState<string | null>(null);
-  useToastError(routingError);
+  const setRoutingError: (value: string | null) => void = () => { };
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  useToastError(mapError);
   const [isBootstrappingPropertyView, setIsBootstrappingPropertyView] =
     useState(false);
 
