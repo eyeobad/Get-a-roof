@@ -228,6 +228,7 @@ function MessagesContent() {
   const messagesByMatch = useAppStore((state) => state.messagesByMatch);
   const loadConversations = useAppStore((state) => state.loadConversations);
   const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
+  const markMatchRead = useAppStore((state) => state.markMatchRead);
   const sendMessageToApi = useAppStore((state) => state.sendMessage);
   const setSelectedThreadId = useAppStore((state) => state.setSelectedThreadId);
   const userId = useAppStore((state) => state.userId);
@@ -496,6 +497,17 @@ function MessagesContent() {
     loadMessagesForMatch,
     setSelectedThreadId,
   ]);
+
+  useEffect(() => {
+    if (!authToken || !activeConversationId) return;
+    const activeConversationEntry = storeConversations.find(
+      (conversation) => conversation.id === activeConversationId
+    );
+    if (!activeConversationEntry?.unread && !(activeConversationEntry?.unreadCount ?? 0)) {
+      return;
+    }
+    void markMatchRead(activeConversationId);
+  }, [authToken, activeConversationId, storeConversations, markMatchRead]);
 
   useEffect(() => {
     if (didApplyDraft || !draftParam.trim() || !activeConversationId) return;

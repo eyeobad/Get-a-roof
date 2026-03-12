@@ -420,7 +420,7 @@ function MapCanvas({
     const loadTimeout = window.setTimeout(() => {
       if (!mapLoadedRef.current) {
         onMapError(
-          "Map style failed to load. Check Mapbox token restrictions for this domain."
+          "Map is taking longer than expected to load. If this persists, confirm Mapbox token URL restrictions include this exact origin."
         );
       }
     }, 5000);

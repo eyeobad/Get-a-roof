@@ -1252,6 +1252,12 @@ export const useAppStore = create<AppState>()(
         const state = get();
         set({
           likedIds: state.likedIds.filter((id) => id !== listingId),
+          matchSummaries: state.matchSummaries.filter(
+            (summary) => summary.listingId !== listingId
+          ),
+          recycledMatchSummaries: state.recycledMatchSummaries.filter(
+            (summary) => summary.listingId !== listingId
+          ),
         });
 
         if (state.authToken && isMongoId(listingId)) {
