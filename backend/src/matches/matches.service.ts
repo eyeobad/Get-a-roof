@@ -120,8 +120,13 @@ export class MatchesService {
       .exec();
 
     if (existing) {
+      const nextStatus =
+        existing.status === MatchStatus.Dismissed && !isDismiss
+          ? MatchStatus.TenantLiked
+          : computedStatus;
+
       existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
-      existing.status = this.validateTransition(existing.status, computedStatus);
+      existing.status = this.validateTransition(existing.status, nextStatus);
       existing.matchScore = matchScoreData.matchScore;
       existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
       existing.apartmentPreferenceMatchPercentage =
@@ -134,6 +139,9 @@ export class MatchesService {
       if (isDismiss) {
         existing.dismissedAt = new Date();
         existing.dismissReason = dto.dismissReason ?? DismissReason.Soft;
+      } else {
+        existing.dismissedAt = undefined;
+        existing.dismissReason = undefined;
       }
 
       return existing.save();

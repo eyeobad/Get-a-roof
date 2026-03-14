@@ -1209,21 +1209,17 @@ export const useAppStore = create<AppState>()(
       createMatchForListing: async (listingId, tenantLiked, dismissReason) => {
         const state = get();
         if (!state.authToken || !isMongoId(listingId)) return;
-        try {
-          await apiFetch(`/api/matches`, {
-            method: "POST",
-            body: JSON.stringify({
-              propertyId: listingId,
-              tenantLiked,
-              ...(dismissReason ? { dismissReason } : {}),
-            }),
-            token: state.authToken,
-          });
-          if (tenantLiked !== false) {
-            await get().loadMatches();
-          }
-        } catch {
-          // Best-effort; ignore errors here to avoid blocking UI.
+        await apiFetch(`/api/matches`, {
+          method: "POST",
+          body: JSON.stringify({
+            propertyId: listingId,
+            tenantLiked,
+            ...(dismissReason ? { dismissReason } : {}),
+          }),
+          token: state.authToken,
+        });
+        if (tenantLiked !== false) {
+          await get().loadMatches();
         }
       },
       likeListing: async (listingId) => {
@@ -1251,7 +1247,15 @@ export const useAppStore = create<AppState>()(
             }
           }
 
-          await get().createMatchForListing(listingId, true);
+          try {
+            await get().createMatchForListing(listingId, true);
+          } catch {
+            set((current) => ({
+              likedIds: current.likedIds.filter((id) => id !== listingId),
+              selectedListingId:
+                current.exploreQueue.find((id) => id !== listingId) ?? current.selectedListingId,
+            }));
+          }
         }
       },
       unlikeListing: async (listingId) => {
@@ -1281,8 +1285,19 @@ export const useAppStore = create<AppState>()(
             }
           }
 
-          await get().createMatchForListing(listingId, false, "Soft");
-          await get().loadMatches();
+          try {
+            await get().createMatchForListing(listingId, false, "Soft");
+            await get().loadMatches();
+          } catch {
+            set((current) => ({
+              likedIds: current.likedIds.includes(listingId)
+                ? current.likedIds
+                : [...current.likedIds, listingId],
+              suppressedMatchListingIds: current.suppressedMatchListingIds.filter(
+                (id) => id !== listingId
+              ),
+            }));
+          }
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -1304,7 +1319,14 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          await get().createMatchForListing(listingId, false, "Soft");
+          try {
+            await get().createMatchForListing(listingId, false, "Soft");
+          } catch {
+            set((current) => ({
+              passedIds: current.passedIds.filter((id) => id !== listingId),
+              selectedListingId: listingId,
+            }));
+          }
         }
       },
       advanceQueue: () =>
