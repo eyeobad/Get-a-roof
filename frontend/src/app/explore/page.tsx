@@ -47,9 +47,10 @@ type ExploreFilterState = {
 
 const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
-const PREFETCH_THRESHOLD = 6;
+const PREFETCH_THRESHOLD = 10;
+const RECYCLE_PREFETCH_THRESHOLD = 8;
 const PRELOAD_LOOKAHEAD = 5;
-const MAX_RECYCLE_CYCLES = 2;
+const MAX_RECYCLE_CYCLES = 3;
 
 const preloadImage = async (src: string) => {
   if (!src || typeof window === "undefined") return;
@@ -157,6 +158,7 @@ export default function ExploreCards() {
   const swipeLockRef = useRef(false);
   const prefetchInFlightRef = useRef(false);
   const preloadedImageUrlsRef = useRef(new Set<string>());
+  const hasRenderedCardsRef = useRef(false);
 
   const controls = useAnimation();
 
@@ -209,6 +211,12 @@ export default function ExploreCards() {
   const topCardId = cardsToRender[0]?.id ?? null;
 
   useEffect(() => {
+    if (renderableQueue.length > 0) {
+      hasRenderedCardsRef.current = true;
+    }
+  }, [renderableQueue.length]);
+
+  useEffect(() => {
     if (renderableQueue.length === exploreQueue.length) return;
 
     useAppStore.setState((state) => {
@@ -245,6 +253,7 @@ export default function ExploreCards() {
     setCardImageIndexes({});
     setRecycleAttempted(false);
     recycleCycleCountRef.current = 0;
+    hasRenderedCardsRef.current = false;
     swipeLockRef.current = false;
     resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
@@ -260,6 +269,7 @@ export default function ExploreCards() {
     setFilters(nextFilters);
     setRecycleAttempted(false);
     recycleCycleCountRef.current = 0;
+    hasRenderedCardsRef.current = false;
     resetExploreQueue();
     void loadExploreListings(nextFilters);
     setFiltersOpen(false);
@@ -274,6 +284,7 @@ export default function ExploreCards() {
     setFilters(next);
     setRecycleAttempted(false);
     recycleCycleCountRef.current = 0;
+    hasRenderedCardsRef.current = false;
     resetExploreQueue();
     void loadExploreListings(next);
     setFiltersOpen(false);
@@ -353,6 +364,44 @@ export default function ExploreCards() {
   }, [renderableQueue, listingsById]);
 
   useEffect(() => {
+    if (
+      renderableQueue.length === 0 ||
+      renderableQueue.length > RECYCLE_PREFETCH_THRESHOLD ||
+      isLoadingListings ||
+      recycleAttempted ||
+      isRecyclingDeckRef.current
+    ) {
+      return;
+    }
+
+    if (recycleCycleCountRef.current >= MAX_RECYCLE_CYCLES) {
+      return;
+    }
+
+    let active = true;
+    isRecyclingDeckRef.current = true;
+
+    void loadRecycledIntoExplore({ prepend: false })
+      .then((restored) => {
+        if (!active || !restored) return;
+        recycleCycleCountRef.current += 1;
+        setRecycleAttempted(false);
+      })
+      .finally(() => {
+        isRecyclingDeckRef.current = false;
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    renderableQueue.length,
+    isLoadingListings,
+    recycleAttempted,
+    loadRecycledIntoExplore,
+  ]);
+
+  useEffect(() => {
     if (renderableQueue.length > 0) {
       hasLoopedFromMemoryRef.current = false;
       setRecycleAttempted(false);
@@ -367,7 +416,8 @@ export default function ExploreCards() {
     }
 
     let active = true;
-    setIsLoadingListings(true);
+    // Do NOT set isLoadingListings here — we only show the skeleton on true
+    // first-load. Recycle should always be invisible to the user.
     isRecyclingDeckRef.current = true;
 
     void loadRecycledIntoExplore()
@@ -375,8 +425,10 @@ export default function ExploreCards() {
         if (!active) return;
         if (restored) {
           recycleCycleCountRef.current += 1;
-          await loadExploreListings(activeExploreFilters, { append: true });
-          if (!active) return;
+          if (getRenderableCount() === 0) {
+            await loadExploreListings(activeExploreFilters, { append: true });
+            if (!active) return;
+          }
           setIsLoadingListings(false);
           if (getRenderableCount() === 0) {
             setRecycleAttempted(true);
@@ -389,16 +441,18 @@ export default function ExploreCards() {
           if (cachedIds.length > 0 && !hasLoopedFromMemoryRef.current) {
             hasLoopedFromMemoryRef.current = true;
             resetExploreQueue();
-            setIsLoadingListings(false);
             if (getRenderableCount() === 0) {
               setRecycleAttempted(true);
             }
             return;
           }
-          setIsLoadingListings(true);
+          // Only show loading skeleton here if the deck is truly empty
+          // (no cards in the visible stack at all).
+          const alreadyEmpty = getRenderableCount() === 0;
+          if (alreadyEmpty) setIsLoadingListings(true);
           await loadExploreListings(activeExploreFilters);
           if (!active) return;
-          setIsLoadingListings(false);
+          if (alreadyEmpty) setIsLoadingListings(false);
           const nextRenderableQueueLength = getRenderableCount();
           if (nextRenderableQueueLength === 0) {
             setRecycleAttempted(true);
@@ -411,11 +465,10 @@ export default function ExploreCards() {
         setRecycleAttempted(true);
       })
       .finally(() => {
-        // Always release recycle lock. Effect cleanup can flip `active` to false
-        // before async work settles, and gating this reset by `active` can deadlock
-        // the deck in an empty state with disabled actions.
-        setIsLoadingListings(false);
+        // Always release recycle lock regardless of `active` to avoid
+        // deadlocking the deck in an empty state with disabled actions.
         isRecyclingDeckRef.current = false;
+        setIsLoadingListings(false);
       });
 
     return () => {
@@ -640,7 +693,7 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {cardsToRender.length === 0 && isLoadingListings && (
+        {cardsToRender.length === 0 && isLoadingListings && !hasRenderedCardsRef.current && (
           <div className="absolute inset-0 flex items-center justify-center px-4">
             <div className="w-full max-w-md rounded-[2rem] overflow-hidden border border-slate-200 bg-white shadow-card">
               <div className="relative h-[58%] min-h-[320px] overflow-hidden bg-slate-200">

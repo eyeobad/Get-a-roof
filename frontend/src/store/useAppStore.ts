@@ -370,7 +370,7 @@ type AppState = {
     filters?: ExploreFilters,
     options?: { append?: boolean }
   ) => Promise<void>;
-  loadRecycledIntoExplore: () => Promise<boolean>;
+  loadRecycledIntoExplore: (options?: { prepend?: boolean }) => Promise<boolean>;
   loadMapMatches: (filters?: ExploreFilters) => Promise<void>;
   loadMatches: () => Promise<void>;
   loadRecycledMatches: () => Promise<void>;
@@ -1465,10 +1465,11 @@ export const useAppStore = create<AppState>()(
           };
         });
       },
-      loadRecycledIntoExplore: async () => {
+      loadRecycledIntoExplore: async (options) => {
         const state = get();
         if (!state.authToken) return false;
         const token = state.authToken;
+        const prepend = options?.prepend !== false;
         const data = await apiFetch<ApiMatch[] | { items?: ApiMatch[]; data?: ApiMatch[] }>(
           `/api/matches/tenant/recycled?page=1&limit=50&cooldownDays=0`,
           {
@@ -1518,7 +1519,9 @@ export const useAppStore = create<AppState>()(
           const filteredExistingQueue = prev.exploreQueue.filter(
             (id) => !recycledIds.includes(id)
           );
-          const nextQueue = [...recycledIds, ...filteredExistingQueue];
+          const nextQueue = prepend
+            ? [...recycledIds, ...filteredExistingQueue]
+            : [...filteredExistingQueue, ...recycledIds];
           const nextSelected =
             nextQueue.includes(prev.selectedListingId ?? "")
               ? prev.selectedListingId

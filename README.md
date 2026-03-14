@@ -1168,3 +1168,23 @@ Implemented:
 Relevant files:
 - `frontend/src/app/explore/page.tsx`
 - `frontend/src/app/map-view/page.tsx`
+
+### 18.9 Explore Seamless Recycle Handoff
+
+Explore recycle now starts before the visible deck is exhausted, so long swipe sessions can continue without exposing a recycle/loading skeleton between batches.
+
+Implemented:
+
+- Added proactive recycle prefetch when the remaining renderable queue gets low
+- Updated recycled listing injection to support append-mode handoff instead of only prepending to the front of the deck
+- Kept first-load skeleton behavior for true boot loading, while suppressing recycle-time skeleton flashes after cards have already rendered
+- Preserved terminal empty-state behavior once recycle and fetch paths are genuinely exhausted
+
+Verified live:
+
+- Repeated `PASS` swipes across 33 cards no longer surfaced the recycle skeleton mid-session
+- The deck remained interactive through recycle instead of entering a temporary blank/dead state during the sampled handoff window
+
+Relevant files:
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/store/useAppStore.ts`

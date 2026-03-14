@@ -112,8 +112,27 @@ const sections: readonly SectionConfig[] = [
 type Selections = Record<SectionKey, number>;
 type SectionWithSelection = SectionConfig & { selectedIndex: number };
 
+const EARNINGS_MIN = 1_000_000;
+const EARNINGS_MAX = 50_000_000;
+const EARNINGS_STEP = 100_000;
+const EARNINGS_DEFAULT = 8_500_000;
+
+const clampEarnings = (value: number) => {
+  if (!Number.isFinite(value)) return EARNINGS_DEFAULT;
+  return Math.min(EARNINGS_MAX, Math.max(EARNINGS_MIN, Math.round(value)));
+};
+
+const normalizeAnnualEarnings = (raw: number) => {
+  if (!Number.isFinite(raw)) return EARNINGS_DEFAULT;
+  if (raw >= EARNINGS_MIN) return clampEarnings(raw);
+  // Legacy compact payloads stored in "hundreds of thousands" (e.g. 85 -> 8,500,000)
+  if (raw > 0 && raw < 1_000) return clampEarnings(raw * 100_000);
+  // Legacy low absolute values should not underflow current slider range.
+  return EARNINGS_MIN;
+};
+
 function TenantMoreAboutYouContent() {
-  const [earnings, setEarnings] = useState(85000);
+  const [earnings, setEarnings] = useState(EARNINGS_DEFAULT);
   const fetchUserProfile = useAppStore((state) => state.fetchUserProfile);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
   const authToken = useAppStore((state) => state.authToken);
@@ -195,7 +214,7 @@ function TenantMoreAboutYouContent() {
 
         const annualEarnings = tenant.annualEarnings;
         if (typeof annualEarnings === "number" && Number.isFinite(annualEarnings)) {
-          setEarnings(annualEarnings);
+          setEarnings(normalizeAnnualEarnings(annualEarnings));
         }
 
         setHydrated(true);
@@ -241,7 +260,7 @@ function TenantMoreAboutYouContent() {
       religionPreference: pickLabel("religion"),
       educationLevel: pickLabel("education"),
       socialHabits: pickLabel("social"),
-      annualEarnings: earnings,
+      annualEarnings: clampEarnings(earnings),
     };
 
     if (childrenLabel === "I have children") {
@@ -354,12 +373,12 @@ function TenantMoreAboutYouContent() {
               <input
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary focus:outline-none"
                 id="earnings"
-                max={50000000}
-                min={1000000}
-                step={100000}
+                max={EARNINGS_MAX}
+                min={EARNINGS_MIN}
+                step={EARNINGS_STEP}
                 type="range"
                 value={earnings}
-                onChange={(event) => setEarnings(Number(event.target.value))}
+                onChange={(event) => setEarnings(clampEarnings(Number(event.target.value)))}
               />
 
               <div className="flex justify-between mt-3 text-sm font-medium text-slate-500">
