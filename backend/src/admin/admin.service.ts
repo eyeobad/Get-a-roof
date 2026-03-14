@@ -137,7 +137,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id firstName lastName email role isSuspended suspendedAt suspensionReason emailVerified createdAt"
+          "_id firstName lastName email role agentOrgId isSuspended suspendedAt suspensionReason emailVerified createdAt"
         )
         .lean(),
       this.userModel.countDocuments(filter),
@@ -173,7 +173,7 @@ export class AdminService {
     const updated = await this.userModel
       .findByIdAndUpdate(userId, update, { new: true })
       .select(
-        "_id firstName lastName email role isSuspended suspendedAt suspensionReason emailVerified createdAt"
+        "_id firstName lastName email role agentOrgId isSuspended suspendedAt suspensionReason emailVerified createdAt"
       )
       .lean();
     if (!updated) throw new NotFoundException("User not found");
@@ -195,7 +195,7 @@ export class AdminService {
     const updated = await this.userModel
       .findByIdAndUpdate(userId, { role: dto.role }, { new: true })
       .select(
-        "_id firstName lastName email role isSuspended suspendedAt suspensionReason emailVerified createdAt"
+        "_id firstName lastName email role agentOrgId isSuspended suspendedAt suspensionReason emailVerified createdAt"
       )
       .lean();
     if (!updated) throw new NotFoundException("User not found");

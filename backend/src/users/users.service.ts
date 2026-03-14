@@ -488,6 +488,9 @@ export class UsersService {
     if (existing && existing.agentOrgId?.toString() === orgId) {
       throw new ConflictException("This user is already an agent of your organisation");
     }
+    if (existing && existing.agentOrgId && existing.agentOrgId.toString() !== orgId) {
+      throw new ConflictException("This user is already linked to another organisation");
+    }
 
     const token = randomBytes(24).toString("base64url");
     const expiresAt = new Date(Date.now() + this.agentInviteTtlMs);
@@ -537,6 +540,15 @@ export class UsersService {
 
     const agent = await this.findById(agentUserId);
     const email = agent.email.toLowerCase();
+
+    if (agent.role === UserRole.Admin || agent.role === UserRole.Organisation) {
+      throw new ForbiddenException(
+        "This account type cannot join an organisation as an agent"
+      );
+    }
+    if (agent.agentOrgId && agent.agentOrgId.toString() !== orgId) {
+      throw new ConflictException("This user is already linked to another organisation");
+    }
 
     if (!org.agentInviteTokenHash) {
       throw new BadRequestException("No pending invite");

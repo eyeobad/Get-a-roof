@@ -1,14 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 import { getGoogleIdToken } from "@/lib/firebase";
 
-export default function LoginPage() {
+function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +18,16 @@ export default function LoginPage() {
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const getPostLoginTarget = () => {
+    const redirectTarget =
+      searchParams?.get("redirect") ?? searchParams?.get("next") ?? "";
+    if (redirectTarget.startsWith("/") && !redirectTarget.startsWith("//")) {
+      return redirectTarget;
+    }
+    return null;
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -73,7 +83,10 @@ export default function LoginPage() {
       if (!isAdmin && !isLandlord) {
         captureUserLocation().catch(() => { });
       }
-      if (isAdmin) {
+      const postLoginTarget = getPostLoginTarget();
+      if (postLoginTarget) {
+        router.push(postLoginTarget);
+      } else if (isAdmin) {
         router.push("/admin");
       } else if (isLandlord) {
         router.push("/dashboard/overview");
@@ -125,7 +138,10 @@ export default function LoginPage() {
       if (!isAdmin && !isLandlord) {
         captureUserLocation().catch(() => { });
       }
-      if (isAdmin) {
+      const postLoginTarget = getPostLoginTarget();
+      if (postLoginTarget) {
+        router.push(postLoginTarget);
+      } else if (isAdmin) {
         router.push("/admin");
       } else if (isLandlord) {
         router.push("/dashboard/overview");
@@ -297,5 +313,13 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
   );
 }

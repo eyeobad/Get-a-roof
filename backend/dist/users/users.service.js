@@ -401,6 +401,9 @@ let UsersService = UsersService_1 = class UsersService {
         if (existing && existing.agentOrgId?.toString() === orgId) {
             throw new common_1.ConflictException("This user is already an agent of your organisation");
         }
+        if (existing && existing.agentOrgId && existing.agentOrgId.toString() !== orgId) {
+            throw new common_1.ConflictException("This user is already linked to another organisation");
+        }
         const token = (0, crypto_1.randomBytes)(24).toString("base64url");
         const expiresAt = new Date(Date.now() + this.agentInviteTtlMs);
         const tokenHash = this.hashAgentInviteToken(token, orgId, email);
@@ -436,6 +439,12 @@ let UsersService = UsersService_1 = class UsersService {
         }
         const agent = await this.findById(agentUserId);
         const email = agent.email.toLowerCase();
+        if (agent.role === enums_1.UserRole.Admin || agent.role === enums_1.UserRole.Organisation) {
+            throw new common_1.ForbiddenException("This account type cannot join an organisation as an agent");
+        }
+        if (agent.agentOrgId && agent.agentOrgId.toString() !== orgId) {
+            throw new common_1.ConflictException("This user is already linked to another organisation");
+        }
         if (!org.agentInviteTokenHash) {
             throw new common_1.BadRequestException("No pending invite");
         }

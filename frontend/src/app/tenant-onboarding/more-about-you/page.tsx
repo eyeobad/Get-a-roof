@@ -122,6 +122,15 @@ const clampEarnings = (value: number) => {
   return Math.min(EARNINGS_MAX, Math.max(EARNINGS_MIN, Math.round(value)));
 };
 
+const formatNaira = (value: number) =>
+  `NGN ${new Intl.NumberFormat("en-NG").format(Math.round(value))}`;
+
+const formatCompactNaira = (value: number) =>
+  new Intl.NumberFormat("en-NG", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Math.round(value));
+
 const normalizeAnnualEarnings = (raw: number) => {
   if (!Number.isFinite(raw)) return EARNINGS_DEFAULT;
   if (raw >= EARNINGS_MIN) return clampEarnings(raw);
@@ -289,9 +298,14 @@ function TenantMoreAboutYouContent() {
         <header className="pt-8 pb-4 px-6">
           <div aria-label="Progress" className="mb-6" role="region">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold text-primary tracking-wide">
-                Step 2 of 3
-              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-primary tracking-wide">
+                  Step 2 of 3
+                </span>
+                <span className="text-xs font-semibold text-slate-400">
+                  Lifestyle and affordability
+                </span>
+              </div>
               <span className="text-xs font-semibold text-slate-400">67%</span>
             </div>
 
@@ -361,13 +375,23 @@ function TenantMoreAboutYouContent() {
             </div>
 
             <div className="bg-white border border-slate-200 shadow-lg rounded-2xl p-6">
-              <div className="flex justify-between items-center mb-6">
-                <label className="text-lg font-medium text-slate-600" htmlFor="earnings">
-                  Yearly Income
-                </label>
-                <span className="text-2xl font-bold text-primary tabular-nums">
-                  ₦{new Intl.NumberFormat("en-NG").format(earnings)}
-                </span>
+              <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <label className="text-lg font-medium text-slate-600" htmlFor="earnings">
+                    Yearly income
+                  </label>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Used only for affordability matching. You can adjust this later.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="block text-2xl font-bold text-primary tabular-nums">
+                    {formatNaira(earnings)}
+                  </span>
+                  <span className="mt-1 block text-sm font-medium text-slate-500">
+                    About {formatNaira(earnings / 12)} per month
+                  </span>
+                </div>
               </div>
 
               <input
@@ -381,9 +405,29 @@ function TenantMoreAboutYouContent() {
                 onChange={(event) => setEarnings(clampEarnings(Number(event.target.value)))}
               />
 
-              <div className="flex justify-between mt-3 text-sm font-medium text-slate-500">
-                <span>₦1m</span>
-                <span>₦50m+</span>
+              <div className="mt-4 flex items-center justify-between text-sm font-medium text-slate-500">
+                <span>{formatCompactNaira(EARNINGS_MIN)}</span>
+                <span>{formatCompactNaira(EARNINGS_MAX)}+</span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[3_000_000, 8_500_000, 15_000_000].map((value) => {
+                  const isActive = earnings === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setEarnings(value)}
+                      className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                        isActive
+                          ? "border-primary bg-blue-50 text-primary"
+                          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-primary/40"
+                      }`}
+                    >
+                      {formatCompactNaira(value)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </section>

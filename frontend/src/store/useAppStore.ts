@@ -260,6 +260,79 @@ export type ApiMessage = {
 type ApiUploadResponse = { url?: string };
 type ApiPhotoResponse = { photoUrl?: string };
 
+let listingMutationQueue: Promise<void> = Promise.resolve();
+let matchesReloadTimer: ReturnType<typeof setTimeout> | null = null;
+type SwipeMutationStatus = "pending" | "confirmed" | "failed";
+type SwipeMutationJournalEntry = {
+  status: SwipeMutationStatus;
+  attempts: number;
+  updatedAt: number;
+};
+const swipeMutationJournal = new Map<string, SwipeMutationJournalEntry>();
+
+const enqueueListingMutation = (task: () => Promise<void>) => {
+  const run = listingMutationQueue.catch(() => undefined).then(task);
+  listingMutationQueue = run.catch(() => undefined);
+  return run;
+};
+
+const markSwipeMutation = (
+  key: string,
+  status: SwipeMutationStatus,
+  attempts: number
+) => {
+  swipeMutationJournal.set(key, {
+    status,
+    attempts,
+    updatedAt: Date.now(),
+  });
+};
+
+const shouldRetrySwipeMutation = (error: unknown, attempts: number) => {
+  if (attempts >= 2) return false;
+  if (!(error instanceof Error)) return false;
+  const status = (error as Error & { status?: number }).status;
+  if (typeof status === "number") {
+    return status >= 500 || status === 429;
+  }
+  return /fetch|network|timeout|failed/i.test(error.message);
+};
+
+const runSwipeMutation = async (
+  key: string,
+  task: () => Promise<void>,
+  onPermanentFailure: () => void
+) => {
+  let attempts = 0;
+  while (attempts < 2) {
+    attempts += 1;
+    markSwipeMutation(key, "pending", attempts);
+    try {
+      await task();
+      markSwipeMutation(key, "confirmed", attempts);
+      return;
+    } catch (error) {
+      if (shouldRetrySwipeMutation(error, attempts)) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempts));
+        continue;
+      }
+      markSwipeMutation(key, "failed", attempts);
+      onPermanentFailure();
+      return;
+    }
+  }
+};
+
+const scheduleMatchesReload = (loadMatches: () => Promise<void>, delayMs = 250) => {
+  if (matchesReloadTimer) {
+    clearTimeout(matchesReloadTimer);
+  }
+  matchesReloadTimer = setTimeout(() => {
+    matchesReloadTimer = null;
+    void loadMatches().catch(() => undefined);
+  }, delayMs);
+};
+
 type Thread = {
   id: string;
   listingId: string;
@@ -267,7 +340,7 @@ type Thread = {
   messages: ChatMessage[];
 };
 
-type ExploreFilters = {
+export type ExploreFilters = {
   budget?: number;
   distance?: number;
   preferredDistance?: number;
@@ -656,7 +729,7 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
   return { summary, listing };
 };
 
-const mapPropertyToListing = (property: ApiProperty): Listing => {
+export const mapPropertyToListing = (property: ApiProperty): Listing => {
   const propertyId = resolvePropertyId(property);
   const addressParts = [
     property?.address?.street,
@@ -1218,44 +1291,52 @@ export const useAppStore = create<AppState>()(
           }),
           token: state.authToken,
         });
-        if (tenantLiked !== false) {
-          await get().loadMatches();
-        }
       },
       likeListing: async (listingId) => {
         const state = get();
-        if (state.likedIds.includes(listingId)) return;
+        const alreadyLiked = state.likedIds.includes(listingId);
 
-        set({
-          likedIds: [...state.likedIds, listingId],
-          suppressedMatchListingIds: state.suppressedMatchListingIds.filter(
-            (id) => id !== listingId
-          ),
-          selectedListingId: listingId,
-        });
+        if (!alreadyLiked) {
+          set({
+            likedIds: [...state.likedIds, listingId],
+            suppressedMatchListingIds: state.suppressedMatchListingIds.filter(
+              (id) => id !== listingId
+            ),
+            selectedListingId: listingId,
+          });
+        }
 
         if (state.authToken && isMongoId(listingId)) {
-          if (state.userId) {
-            try {
-              await apiFetch(`/api/users/${state.userId}/saved-properties`, {
-                method: "POST",
-                body: JSON.stringify({ propertyId: listingId }),
-                token: state.authToken,
-              });
-            } catch {
-              // Keep match creation independent of saved-properties failures.
-            }
-          }
+          void enqueueListingMutation(async () => {
+            const currentState = get();
+            if (!currentState.likedIds.includes(listingId) && !alreadyLiked) return;
+            await runSwipeMutation(
+              `like:${listingId}`,
+              async () => {
+                if (currentState.userId) {
+                  try {
+                    await apiFetch(`/api/users/${currentState.userId}/saved-properties`, {
+                      method: "POST",
+                      body: JSON.stringify({ propertyId: listingId }),
+                      token: currentState.authToken ?? undefined,
+                    });
+                  } catch {
+                    // Keep match creation independent of saved-properties failures.
+                  }
+                }
 
-          try {
-            await get().createMatchForListing(listingId, true);
-          } catch {
-            set((current) => ({
-              likedIds: current.likedIds.filter((id) => id !== listingId),
-              selectedListingId:
-                current.exploreQueue.find((id) => id !== listingId) ?? current.selectedListingId,
-            }));
-          }
+                await get().createMatchForListing(listingId, true);
+                scheduleMatchesReload(get().loadMatches);
+              },
+              () => {
+                set((current) => ({
+                  likedIds: current.likedIds.filter((id) => id !== listingId),
+                  selectedListingId:
+                    current.exploreQueue.find((id) => id !== listingId) ?? current.selectedListingId,
+                }));
+              }
+            );
+          });
         }
       },
       unlikeListing: async (listingId) => {
@@ -1274,30 +1355,37 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          if (state.userId) {
-            try {
-              await apiFetch(`/api/users/${state.userId}/saved-properties/${listingId}`, {
-                method: "DELETE",
-                token: state.authToken,
-              });
-            } catch {
-              // Ignore saved-properties failures; still update match state.
-            }
-          }
+          void enqueueListingMutation(async () => {
+            const currentState = get();
+            await runSwipeMutation(
+              `unlike:${listingId}`,
+              async () => {
+                if (currentState.userId) {
+                  try {
+                    await apiFetch(`/api/users/${currentState.userId}/saved-properties/${listingId}`, {
+                      method: "DELETE",
+                      token: currentState.authToken ?? undefined,
+                    });
+                  } catch {
+                    // Ignore saved-properties failures; still update match state.
+                  }
+                }
 
-          try {
-            await get().createMatchForListing(listingId, false, "Soft");
-            await get().loadMatches();
-          } catch {
-            set((current) => ({
-              likedIds: current.likedIds.includes(listingId)
-                ? current.likedIds
-                : [...current.likedIds, listingId],
-              suppressedMatchListingIds: current.suppressedMatchListingIds.filter(
-                (id) => id !== listingId
-              ),
-            }));
-          }
+                await get().createMatchForListing(listingId, false, "Soft");
+                scheduleMatchesReload(get().loadMatches);
+              },
+              () => {
+                set((current) => ({
+                  likedIds: current.likedIds.includes(listingId)
+                    ? current.likedIds
+                    : [...current.likedIds, listingId],
+                  suppressedMatchListingIds: current.suppressedMatchListingIds.filter(
+                    (id) => id !== listingId
+                  ),
+                }));
+              }
+            );
+          });
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -1319,14 +1407,20 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          try {
-            await get().createMatchForListing(listingId, false, "Soft");
-          } catch {
-            set((current) => ({
-              passedIds: current.passedIds.filter((id) => id !== listingId),
-              selectedListingId: listingId,
-            }));
-          }
+          void enqueueListingMutation(async () => {
+            await runSwipeMutation(
+              `pass:${listingId}`,
+              async () => {
+                await get().createMatchForListing(listingId, false, "Soft");
+              },
+              () => {
+                set((current) => ({
+                  passedIds: current.passedIds.filter((id) => id !== listingId),
+                  selectedListingId: listingId,
+                }));
+              }
+            );
+          });
         }
       },
       advanceQueue: () =>

@@ -35,6 +35,8 @@ function SignUpContent() {
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
   const isAgentSignup = searchParams?.get("isAgent") === "true";
   const redirectParam = searchParams?.get("redirect") ?? "";
+  const postSignupRedirect =
+    isAgentSignup && redirectParam ? decodeURIComponent(redirectParam) : "/dashboard/overview";
 
   const updateField = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -51,7 +53,7 @@ function SignUpContent() {
         return;
       }
       captureUserLocation().catch(() => { });
-      router.push("/dashboard/overview");
+      router.push(postSignupRedirect);
     } catch (err) {
       if (!hasShownErrorToast(err)) {
         showToast({ title: getApiErrorMessage(err), variant: "error" });
@@ -219,6 +221,11 @@ function SignUpContent() {
               ? "Join your organisation to manage properties."
               : "List and manage your properties with ease."}
           </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {isAgentSignup
+              ? "Use the invited email so your organisation can link this account correctly."
+              : "You can verify identity and finish property setup after account creation."}
+          </p>
         </header>
 
         {/* Form */}
@@ -336,6 +343,9 @@ function SignUpContent() {
 
           <p className="text-sm text-gray-500">
             Protected by reCAPTCHA v3.
+          </p>
+          <p className="text-sm text-slate-500">
+            Password must be at least 8 characters and your email will be verified before access.
           </p>
 
           {/* Submit */}

@@ -1188,3 +1188,34 @@ Verified live:
 Relevant files:
 - `frontend/src/app/explore/page.tsx`
 - `frontend/src/store/useAppStore.ts`
+
+### 18.10 Explore Deck State Machine, Infinite Replay, and Match Sync
+
+Explore now uses an explicit deck controller rather than ad hoc queue/recycle effects, and the right-swipe persistence path was tightened so visual deck progress stays in sync with backend match creation.
+
+Implemented:
+
+- Added a dedicated Explore deck controller with explicit phases: `boot_loading`, `ready`, `prefetching`, `swapping`, `terminal_empty`, and `error`
+- Split deck orchestration into `visibleQueue` and `bufferQueue` so swaps happen atomically instead of after the visible deck drains
+- Enabled infinite session replay after the first successful load, so Explore keeps cycling previously seen listings instead of reaching terminal empty during long sessions
+- Kept the rendered stack visually 3-deep by sourcing the visible card stack from `visibleQueue + bufferQueue`
+- Tightened swipe timing so the next card commits before the full exit animation completes
+- Hardened rapid `INTERESTED` bursts with a queued mutation path and coalesced matches refresh
+- Fixed a real sync bug where a card already present in local `likedIds` could advance out of Explore without firing `POST /api/matches`; right-swipes now reconcile backend save/match state even when the card is already liked locally
+- Refined the Explore boot skeleton into a bounded 3-card stack placeholder that stays within the card canvas and does not cover the `PASS` / `INTERESTED` action buttons
+
+Verified live:
+
+- 40 consecutive left swipes completed without recycle skeleton flashes or dead blank states
+- Rapid right-swipes continued advancing the deck while backend writes were serialized in the background
+- A previously failing `INTERESTED` case now produced:
+  - `POST /api/users/:id/saved-properties -> 201`
+  - `POST /api/matches -> 201`
+  - `GET /api/matches/tenant -> 200`
+- The swiped listing appeared on `/matches` immediately without manual reload
+- Under forced slow 3G, the loading skeleton remained constrained to the card stack area and preserved a clean visual lane for the action buttons
+
+Relevant files:
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/app/explore/useExploreDeckController.ts`
+- `frontend/src/store/useAppStore.ts`

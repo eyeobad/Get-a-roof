@@ -31,6 +31,7 @@ type AdminUser = {
   lastName?: string;
   email: string;
   role: string;
+  agentOrgId?: string;
   isSuspended?: boolean;
   emailVerified?: boolean;
 };
@@ -101,6 +102,18 @@ export default function AdminPage() {
   const lineChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const donutChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const barChartCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const getAdminRoleLabel = useCallback((item: AdminUser) => {
+    if (item.role === "Organisation") return "Organisation";
+    if (item.role === "Landlord" && item.agentOrgId) return "Organisation Agent";
+    return item.role;
+  }, []);
+
+  const canEditRoleDirectly = useCallback((item: AdminUser) => {
+    if (item.role === "Organisation") return false;
+    if (item.role === "Landlord" && item.agentOrgId) return false;
+    return true;
+  }, []);
 
   const role = useMemo(() => {
     const raw = user?.role;
@@ -442,28 +455,39 @@ export default function AdminPage() {
                       {[item.firstName, item.lastName].filter(Boolean).join(" ") || "Unnamed"}
                     </p>
                     <p className="text-slate-500 truncate">{item.email}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-600">
+                      {getAdminRoleLabel(item)}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <select
-                      value={userRoleDraft[item._id] ?? item.role}
-                      onChange={(event) =>
-                        setUserRoleDraft((prev) => ({
-                          ...prev,
-                          [item._id]: event.target.value,
-                        }))
-                      }
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
-                    >
-                      <option value="Tenant">Tenant</option>
-                      <option value="Landlord">Landlord</option>
-                      <option value="Admin">Admin</option>
-                    </select>
-                    <button
-                      onClick={() => updateUserRole(item._id)}
-                      className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white"
-                    >
-                      Save Role
-                    </button>
+                    {canEditRoleDirectly(item) ? (
+                      <>
+                        <select
+                          value={userRoleDraft[item._id] ?? item.role}
+                          onChange={(event) =>
+                            setUserRoleDraft((prev) => ({
+                              ...prev,
+                              [item._id]: event.target.value,
+                            }))
+                          }
+                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
+                        >
+                          <option value="Tenant">Tenant</option>
+                          <option value="Landlord">Landlord</option>
+                          <option value="Admin">Admin</option>
+                        </select>
+                        <button
+                          onClick={() => updateUserRole(item._id)}
+                          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white"
+                        >
+                          Save Role
+                        </button>
+                      </>
+                    ) : (
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">
+                        Managed by workspace
+                      </span>
+                    )}
                     <button
                       onClick={() => updateUserStatus(item._id, !item.isSuspended)}
                       className={`rounded-md px-2 py-1 text-xs font-semibold ${

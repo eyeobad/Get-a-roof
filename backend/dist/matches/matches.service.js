@@ -93,8 +93,11 @@ let MatchesService = class MatchesService {
             .findOne({ tenantId: tenantOid, propertyId: propertyOid })
             .exec();
         if (existing) {
+            const nextStatus = existing.status === enums_1.MatchStatus.Dismissed && !isDismiss
+                ? enums_1.MatchStatus.TenantLiked
+                : computedStatus;
             existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
-            existing.status = this.validateTransition(existing.status, computedStatus);
+            existing.status = this.validateTransition(existing.status, nextStatus);
             existing.matchScore = matchScoreData.matchScore;
             existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
             existing.apartmentPreferenceMatchPercentage =
@@ -106,6 +109,10 @@ let MatchesService = class MatchesService {
             if (isDismiss) {
                 existing.dismissedAt = new Date();
                 existing.dismissReason = dto.dismissReason ?? enums_1.DismissReason.Soft;
+            }
+            else {
+                existing.dismissedAt = undefined;
+                existing.dismissReason = undefined;
             }
             return existing.save();
         }

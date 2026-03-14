@@ -24,6 +24,7 @@ import { useAppStore } from "@/store/useAppStore";
 import type { Listing } from "@/lib/listings";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 import { getCitiesForState, NIGERIA_STATES } from "@/lib/nigeriaLocations";
+import { useExploreDeckController } from "@/app/explore/useExploreDeckController";
 
 type FilterModalProps = {
   isOpen: boolean;
@@ -47,10 +48,7 @@ type ExploreFilterState = {
 
 const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
-const PREFETCH_THRESHOLD = 10;
-const RECYCLE_PREFETCH_THRESHOLD = 8;
 const PRELOAD_LOOKAHEAD = 5;
-const MAX_RECYCLE_CYCLES = 3;
 
 const preloadImage = async (src: string) => {
   if (!src || typeof window === "undefined") return;
@@ -121,6 +119,7 @@ export default function ExploreCards() {
   const [filters, setFilters] = useState<ExploreFilterState>(defaultFilters);
   const [draftFilters, setDraftFilters] = useState<ExploreFilterState>(defaultFilters);
   const [cardImageIndexes, setCardImageIndexes] = useState<Record<string, number>>({});
+  const [deckResetKey, setDeckResetKey] = useState(0);
 
   const hasActiveFilters = useMemo(() => {
     if (
@@ -136,36 +135,19 @@ export default function ExploreCards() {
     return Object.values(filters.toggles).some(Boolean);
   }, [filters, defaultFilters]);
 
-  const exploreQueue = useAppStore((state) => state.exploreQueue);
-  const listingsById = useAppStore((state) => state.listingsById);
   const likeListing = useAppStore((state) => state.likeListing);
   const passListing = useAppStore((state) => state.passListing);
-  const advanceQueue = useAppStore((state) => state.advanceQueue);
-  const resetExploreQueue = useAppStore((state) => state.resetExploreQueue);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
-  const loadExploreListings = useAppStore((state) => state.loadExploreListings);
-  const loadRecycledIntoExplore = useAppStore(
-    (state) => state.loadRecycledIntoExplore
-  );
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
+  const authToken = useAppStore((state) => state.authToken);
+  const userLocation = useAppStore((state) => state.userLocation);
+  const tenantPrefs = useAppStore((state) => state.user?.preferences?.tenant);
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
-  const [isLoadingListings, setIsLoadingListings] = useState(false);
-  const [recycleAttempted, setRecycleAttempted] = useState(false);
-  const isRecyclingDeckRef = useRef(false);
-  const hasLoopedFromMemoryRef = useRef(false);
-  const recycleCycleCountRef = useRef(0);
   const swipeLockRef = useRef(false);
-  const prefetchInFlightRef = useRef(false);
   const preloadedImageUrlsRef = useRef(new Set<string>());
-  const hasRenderedCardsRef = useRef(false);
 
   const controls = useAnimation();
-
-  const getRenderableCount = () => {
-    const state = useAppStore.getState();
-    return state.exploreQueue.filter((id) => Boolean(state.listingsById[id])).length;
-  };
 
   const activeExploreFilters = useMemo(
     () => ({
@@ -188,60 +170,53 @@ export default function ExploreCards() {
     ]
   );
 
-  const renderableQueue = useMemo(
-    () => exploreQueue.filter((id) => Boolean(listingsById[id])),
-    [exploreQueue, listingsById]
+  const normalizedTenantPrefs = useMemo(
+    () =>
+      tenantPrefs && typeof tenantPrefs === "object"
+        ? {
+            preferredDistance:
+              typeof tenantPrefs.preferredDistance === "number"
+                ? tenantPrefs.preferredDistance
+                : undefined,
+            maxCommuteRadius:
+              typeof tenantPrefs.maxCommuteRadius === "number"
+                ? tenantPrefs.maxCommuteRadius
+                : undefined,
+            preferredState:
+              typeof tenantPrefs.preferredState === "string"
+                ? tenantPrefs.preferredState
+                : undefined,
+          }
+        : null,
+    [tenantPrefs]
   );
 
-  const visibleCards = useMemo(() => {
-    const seen = new Set<string>();
-    const uniqueTopIds = renderableQueue
-      .filter((id) => {
-        if (seen.has(id)) return false;
-        seen.add(id);
-        return true;
-      })
-      .slice(0, 3);
-
-    return uniqueTopIds
-      .map((id) => listingsById[id])
-      .filter((listing): listing is Listing => Boolean(listing));
-  }, [renderableQueue, listingsById]);
-  const cardsToRender = visibleCards;
-  const topCardId = cardsToRender[0]?.id ?? null;
-
-  useEffect(() => {
-    if (renderableQueue.length > 0) {
-      hasRenderedCardsRef.current = true;
-    }
-  }, [renderableQueue.length]);
-
-  useEffect(() => {
-    if (renderableQueue.length === exploreQueue.length) return;
-
-    useAppStore.setState((state) => {
-      const nextQueue = state.exploreQueue.filter((id) => Boolean(state.listingsById[id]));
-      if (nextQueue.length === state.exploreQueue.length) {
-        return state;
-      }
-
-      const nextSelected =
-        state.selectedListingId && nextQueue.includes(state.selectedListingId)
-          ? state.selectedListingId
-          : nextQueue[0] ?? null;
-
-      return {
-        exploreQueue: nextQueue,
-        selectedListingId: nextSelected,
-      };
-    });
-  }, [exploreQueue.length, renderableQueue.length]);
+  const {
+    cardsToRender,
+    topCardId,
+    phase: deckPhase,
+    hasRenderedCards,
+    errorMessage,
+    commitSwipe,
+  } = useExploreDeckController({
+    authToken,
+    filters: activeExploreFilters,
+    resetKey: deckResetKey,
+    tenantPrefs: normalizedTenantPrefs,
+    userLocation,
+  });
 
   useEffect(() => {
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     swipeLockRef.current = false;
     setIsSwipeAnimating(false);
   }, [topCardId, controls]);
+
+  useEffect(() => {
+    if (useAppStore.getState().selectedListingId !== topCardId) {
+      setSelectedListingId(topCardId);
+    }
+  }, [setSelectedListingId, topCardId]);
 
   const resetDeck = () => {
     const next = {
@@ -251,14 +226,10 @@ export default function ExploreCards() {
     setDraftFilters(next);
     setFilters(next);
     setCardImageIndexes({});
-    setRecycleAttempted(false);
-    recycleCycleCountRef.current = 0;
-    hasRenderedCardsRef.current = false;
     swipeLockRef.current = false;
-    resetExploreQueue();
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
-    void loadExploreListings(next);
+    setDeckResetKey((value) => value + 1);
   };
 
   const applyFilters = () => {
@@ -267,11 +238,8 @@ export default function ExploreCards() {
       toggles: { ...draftFilters.toggles },
     };
     setFilters(nextFilters);
-    setRecycleAttempted(false);
-    recycleCycleCountRef.current = 0;
-    hasRenderedCardsRef.current = false;
-    resetExploreQueue();
-    void loadExploreListings(nextFilters);
+    setCardImageIndexes({});
+    setDeckResetKey((value) => value + 1);
     setFiltersOpen(false);
   };
 
@@ -282,11 +250,8 @@ export default function ExploreCards() {
     };
     setDraftFilters(next);
     setFilters(next);
-    setRecycleAttempted(false);
-    recycleCycleCountRef.current = 0;
-    hasRenderedCardsRef.current = false;
-    resetExploreQueue();
-    void loadExploreListings(next);
+    setCardImageIndexes({});
+    setDeckResetKey((value) => value + 1);
     setFiltersOpen(false);
   };
 
@@ -295,63 +260,7 @@ export default function ExploreCards() {
   }, [captureUserLocation]);
 
   useEffect(() => {
-    let active = true;
-    setIsLoadingListings(true);
-    void loadExploreListings(activeExploreFilters)
-      .catch(() => {
-        if (active) setRecycleAttempted(true);
-      })
-      .finally(() => {
-        if (active) setIsLoadingListings(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [
-    loadExploreListings,
-    activeExploreFilters,
-  ]);
-
-  useEffect(() => {
-    if (
-      renderableQueue.length === 0 ||
-      renderableQueue.length > PREFETCH_THRESHOLD ||
-      isLoadingListings ||
-      recycleAttempted ||
-      isRecyclingDeckRef.current ||
-      prefetchInFlightRef.current
-    ) {
-      return;
-    }
-
-    prefetchInFlightRef.current = true;
-    void loadExploreListings(activeExploreFilters, { append: true }).finally(() => {
-      prefetchInFlightRef.current = false;
-    });
-  }, [
-    renderableQueue.length,
-    isLoadingListings,
-    recycleAttempted,
-    loadExploreListings,
-    activeExploreFilters,
-  ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (process.env.NODE_ENV !== "development") return;
-    console.debug("[explore-deck]", {
-      queueLength: exploreQueue.length,
-      renderableQueueLength: renderableQueue.length,
-      visibleCardsLength: visibleCards.length,
-      listingsCount: Object.keys(listingsById).length,
-    });
-  }, [exploreQueue.length, renderableQueue.length, visibleCards.length, listingsById]);
-
-  useEffect(() => {
-    const upcomingCards = renderableQueue
-      .slice(3, 3 + PRELOAD_LOOKAHEAD)
-      .map((id) => listingsById[id])
-      .filter((listing): listing is Listing => Boolean(listing));
+    const upcomingCards = cardsToRender.slice(1, 1 + PRELOAD_LOOKAHEAD);
 
     upcomingCards.forEach((card) => {
       const candidates = (card.images?.length ? card.images : [card.image]).filter(Boolean);
@@ -361,128 +270,7 @@ export default function ExploreCards() {
         void preloadImage(src);
       });
     });
-  }, [renderableQueue, listingsById]);
-
-  useEffect(() => {
-    if (
-      renderableQueue.length === 0 ||
-      renderableQueue.length > RECYCLE_PREFETCH_THRESHOLD ||
-      isLoadingListings ||
-      recycleAttempted ||
-      isRecyclingDeckRef.current
-    ) {
-      return;
-    }
-
-    if (recycleCycleCountRef.current >= MAX_RECYCLE_CYCLES) {
-      return;
-    }
-
-    let active = true;
-    isRecyclingDeckRef.current = true;
-
-    void loadRecycledIntoExplore({ prepend: false })
-      .then((restored) => {
-        if (!active || !restored) return;
-        recycleCycleCountRef.current += 1;
-        setRecycleAttempted(false);
-      })
-      .finally(() => {
-        isRecyclingDeckRef.current = false;
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [
-    renderableQueue.length,
-    isLoadingListings,
-    recycleAttempted,
-    loadRecycledIntoExplore,
-  ]);
-
-  useEffect(() => {
-    if (renderableQueue.length > 0) {
-      hasLoopedFromMemoryRef.current = false;
-      setRecycleAttempted(false);
-      return;
-    }
-    if (isRecyclingDeckRef.current || recycleAttempted) return;
-
-    // Avoid endless recycle loops during long swipe sessions.
-    if (recycleCycleCountRef.current >= MAX_RECYCLE_CYCLES) {
-      setRecycleAttempted(true);
-      return;
-    }
-
-    let active = true;
-    // Do NOT set isLoadingListings here — we only show the skeleton on true
-    // first-load. Recycle should always be invisible to the user.
-    isRecyclingDeckRef.current = true;
-
-    void loadRecycledIntoExplore()
-      .then(async (restored) => {
-        if (!active) return;
-        if (restored) {
-          recycleCycleCountRef.current += 1;
-          if (getRenderableCount() === 0) {
-            await loadExploreListings(activeExploreFilters, { append: true });
-            if (!active) return;
-          }
-          setIsLoadingListings(false);
-          if (getRenderableCount() === 0) {
-            setRecycleAttempted(true);
-          }
-          return;
-        }
-
-        if (!restored) {
-          const cachedIds = Object.keys(listingsById);
-          if (cachedIds.length > 0 && !hasLoopedFromMemoryRef.current) {
-            hasLoopedFromMemoryRef.current = true;
-            resetExploreQueue();
-            if (getRenderableCount() === 0) {
-              setRecycleAttempted(true);
-            }
-            return;
-          }
-          // Only show loading skeleton here if the deck is truly empty
-          // (no cards in the visible stack at all).
-          const alreadyEmpty = getRenderableCount() === 0;
-          if (alreadyEmpty) setIsLoadingListings(true);
-          await loadExploreListings(activeExploreFilters);
-          if (!active) return;
-          if (alreadyEmpty) setIsLoadingListings(false);
-          const nextRenderableQueueLength = getRenderableCount();
-          if (nextRenderableQueueLength === 0) {
-            setRecycleAttempted(true);
-          }
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        setIsLoadingListings(false);
-        setRecycleAttempted(true);
-      })
-      .finally(() => {
-        // Always release recycle lock regardless of `active` to avoid
-        // deadlocking the deck in an empty state with disabled actions.
-        isRecyclingDeckRef.current = false;
-        setIsLoadingListings(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [
-    renderableQueue.length,
-    recycleAttempted,
-    loadRecycledIntoExplore,
-    loadExploreListings,
-    resetExploreQueue,
-    listingsById,
-    activeExploreFilters,
-  ]);
+  }, [cardsToRender]);
 
   const handleSwipe = async (direction: "left" | "right") => {
     if (swipeLockRef.current || isSwipeAnimating || cardsToRender.length === 0) return;
@@ -494,12 +282,16 @@ export default function ExploreCards() {
     setIsSwipeAnimating(true);
 
     try {
-      await controls.start({
+      const swipeAnimation = controls.start({
         x: direction === "left" ? -420 : 420,
         rotate: direction === "left" ? -18 : 18,
         opacity: 0,
-        transition: { duration: 0.35 },
+        transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
       });
+      await Promise.race([
+        swipeAnimation,
+        new Promise((resolve) => window.setTimeout(resolve, 180)),
+      ]);
 
       if (direction === "right") {
         void likeListing(topListing.id);
@@ -508,8 +300,9 @@ export default function ExploreCards() {
         void passListing(topListing.id);
       }
 
-      advanceQueue();
+      commitSwipe(topListing.id);
       controls.set({ x: 0, rotate: 0, opacity: 1 });
+      await swipeAnimation.catch(() => undefined);
     } finally {
       swipeLockRef.current = false;
       setIsSwipeAnimating(false);
@@ -693,34 +486,39 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {cardsToRender.length === 0 && isLoadingListings && !hasRenderedCardsRef.current && (
-          <div className="absolute inset-0 flex items-center justify-center px-4">
-            <div className="w-full max-w-md rounded-[2rem] overflow-hidden border border-slate-200 bg-white shadow-card">
-              <div className="relative h-[58%] min-h-[320px] overflow-hidden bg-slate-200">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300" />
-                <div className="skeleton-shimmer absolute inset-0" />
-                <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-white/65" />
-                <div className="absolute inset-x-0 top-4 flex justify-center gap-2">
-                  <div className="h-1.5 w-6 rounded-full bg-white/90" />
-                  <div className="h-1.5 w-2 rounded-full bg-white/65" />
-                  <div className="h-1.5 w-2 rounded-full bg-white/65" />
+        {cardsToRender.length === 0 && deckPhase === "boot_loading" && !hasRenderedCards && (
+          <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
+            <div className="relative h-full w-full max-w-md">
+              <div className="pointer-events-none absolute inset-x-10 top-[6%] h-20 rounded-full bg-primary/10 blur-3xl" />
+              <div className="absolute inset-x-12 top-[13%] h-[68%] scale-[0.94] rounded-[2.1rem] border border-slate-200/68 bg-white/60 shadow-[0_12px_30px_rgba(15,23,42,0.05)]" />
+              <div className="absolute inset-x-7 top-[8.5%] h-[74%] scale-[0.975] rounded-[2.3rem] border border-slate-200/80 bg-white/82 shadow-[0_18px_46px_rgba(15,23,42,0.09)]" />
+              <div className="absolute inset-x-2 top-[2%] h-[84%] overflow-hidden rounded-[2.45rem] border border-slate-200/90 bg-white shadow-[0_28px_72px_rgba(15,23,42,0.14)]">
+                <div className="relative h-[58%] min-h-[280px] overflow-hidden bg-slate-200">
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300" />
+                  <div className="skeleton-shimmer absolute inset-0" />
+                  <div className="absolute left-5 top-5 h-10 w-28 rounded-full bg-white/65" />
+                  <div className="absolute inset-x-0 top-5 flex justify-center gap-3">
+                    <div className="h-2 w-7 rounded-full bg-white/90" />
+                    <div className="h-2 w-2.5 rounded-full bg-white/65" />
+                    <div className="h-2 w-2.5 rounded-full bg-white/65" />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-4 bg-primary px-4 py-4 md:px-6 md:py-5">
-                <div className="space-y-2 border-b border-white/10 pb-3">
-                  <div className="h-8 w-44 rounded-full bg-white/25" />
-                  <div className="h-3 w-28 rounded-full bg-white/20" />
-                </div>
-                <div className="grid grid-cols-3 gap-2.5 md:gap-3">
-                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
-                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
-                  <div className="h-14 rounded-xl border border-white/10 bg-white/10" />
-                </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                  <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
-                  <div className="space-y-2 min-w-0">
-                    <div className="h-4 w-44 rounded-full bg-white/15" />
-                    <div className="h-7 w-24 rounded-lg border border-white/10 bg-white/10" />
+                <div className="space-y-5 bg-primary px-5 py-5 md:px-6 md:py-6">
+                  <div className="space-y-2.5 border-b border-white/10 pb-4">
+                    <div className="h-10 w-52 rounded-full bg-white/25" />
+                    <div className="h-3.5 w-32 rounded-full bg-white/20" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
+                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
+                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
+                  </div>
+                  <div className="flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/5 px-4 py-4">
+                    <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
+                    <div className="min-w-0 space-y-2">
+                      <div className="h-4.5 w-52 rounded-full bg-white/15" />
+                      <div className="h-8 w-28 rounded-xl border border-white/10 bg-white/10" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -728,7 +526,7 @@ export default function ExploreCards() {
           </div>
         )}
 
-        {cardsToRender.length === 0 && recycleAttempted && !isLoadingListings && (
+        {cardsToRender.length === 0 && deckPhase === "terminal_empty" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-6">
             <span className="material-symbols-outlined text-6xl text-gray-300">maps_home_work</span>
             <h3 className="text-xl font-bold text-gray-700">No more listings</h3>
@@ -741,13 +539,27 @@ export default function ExploreCards() {
             </button>
           </div>
         )}
+
+        {cardsToRender.length === 0 && deckPhase === "error" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <span className="material-symbols-outlined text-6xl text-rose-300">wifi_off</span>
+            <h3 className="text-xl font-bold text-gray-700">Unable to load listings</h3>
+            <p className="text-gray-500">{errorMessage || "Please try again."}</p>
+            <button
+              onClick={resetDeck}
+              className="mt-2 px-6 py-3 bg-primary text-white rounded-full font-bold shadow-lg"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Action Buttons */}
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
           onClick={() => handleSwipe("left")}
-          disabled={isSwipeAnimating || cardsToRender.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
           className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-200"
         >
           <span className="material-symbols-outlined text-3xl">close</span>
@@ -756,7 +568,7 @@ export default function ExploreCards() {
 
         <button
           onClick={() => handleSwipe("right")}
-          disabled={isSwipeAnimating || cardsToRender.length === 0}
+          disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
           className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100"
         >
           <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
@@ -1125,3 +937,4 @@ function FilterModal({
     </div>
   );
 }
+
