@@ -18,6 +18,7 @@ export default function TenantReview() {
   type TenantPreferences = {
     lookingFor?: string[];
     petFriendlyRequired?: boolean;
+    hasSeenExploreTutorial?: boolean;
     employmentStatus?: string;
     annualEarnings?: number;
     maritalStatus?: string;

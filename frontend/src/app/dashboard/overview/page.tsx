@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useAppStore } from "@/store/useAppStore";
+import LandlordTutorial from "@/components/LandlordTutorial";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 import { MatchTrendChart, PropertyPerformanceChart } from "@/components/DashboardCharts";
 
@@ -229,7 +230,7 @@ export default function DashboardOverviewPage() {
       <main className="mx-auto flex w-full max-w-md lg:max-w-6xl flex-col gap-6 px-5 pt-6 lg:flex-1 lg:min-h-0 lg:grid lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-5 lg:overflow-hidden">
         
         {/* At a Glance Stats */}
-        <section className="lg:min-h-0">
+        <section className="lg:min-h-0" data-tour="dashboard-metrics">
           <div className="grid grid-cols-3 gap-3 lg:gap-5">
             {isLoading
               ? Array.from({ length: 3 }).map((_, index) => (
@@ -247,6 +248,13 @@ export default function DashboardOverviewPage() {
                     key={card.label}
                     type="button"
                     onClick={() => router.push(card.href)}
+                    data-tour={
+                      card.label === "My Listings"
+                        ? "dashboard-listings"
+                        : card.label === "Unread Messages"
+                          ? "dashboard-messages"
+                          : undefined
+                    }
                     className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-1 hover:border-[#0a44b8]/30 hover:shadow-md group flex flex-col"
                   >
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#0a44b8] opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -308,6 +316,8 @@ export default function DashboardOverviewPage() {
         </section>
 
       </main>
+
+      <LandlordTutorial ready={Boolean(user && !isLoading)} />
 
       <BottomNav active="overview" />
     </div>

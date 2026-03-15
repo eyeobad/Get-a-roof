@@ -105,6 +105,7 @@ type ModalType = "none" | "photo" | "preferences" | "delete";
 type ApiTenantPreferences = {
   lookingFor?: string[];
   petFriendlyRequired?: boolean;
+  hasSeenExploreTutorial?: boolean;
   gender?: string;
   employmentStatus?: string;
   maritalStatus?: string;

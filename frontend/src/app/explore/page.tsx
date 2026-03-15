@@ -20,6 +20,7 @@ import {
 } from "framer-motion";
 
 import BottomNav from "@/components/BottomNav";
+import ExploreTutorial from "@/components/ExploreTutorial";
 import { useAppStore } from "@/store/useAppStore";
 import type { Listing } from "@/lib/listings";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
@@ -451,6 +452,7 @@ export default function ExploreCards() {
 
         <div className="w-12 flex justify-end">
           <button
+            data-tour="explore-filters"
             onClick={() => {
               setDraftFilters(filters);
               setFiltersOpen(true);
@@ -555,9 +557,12 @@ export default function ExploreCards() {
         )}
       </main>
 
+      <ExploreTutorial ready={cardsToRender.length > 0 && deckPhase === "ready"} />
+
       {/* Action Buttons */}
       <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
         <button
+          data-tour="explore-pass"
           onClick={() => handleSwipe("left")}
           disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
           className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-200"
@@ -567,6 +572,7 @@ export default function ExploreCards() {
         </button>
 
         <button
+          data-tour="explore-like"
           onClick={() => handleSwipe("right")}
           disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
           className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100"

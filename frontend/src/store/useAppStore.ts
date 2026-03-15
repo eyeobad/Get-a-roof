@@ -146,8 +146,12 @@ type ApiUser = {
   matchesCount?: number;
   unreadMessages?: number;
   preferences?: {
-    tenant?: Record<string, unknown>;
-    landlord?: Record<string, unknown>;
+    tenant?: Record<string, unknown> & {
+      hasSeenExploreTutorial?: boolean;
+    };
+    landlord?: Record<string, unknown> & {
+      hasSeenLandlordTutorial?: boolean;
+    };
   };
 };
 
@@ -1241,11 +1245,15 @@ export const useAppStore = create<AppState>()(
       updatePreferences: async (payload) => {
         const state = get();
         if (!state.authToken || !state.userId) return null;
-        return apiFetch<ApiUser>(`/api/users/${state.userId}/preferences`, {
+        const updatedUser = await apiFetch<ApiUser>(`/api/users/${state.userId}/preferences`, {
           method: "PATCH",
           body: JSON.stringify(payload),
           token: state.authToken,
         });
+        if (updatedUser) {
+          set({ user: updatedUser });
+        }
+        return updatedUser;
       },
       deleteAccount: async () => {
         const state = get();

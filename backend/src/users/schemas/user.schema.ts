@@ -102,14 +102,22 @@ class TenantPreferences {
 
   @Prop()
   preferredState?: string;
+
+  @Prop({ default: false })
+  hasSeenExploreTutorial?: boolean;
+}
+
+class LandlordPreferences {
+  @Prop({ default: false })
+  hasSeenLandlordTutorial?: boolean;
 }
 
 class Preferences {
   @Prop({ type: TenantPreferences })
   tenant?: TenantPreferences;
 
-  @Prop({ type: Object })
-  landlord?: Record<string, unknown>;
+  @Prop({ type: LandlordPreferences })
+  landlord?: LandlordPreferences;
 }
 
 class OrgProfile {

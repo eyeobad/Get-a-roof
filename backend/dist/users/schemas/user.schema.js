@@ -137,6 +137,16 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], TenantPreferences.prototype, "preferredState", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], TenantPreferences.prototype, "hasSeenExploreTutorial", void 0);
+class LandlordPreferences {
+}
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], LandlordPreferences.prototype, "hasSeenLandlordTutorial", void 0);
 class Preferences {
 }
 __decorate([
@@ -144,8 +154,8 @@ __decorate([
     __metadata("design:type", TenantPreferences)
 ], Preferences.prototype, "tenant", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: Object }),
-    __metadata("design:type", Object)
+    (0, mongoose_1.Prop)({ type: LandlordPreferences }),
+    __metadata("design:type", LandlordPreferences)
 ], Preferences.prototype, "landlord", void 0);
 class OrgProfile {
 }

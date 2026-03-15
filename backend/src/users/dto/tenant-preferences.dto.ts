@@ -84,4 +84,8 @@ export class TenantPreferencesDto {
   @IsOptional()
   @IsString()
   preferredState?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasSeenExploreTutorial?: boolean;
 }
