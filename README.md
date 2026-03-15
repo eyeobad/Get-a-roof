@@ -1219,3 +1219,43 @@ Relevant files:
 - `frontend/src/app/explore/page.tsx`
 - `frontend/src/app/explore/useExploreDeckController.ts`
 - `frontend/src/store/useAppStore.ts`
+
+### 18.11 Explore Atomic Render Stack, Tutorial Gating, and OTP Deduplication
+
+Several follow-up hardening fixes were added after the initial Explore state-machine rollout to remove remaining visual gaps and tighten first-run onboarding behavior.
+
+Implemented:
+
+- Added a stable `renderStack` inside the Explore deck controller so the UI renders from a preserved top-3 deck snapshot instead of transient queue state
+- Changed swipe commit to hand off atomically into `bufferQueue` or replay fallback before the deck can visually collapse into a blank `swapping` canvas
+- Moved Explore prefetch from `bufferQueue.length === 0` to a low-watermark trigger (`<= 2`) so refill starts before the buffer is fully exhausted
+- Kept the top Explore badge aligned to listing intent (`For Rent` / `Shortlet`) instead of generic property status like `Listed`
+- Removed the redundant bottom listing-intent pill from the Explore card to avoid duplicate `For Rent` labeling
+- Gated product tutorials behind a session-scoped new-account tutorial-flow marker so tutorials only auto-open for newly onboarded users, not whenever an older user with an unset `hasSeen...Tutorial` flag opens a page
+- Added a small browser-session helper for tutorial flow state and set it only from actual new-account entry points:
+  - tenant onboarding completion / direct post-signup Explore entry
+  - landlord or organisation new-account flow / post-identity verification entry
+- Hardened email OTP sending so duplicate client/bootstrap/concurrent sends do not generate multiple fresh OTP emails in the same immediate window
+
+Verified live:
+
+- 40 consecutive left swipes on `/explore` completed with no sampled blank deck frames, no dead controls, and the deck still rendering 3 cards at the end of the run
+- The Explore card hierarchy now reads as:
+  - top badge: listing intent
+  - under price: property type
+  - location row: location plus `View`
+- Tutorials no longer auto-open solely because a stored seen-flag is `false`; they now require a new-account onboarding session marker
+
+Relevant files:
+- `frontend/src/app/explore/useExploreDeckController.ts`
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/store/useAppStore.ts`
+- `frontend/src/components/PreferenceTutorial.tsx`
+- `frontend/src/lib/tutorialFlow.ts`
+- `frontend/src/app/tenant-onboarding/review/page.tsx`
+- `frontend/src/app/tenant-signup/page.tsx`
+- `frontend/src/app/landlord-signup/page.tsx`
+- `frontend/src/app/org-signup/page.tsx`
+- `frontend/src/app/facial-verification/page.tsx`
+- `frontend/src/app/auth/email-verification/page.tsx`
+- `backend/src/auth/auth.service.ts`
