@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import LandlordProfileTutorial from "@/components/LandlordProfileTutorial";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
 import { useToastError } from "@/hooks/useToastError";
 
@@ -54,6 +55,7 @@ export default function DashboardProfilePage() {
   const clearAuth = useAppStore((state) => state.clearAuth);
   // --- Local State ---
   const [isLoading, setIsLoading] = useState(true);
+  const [hasHydratedSession, setHasHydratedSession] = useState(false);
   
   // Delete State
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -73,15 +75,20 @@ export default function DashboardProfilePage() {
 
   // --- Effects ---
   useEffect(() => {
+    setHasHydratedSession(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedSession) return;
     if (!authToken || !userId) {
       router.replace("/login");
     }
-  }, [authToken, userId, router]);
+  }, [authToken, hasHydratedSession, userId, router]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-        if (!authToken || !userId) {
+        if (!hasHydratedSession || !authToken || !userId) {
             if (mounted) setIsLoading(false);
             return;
         }
@@ -93,7 +100,7 @@ export default function DashboardProfilePage() {
     }
     load();
     return () => { mounted = false; };
-  }, [fetchUserProfile, authToken, userId]);
+  }, [fetchUserProfile, authToken, hasHydratedSession, userId]);
 
   useEffect(() => {
     if (isPhotoModalOpen && user) {
@@ -205,7 +212,7 @@ export default function DashboardProfilePage() {
     <div className="min-h-screen font-display antialiased flex flex-col pb-28 bg-slate-50 text-slate-900">
       
       {/* --- Header --- */}
-      <header className="bg-white px-6 pt-12 pb-8 border-b border-slate-200 shadow-sm relative">
+      <header data-tour="landlord-profile-header" className="bg-white px-6 pt-12 pb-8 border-b border-slate-200 shadow-sm relative">
         <div className="flex items-center gap-6 max-w-2xl mx-auto">
           <button
             onClick={() => router.back()}
@@ -258,7 +265,7 @@ export default function DashboardProfilePage() {
       <main className="flex-1 space-y-8 px-6 pt-8 max-w-2xl mx-auto w-full">
         
         {/* Settings Links */}
-        <section className="space-y-4">
+        <section data-tour="landlord-profile-settings" className="space-y-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xl font-bold text-primary">Profile Settings</h2>
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manage</span>
@@ -298,7 +305,7 @@ export default function DashboardProfilePage() {
         </section>
 
         {/* Account Actions */}
-        <section className="space-y-3 pt-4">
+        <section data-tour="landlord-profile-actions" className="space-y-3 pt-4">
            {/* Sign Out */}
           <button 
             onClick={handleSignOut}
@@ -319,6 +326,8 @@ export default function DashboardProfilePage() {
           </button>
         </section>
       </main>
+
+      <LandlordProfileTutorial ready={Boolean(authToken && user && !isLoading)} />
 
       <Modal
         open={isPhotoModalOpen}

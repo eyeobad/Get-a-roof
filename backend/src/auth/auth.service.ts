@@ -23,6 +23,11 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly otpTtlMs = 10 * 60 * 1000;
   private readonly otpMaxAttempts = 5;
+  private readonly otpResendCooldownMs = 45 * 1000;
+  private readonly emailOtpInflight = new Map<
+    string,
+    Promise<{ sent: true; channel: "email"; expiresAt: Date; deduped?: boolean }>
+  >();
   private readonly otpSecret =
     process.env.OTP_SECRET || process.env.JWT_SECRET || "dev-otp-secret";
 
@@ -56,28 +61,14 @@ export class AuthService {
     }
 
     if (!user.emailVerified) {
-      const challenge = await this.usersService.createSignupVerificationChallenge(
-        user
-      );
-      let otpSent = true;
-      try {
-        await this.sendEmailOtp({
-          userId: user.id,
-          verificationToken: challenge.token,
-        });
-      } catch (error) {
-        otpSent = false;
-        this.logger.warn(
-          `Unable to auto-send verification OTP for ${user.email}: ${(error as Error)?.message ?? "unknown error"}`
-        );
-      }
+      const challenge = await this.usersService.createSignupVerificationChallenge(user);
       return {
         status: "EMAIL_NOT_VERIFIED" as const,
         userId: user.id,
         email: user.email,
         verificationToken: challenge.token,
         verificationTokenExpiresAt: challenge.expiresAt,
-        otpSent,
+        otpSent: false,
         message: "Email not verified. Continue verification.",
       };
     }
@@ -154,6 +145,21 @@ export class AuthService {
   }
 
   async sendEmailOtp(dto: SendOtpDto) {
+    const inflightKey = `${dto.userId}:${dto.verificationToken ?? "direct"}`;
+    const existingInflight = this.emailOtpInflight.get(inflightKey);
+    if (existingInflight) {
+      return existingInflight;
+    }
+
+    const sendPromise = this.sendEmailOtpInternal(dto).finally(() => {
+      this.emailOtpInflight.delete(inflightKey);
+    });
+
+    this.emailOtpInflight.set(inflightKey, sendPromise);
+    return sendPromise;
+  }
+
+  private async sendEmailOtpInternal(dto: SendOtpDto) {
     const user = await this.usersService.findById(dto.userId);
     if (!user.emailVerified && dto.verificationToken) {
       await this.usersService.validateSignupVerificationChallenge(
@@ -161,15 +167,37 @@ export class AuthService {
         dto.verificationToken
       );
     }
+    const now = Date.now();
+    const hasRecentOtp =
+      user.emailOtpHash &&
+      user.emailOtpExpiresAt &&
+      user.emailOtpExpiresAt.getTime() > now &&
+      user.emailOtpSentAt &&
+      now - user.emailOtpSentAt.getTime() < this.otpResendCooldownMs;
+    if (hasRecentOtp) {
+      return {
+        sent: true,
+        channel: "email",
+        expiresAt: user.emailOtpExpiresAt,
+        deduped: true,
+      };
+    }
     const otp = this.generateOtp();
     user.emailOtp = undefined;
     user.emailOtpHash = this.hashOtp(otp, user.id, "email");
     user.emailOtpExpiresAt = new Date(Date.now() + this.otpTtlMs);
+    user.emailOtpSentAt = new Date(now);
     user.emailOtpAttempts = 0;
     await user.save();
     try {
       await this.mailService.sendVerificationOtp(user.email, otp);
     } catch (error) {
+      user.emailOtpHash = undefined;
+      user.emailOtp = undefined;
+      user.emailOtpExpiresAt = undefined;
+      user.emailOtpSentAt = undefined;
+      user.emailOtpAttempts = 0;
+      await user.save();
       this.logger.error(
         `Failed to send verification email to ${user.email}: ${(error as Error)?.message ?? "unknown error"}`
       );
@@ -206,6 +234,7 @@ export class AuthService {
     user.emailOtpHash = undefined;
     user.emailOtp = undefined;
     user.emailOtpExpiresAt = undefined;
+    user.emailOtpSentAt = undefined;
     user.emailOtpAttempts = 0;
     this.usersService.clearSignupVerificationChallenge(user);
     await user.save();

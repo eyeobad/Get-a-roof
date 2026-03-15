@@ -326,7 +326,6 @@ export default function ExploreCards() {
   };
 
   const cardBody = (card: Listing, isFront: boolean) => {
-    const intentLabel = card.listingIntent === "Shortlet" ? "SHORTLET" : "FOR RENT";
     const images = resolveCardImages(card);
     const activeImageIndex =
       cardImageIndexes[card.id] !== undefined
@@ -417,12 +416,6 @@ export default function ExploreCards() {
                 <p className="text-[13px] md:text-base font-semibold leading-snug opacity-95">
                   {card.publicLocationLabel || card.neighborhood || card.address}
                 </p>
-                <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1 w-fit border border-white/10 backdrop-blur-sm">
-                  <span className="material-symbols-outlined text-sm">villa</span>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.3em] opacity-90">
-                    {intentLabel}
-                  </span>
-                </div>
               </div>
             </div>
             <span className="mt-1 shrink-0 text-sm font-bold uppercase tracking-[0.22em] text-white/80">

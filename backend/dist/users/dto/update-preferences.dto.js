@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdatePreferencesDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
+const landlord_preferences_dto_1 = require("./landlord-preferences.dto");
 const tenant_preferences_dto_1 = require("./tenant-preferences.dto");
 class UpdatePreferencesDto {
 }
@@ -24,6 +25,7 @@ __decorate([
 ], UpdatePreferencesDto.prototype, "tenant", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsObject)(),
-    __metadata("design:type", Object)
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => landlord_preferences_dto_1.LandlordPreferencesDto),
+    __metadata("design:type", landlord_preferences_dto_1.LandlordPreferencesDto)
 ], UpdatePreferencesDto.prototype, "landlord", void 0);

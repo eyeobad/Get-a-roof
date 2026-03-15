@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
+import TenantProfileTutorial from "@/components/TenantProfileTutorial";
 import { useToastError } from "@/hooks/useToastError";
 import { NIGERIA_STATES } from "@/lib/nigeriaLocations";
 
@@ -259,8 +260,8 @@ function ProfileSkeleton() {
 
 function DesktopSidebarSkeleton() {
   return (
-    <div className="sticky top-[76px] space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="sticky top-[76px] space-y-6">
+                  <div data-tour="tenant-profile-photo" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <Shimmer className="h-4 w-16 rounded" />
           <Shimmer className="h-9 w-28 rounded-full" />
@@ -272,7 +273,7 @@ function DesktopSidebarSkeleton() {
           <Shimmer className="mt-1 h-3 w-28 rounded" />
         </div>
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div data-tour="tenant-profile-details" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <Shimmer className="h-4 w-20 rounded" />
           <Shimmer className="h-9 w-20 rounded-full" />
@@ -387,6 +388,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasHydratedSession, setHasHydratedSession] = useState(false);
 
   const [profile, setProfile] = useState<ProfileState>(() => ({ ...defaultProfile }));
   const [hasServerPhone, setHasServerPhone] = useState(false);
@@ -440,10 +442,15 @@ export default function ProfilePage() {
   }, [profile.preferences]);
 
   useEffect(() => {
+    setHasHydratedSession(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedSession) return;
     if (!authToken || !userId) {
       router.replace("/login");
     }
-  }, [authToken, userId, router]);
+  }, [authToken, hasHydratedSession, userId, router]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -451,7 +458,7 @@ export default function ProfilePage() {
   }, [authToken, captureUserLocation]);
 
   useEffect(() => {
-    if (!authToken || !userId) return;
+    if (!hasHydratedSession || !authToken || !userId) return;
     let mounted = true;
     setIsLoading(true);
     fetchUserProfile()
@@ -471,7 +478,7 @@ export default function ProfilePage() {
     return () => {
       mounted = false;
     };
-  }, [authToken, userId, fetchUserProfile]);
+  }, [authToken, hasHydratedSession, userId, fetchUserProfile]);
 
   const handleSaveProfile = async () => {
     if (!authToken || !userId) {
@@ -943,16 +950,19 @@ export default function ProfilePage() {
 
         {/* Footer (mobile sticky) */}
         <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-background-light/95 px-4 py-4 backdrop-blur-sm lg:static lg:bg-transparent lg:border-0 lg:px-0 lg:py-0">
-          <button
-            onClick={handleSaveProfile}
-            disabled={isSaving || isLoading}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 lg:max-w-md lg:ml-auto disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined">save</span>
-            {isSaving ? "Saving..." : "Save Profile"}
-          </button>
-        </footer>
-      </div>
+            <button
+              data-tour="tenant-profile-save"
+              onClick={handleSaveProfile}
+              disabled={isSaving || isLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 lg:max-w-md lg:ml-auto disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined">save</span>
+              {isSaving ? "Saving..." : "Save Profile"}
+            </button>
+          </footer>
+        </div>
+
+        <TenantProfileTutorial ready={Boolean(authToken && !isLoading)} />
 
       {/* ---------------- MODALS ---------------- */}
 

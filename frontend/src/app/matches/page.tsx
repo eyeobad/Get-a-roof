@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import TenantMatchesTutorial from "@/components/TenantMatchesTutorial";
 import { useMotionScheme } from "@/lib/motion";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -190,6 +191,7 @@ export default function MatchesPage() {
               </h1>
               <div className="flex items-center gap-2">
                 <button
+                  data-tour="matches-search"
                   aria-label="Search"
                   onClick={() => setIsSearchOpen((prev) => !prev)}
                   className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
@@ -266,7 +268,7 @@ export default function MatchesPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div data-tour="matches-list" className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {filteredMatches.map((m) => (
                   <motion.button
                     key={m.id}
@@ -345,6 +347,7 @@ export default function MatchesPage() {
               <h1 className="text-3xl font-extrabold tracking-tight">Matches</h1>
               <div className="flex items-center gap-2">
                 <button
+                  data-tour="matches-search"
                   aria-label="Search"
                   onClick={() => setIsSearchOpen((prev) => !prev)}
                   className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
@@ -424,7 +427,7 @@ export default function MatchesPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+                <div data-tour="matches-list" className="grid grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredMatches.map((m) => (
                   <motion.button
                     key={m.id}
@@ -494,6 +497,8 @@ export default function MatchesPage() {
           <BottomNav className="hidden lg:block" />
         </div>
       </div>
+
+      <TenantMatchesTutorial ready={Boolean(authToken && !isLoadingMatches)} />
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/35 p-4 lg:items-center">

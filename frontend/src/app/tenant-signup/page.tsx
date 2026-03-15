@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 import { getGoogleIdToken } from "@/lib/firebase";
+import { markTutorialFlow } from "@/lib/tutorialFlow";
 
 export default function TenantSignupPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,7 +25,6 @@ export default function TenantSignupPage() {
   const registerTenant = useAppStore((state) => state.registerTenant);
   const googleLogin = useAppStore((state) => state.googleLogin);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
-  const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? "";
@@ -107,25 +107,14 @@ export default function TenantSignupPage() {
       if (!userId) {
         throw new Error("Unable to start verification. Please try again.");
       }
-      let otpSent = false;
-      if (verificationToken) {
-        try {
-          await sendEmailOtp(userId, verificationToken);
-          otpSent = true;
-        } catch {
-          // resend is available on verification screen
-        }
-      }
-
       const query = new URLSearchParams({
         userId,
         email: payload.email,
-        otpSent: otpSent ? "1" : "0",
         ...(verificationToken ? { verificationToken } : {}),
       });
       showToast({
         title: "Continue verification",
-        text: "We sent a verification code to your email.",
+        text: "Enter the verification code on the next step.",
         variant: "success",
       });
 
@@ -166,6 +155,9 @@ export default function TenantSignupPage() {
         !tenantPreferences ||
         !tenantPreferences.lookingFor ||
         tenantPreferences.lookingFor.length === 0;
+      if (!needsTenantOnboarding) {
+        markTutorialFlow("tenant");
+      }
       router.push(needsTenantOnboarding ? "/tenant-onboarding" : "/explore");
     } catch (err) {
       if (!hasShownErrorToast(err)) {

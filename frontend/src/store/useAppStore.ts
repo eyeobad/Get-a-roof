@@ -145,15 +145,21 @@ type ApiUser = {
   listingsCount?: number;
   matchesCount?: number;
   unreadMessages?: number;
-  preferences?: {
-    tenant?: Record<string, unknown> & {
-      hasSeenExploreTutorial?: boolean;
-    };
-    landlord?: Record<string, unknown> & {
-      hasSeenLandlordTutorial?: boolean;
+    preferences?: {
+      tenant?: Record<string, unknown> & {
+        hasSeenExploreTutorial?: boolean;
+        hasSeenMatchesTutorial?: boolean;
+        hasSeenMessagesTutorial?: boolean;
+        hasSeenProfileTutorial?: boolean;
+      };
+      landlord?: Record<string, unknown> & {
+        hasSeenLandlordTutorial?: boolean;
+        hasSeenLandlordMatchesTutorial?: boolean;
+        hasSeenLandlordMessagesTutorial?: boolean;
+        hasSeenLandlordProfileTutorial?: boolean;
+      };
     };
   };
-};
 
 type ApiAuthResponse = {
   accessToken?: string;
@@ -774,7 +780,7 @@ export const mapPropertyToListing = (property: ApiProperty): Listing => {
     publicLocationLabel: publicLocationLabel || address || property?.neighborhood || "",
     highlight: property?.propertyType ?? "Listing",
     listingIntent: property?.listingIntent ?? "Rent",
-    tag: property?.status ?? "Listing",
+    tag: property?.listingIntent === "Shortlet" ? "Shortlet" : "For Rent",
     alt: property?.propertyType ?? "Property",
     neighborhood: property?.neighborhood ?? property?.address?.city ?? "",
     bedrooms,

@@ -14,6 +14,7 @@ function VerifyIdentityContent() {
   const params = useSearchParams();
   const userId = params?.get("userId") ?? "";
   const [tab, setTab] = useState<Tab>("license");
+  const [nin, setNin] = useState("");
   const [uploads, setUploads] = useState<Record<UploadKey, File | null>>({
     licenseFront: null,
     licenseBack: null,
@@ -46,150 +47,164 @@ function VerifyIdentityContent() {
     };
   }, [tab]);
 
+  const canContinue = useMemo(() => {
+    if (tab === "passport") {
+      return Boolean(uploads.passport);
+    }
+    if (tab === "nin") {
+      return /^\d{11}$/.test(nin.trim());
+    }
+    return Boolean(uploads.licenseFront && uploads.licenseBack);
+  }, [nin, tab, uploads.licenseBack, uploads.licenseFront, uploads.passport]);
+
   const handleSubmit = () => {
-    if (!uploads.passport) return;
+    if (!canContinue) return;
     const query = new URLSearchParams(userId ? { userId } : {});
     router.push(`/facial-verification?${query.toString()}`);
   };
 
   return (
     <div className="min-h-screen bg-white font-display text-[#1A1A1A] antialiased">
-      <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden lg:px-8 lg:py-10">
-        <div className="flex min-h-screen w-full flex-col lg:min-h-0 lg:max-w-[960px] lg:mx-auto">
-          <header className="flex items-center justify-between p-4 pb-2 lg:px-8 lg:pt-8 lg:pb-4">
+      <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+        <div className="mx-auto flex min-h-screen w-full max-w-md flex-col lg:max-w-xl">
+          <header className="flex items-center justify-between p-4 pb-2">
             <button
               type="button"
               aria-label="Go back"
               onClick={() => router.back()}
-              className="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-black/5 transition-colors lg:size-12"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-black/5 transition-colors"
             >
               <span
-                className="material-symbols-outlined text-[28px] lg:text-[32px]"
+                className="material-symbols-outlined text-[28px]"
                 style={solidIconStyle}
               >
                 arrow_back
               </span>
             </button>
-            <span className="text-xs font-bold tracking-[0.18em] text-[#0a44b8] uppercase lg:text-sm lg:tracking-widest">
+            <span className="text-xs font-bold tracking-[0.18em] text-[#0a44b8] uppercase">
               Step 1 of 3
             </span>
-            <div className="w-11 lg:w-12" />
+            <div className="w-11" />
           </header>
 
-          <main className="flex flex-1 flex-col px-4 pb-36 lg:px-8 lg:pb-10">
-            <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
-              <div className="flex flex-col lg:flex-1">
-                <div className="mb-6 pt-2 lg:mb-8">
-                  <h1 className="mb-3 text-[30px] font-bold leading-tight tracking-tight lg:mb-4 lg:text-[32px]">
-                    {copy.title}
-                  </h1>
-                  <p className="text-base font-normal leading-relaxed opacity-90 lg:text-lg">
-                    {copy.desc}
-                  </p>
-                </div>
+          <main className="flex flex-1 flex-col px-4 pb-44">
+            <div className="flex flex-col">
+              <div className="mb-6 pt-2">
+                <h1 className="mb-3 text-[30px] font-bold leading-tight tracking-tight">
+                  {copy.title}
+                </h1>
+                <p className="text-base font-normal leading-relaxed opacity-90">
+                  {copy.desc}
+                </p>
+              </div>
 
-                <div className="mb-6 lg:mb-8">
-                  <div className="flex h-12 w-full items-center rounded-full border border-[#E0E0E0] bg-white p-1 shadow-sm lg:h-14 lg:p-1.5">
-                    <TabPill
-                      label={"Driver's\nLicense"}
-                      active={tab === "license"}
-                      onClick={() => setTab("license")}
-                    />
-                    <TabPill
-                      label="Passport"
-                      active={tab === "passport"}
-                      onClick={() => setTab("passport")}
-                    />
-                    <TabPill
-                      label="NIN"
-                      active={tab === "nin"}
-                      onClick={() => setTab("nin")}
-                    />
-                  </div>
-                </div>
+              <div className="mb-5 flex items-center justify-center gap-2 rounded-xl bg-black/5 px-4 py-3 text-center text-[#1A1A1A]/70">
+                <span
+                  className="material-symbols-outlined text-[22px]"
+                  style={solidIconStyle}
+                >
+                  lock
+                </span>
+                <span className="text-sm font-semibold tracking-wide">
+                  Your data is encrypted and secure
+                </span>
+              </div>
 
-                <div className="flex flex-1 flex-col gap-4 lg:gap-6">
-                  {tab === "license" && (
-                    <>
-                      <UploadCard
-                        title="Front of ID"
-                        subtitle="Tap to upload"
-                        inputId="license-front"
-                        file={uploads.licenseFront}
-                        onFileChange={(file) => updateUpload("licenseFront", file)}
-                      />
-                      <UploadCard
-                        title="Back of ID"
-                        subtitle="Tap to upload"
-                        inputId="license-back"
-                        file={uploads.licenseBack}
-                        onFileChange={(file) => updateUpload("licenseBack", file)}
-                      />
-                    </>
-                  )}
-
-                  {tab === "passport" && (
-                    <UploadCard
-                      title="Passport Photo Page"
-                      subtitle="Tap to upload the page with your photo"
-                      bigger
-                      inputId="passport-photo"
-                      file={uploads.passport}
-                      onFileChange={(file) => updateUpload("passport", file)}
-                    />
-                  )}
-
-                  {tab === "nin" && (
-                    <div className="flex flex-col gap-4">
-                      <p className="mb-4 text-[30px] font-bold tracking-tight lg:mb-6 lg:text-[32px]">
-                        NIN Number
-                      </p>
-                      <div className="relative">
-                        <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40 lg:left-6">
-                          <span
-                            className="material-symbols-outlined text-[24px] lg:text-[26px]"
-                            style={solidIconStyle}
-                          >
-                            badge
-                          </span>
-                        </span>
-                        <input
-                          inputMode="numeric"
-                          maxLength={11}
-                          placeholder="Ex: 12345678901"
-                          className="h-[68px] w-full rounded-2xl border-2 border-[#DADADA] bg-white pl-14 pr-4 text-[28px] font-semibold tracking-wide text-[#1A1A1A]/50 placeholder:text-[24px] placeholder:text-[#1A1A1A]/25 outline-none lg:h-[76px] lg:pl-16 lg:pr-6 lg:text-[32px]"
-                        />
-                      </div>
-                      <p className="mt-4 text-base leading-relaxed opacity-70 lg:mt-6 lg:text-lg">
-                        Provide your NIN sticker or slip—it complements the next facial
-                        verification step.
-                      </p>
-                    </div>
-                  )}
+              <div className="mb-6">
+                <div className="flex h-12 w-full items-center rounded-full border border-[#E0E0E0] bg-white p-1 shadow-sm">
+                  <TabPill
+                    label={"Driver's\nLicense"}
+                    active={tab === "license"}
+                    onClick={() => setTab("license")}
+                  />
+                  <TabPill
+                    label="Passport"
+                    active={tab === "passport"}
+                    onClick={() => setTab("passport")}
+                  />
+                  <TabPill
+                    label="NIN"
+                    active={tab === "nin"}
+                    onClick={() => setTab("nin")}
+                  />
                 </div>
               </div>
 
-              <div className="fixed inset-x-0 bottom-0 z-20 border-t border-black/10 bg-white/95 px-4 pb-5 pt-3 backdrop-blur-sm lg:relative lg:inset-auto lg:mt-0 lg:flex lg:w-full lg:items-stretch lg:flex-col lg:gap-5 lg:border-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-4 lg:backdrop-blur-0">
-                <div className="mb-3 flex items-center gap-2 rounded-xl bg-black/5 px-4 py-3 text-[#1A1A1A]/70 lg:mb-0">
-                  <span
-                    className="material-symbols-outlined text-[22px]"
-                    style={solidIconStyle}
-                  >
-                    lock
-                  </span>
-                  <span className="text-sm font-semibold tracking-wide">
-                    Your data is encrypted and secure
-                  </span>
-                </div>
+              <div className="flex flex-1 flex-col gap-4">
+                {tab === "license" && (
+                  <>
+                    <UploadCard
+                      title="Front of ID"
+                      subtitle="Tap to upload"
+                      inputId="license-front"
+                      file={uploads.licenseFront}
+                      onFileChange={(file) => updateUpload("licenseFront", file)}
+                    />
+                    <UploadCard
+                      title="Back of ID"
+                      subtitle="Tap to upload"
+                      inputId="license-back"
+                      file={uploads.licenseBack}
+                      onFileChange={(file) => updateUpload("licenseBack", file)}
+                    />
+                  </>
+                )}
 
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!uploads.passport}
-                  className="pointer-events-auto h-[58px] w-full rounded-full bg-[#0a44b8] text-base font-bold tracking-wide text-white shadow-xl shadow-blue-900/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50 lg:h-[64px] lg:text-xl"
-                >
-                  Continue to Facial Verification
-                </button>
+                {tab === "passport" && (
+                  <UploadCard
+                    title="Passport Photo Page"
+                    subtitle="Tap to upload the page with your photo"
+                    bigger
+                    inputId="passport-photo"
+                    file={uploads.passport}
+                    onFileChange={(file) => updateUpload("passport", file)}
+                  />
+                )}
+
+                {tab === "nin" && (
+                  <div className="flex flex-col gap-4">
+                    <p className="mb-4 text-[30px] font-bold tracking-tight">
+                      NIN Number
+                    </p>
+                    <div className="relative">
+                      <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/40">
+                        <span
+                          className="material-symbols-outlined text-[24px]"
+                          style={solidIconStyle}
+                        >
+                          badge
+                        </span>
+                      </span>
+                      <input
+                        inputMode="numeric"
+                        maxLength={11}
+                        value={nin}
+                        onChange={(event) =>
+                          setNin(event.target.value.replace(/\D/g, "").slice(0, 11))
+                        }
+                        placeholder="Ex: 12345678901"
+                        className="h-[68px] w-full rounded-2xl border-2 border-[#DADADA] bg-white pl-14 pr-4 text-[28px] font-semibold tracking-wide text-[#1A1A1A] placeholder:text-[24px] placeholder:text-[#1A1A1A]/25 outline-none"
+                      />
+                    </div>
+                    <p className="mt-4 text-base leading-relaxed opacity-70">
+                      Provide your NIN sticker or slip. It complements the next facial
+                      verification step.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="fixed inset-x-0 bottom-0 z-20 border-t border-black/10 bg-white/95 px-4 pb-5 pt-3 backdrop-blur-sm">
+                <div className="mx-auto w-full max-w-md">
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!canContinue}
+                    className="pointer-events-auto h-[58px] w-full rounded-full bg-[#0a44b8] text-base font-bold tracking-wide text-white shadow-xl shadow-blue-900/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Continue to Facial Verification
+                  </button>
+                </div>
               </div>
             </div>
           </main>

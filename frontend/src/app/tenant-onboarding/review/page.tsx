@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { markTutorialFlow } from "@/lib/tutorialFlow";
 
 const propertyLabelMap: Record<string, string> = {
   NonOwnerOccupied: "Non-owner-occupied",
@@ -241,6 +242,7 @@ export default function TenantReview() {
         <div className="fixed bottom-0 left-0 w-full p-4 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200  z-10 flex justify-center">
           <div className="max-w-md w-full">
            <Link href={'/explore'}
+              onClick={() => markTutorialFlow("tenant")}
               className=" w-full bg-primary text-white font-bold text-lg py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center gap-2"
               type="button"
             >

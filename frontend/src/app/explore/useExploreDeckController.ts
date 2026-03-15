@@ -19,6 +19,7 @@ type DeckState = {
   phase: DeckPhase;
   visibleQueue: Listing[];
   bufferQueue: Listing[];
+  renderStack: Listing[];
   hasRenderedCards: boolean;
   errorMessage: string | null;
 };
@@ -32,7 +33,7 @@ type DeckAction =
       type: "BUFFER_RESOLVED";
       bufferQueue: Listing[];
     }
-  | { type: "SWIPE_COMMITTED"; cardId: string }
+  | { type: "SWIPE_COMMITTED"; cardId: string; fallbackQueue?: Listing[] }
   | { type: "ERROR"; message: string };
 
 type TenantPrefs = {
@@ -71,6 +72,7 @@ const initialDeckState: DeckState = {
   phase: "boot_loading",
   visibleQueue: [],
   bufferQueue: [],
+  renderStack: [],
   hasRenderedCards: false,
   errorMessage: null,
 };
@@ -93,6 +95,9 @@ const splitVisibleAndBuffer = (listings: Listing[]) => ({
   bufferQueue: listings.slice(INITIAL_VISIBLE_BATCH_SIZE),
 });
 
+const buildRenderStack = (visibleQueue: Listing[], bufferQueue: Listing[]) =>
+  dedupeListings([...visibleQueue, ...bufferQueue]).slice(0, 3);
+
 function deckReducer(state: DeckState, action: DeckAction): DeckState {
   switch (action.type) {
     case "RESET":
@@ -102,6 +107,7 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         phase: "ready",
         visibleQueue: action.visibleQueue,
         bufferQueue: action.bufferQueue,
+        renderStack: buildRenderStack(action.visibleQueue, action.bufferQueue),
         hasRenderedCards: action.visibleQueue.length > 0,
         errorMessage: null,
       };
@@ -111,6 +117,7 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         phase: "terminal_empty",
         visibleQueue: [],
         bufferQueue: [],
+        renderStack: [],
         errorMessage: null,
       };
     case "PREFETCH_START":
@@ -132,6 +139,10 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         return {
           ...state,
           phase: state.visibleQueue.length > 0 ? "ready" : "swapping",
+          renderStack:
+            state.visibleQueue.length > 0
+              ? buildRenderStack(state.visibleQueue, state.bufferQueue)
+              : state.renderStack,
         };
       }
 
@@ -142,15 +153,18 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
           phase: "ready",
           visibleQueue: swapped.visibleQueue,
           bufferQueue: swapped.bufferQueue,
+          renderStack: buildRenderStack(swapped.visibleQueue, swapped.bufferQueue),
           hasRenderedCards: true,
           errorMessage: null,
         };
       }
 
+      const mergedBufferQueue = mergeUniqueListings(state.bufferQueue, action.bufferQueue);
       return {
         ...state,
         phase: "ready",
-        bufferQueue: mergeUniqueListings(state.bufferQueue, action.bufferQueue),
+        bufferQueue: mergedBufferQueue,
+        renderStack: buildRenderStack(state.visibleQueue, mergedBufferQueue),
         errorMessage: null,
       };
     }
@@ -160,6 +174,7 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         return {
           ...state,
           visibleQueue: remainingVisible,
+          renderStack: buildRenderStack(remainingVisible, state.bufferQueue),
           phase: state.phase === "terminal_empty" ? "terminal_empty" : "ready",
         };
       }
@@ -171,6 +186,19 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
           phase: "ready",
           visibleQueue: swapped.visibleQueue,
           bufferQueue: swapped.bufferQueue,
+          renderStack: buildRenderStack(swapped.visibleQueue, swapped.bufferQueue),
+          hasRenderedCards: true,
+        };
+      }
+
+      if ((action.fallbackQueue?.length ?? 0) > 0) {
+        const swapped = splitVisibleAndBuffer(action.fallbackQueue ?? []);
+        return {
+          ...state,
+          phase: "ready",
+          visibleQueue: swapped.visibleQueue,
+          bufferQueue: swapped.bufferQueue,
+          renderStack: buildRenderStack(swapped.visibleQueue, swapped.bufferQueue),
           hasRenderedCards: true,
         };
       }
@@ -178,6 +206,7 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
       return {
         ...state,
         visibleQueue: [],
+        renderStack: state.renderStack.filter((listing) => listing.id !== action.cardId),
         phase: "swapping",
       };
     }
@@ -187,6 +216,7 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         phase: state.hasRenderedCards ? "terminal_empty" : "error",
         visibleQueue: state.hasRenderedCards ? state.visibleQueue : [],
         bufferQueue: state.hasRenderedCards ? state.bufferQueue : [],
+        renderStack: state.hasRenderedCards ? state.renderStack : [],
         errorMessage: action.message,
       };
     default:
@@ -454,7 +484,7 @@ export function useExploreDeckController({
       state.phase !== "boot_loading" &&
       state.phase !== "terminal_empty" &&
       state.phase !== "error" &&
-      state.bufferQueue.length === 0 &&
+      state.bufferQueue.length <= 2 &&
       state.visibleQueue.length <= LOW_WATERMARK;
 
     if (!shouldPrefetch || prefetchInFlightRef.current) {
@@ -483,16 +513,26 @@ export function useExploreDeckController({
       });
   }, [state.bufferQueue.length, state.phase, state.visibleQueue.length]);
 
-  const cardsToRender = useMemo(
-    () => dedupeListings([...state.visibleQueue, ...state.bufferQueue]).slice(0, 3),
-    [state.bufferQueue, state.visibleQueue]
-  );
+  const cardsToRender = useMemo(() => state.renderStack, [state.renderStack]);
 
   const topCardId = cardsToRender[0]?.id ?? null;
 
   const commitSwipe = (cardId: string) => {
     consumedIdsRef.current.add(cardId);
-    dispatch({ type: "SWIPE_COMMITTED", cardId });
+    const latestState = stateRef.current;
+    const needsImmediateFallback =
+      latestState.visibleQueue.length === 1 && latestState.bufferQueue.length === 0;
+
+    const fallbackQueue = needsImmediateFallback
+      ? replayListingsRef.current.filter(
+          (listing) =>
+            listing.id !== cardId &&
+            !latestState.visibleQueue.some((activeListing) => activeListing.id === listing.id) &&
+            !latestState.bufferQueue.some((activeListing) => activeListing.id === listing.id)
+        )
+      : undefined;
+
+    dispatch({ type: "SWIPE_COMMITTED", cardId, fallbackQueue });
   };
 
   return {

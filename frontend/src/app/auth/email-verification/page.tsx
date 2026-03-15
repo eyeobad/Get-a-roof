@@ -7,6 +7,8 @@ import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
 
 const DIGITS = 6;
+const bootstrapOtpKey = (userId: string, verificationToken: string) =>
+  `email-otp-bootstrap:${userId}:${verificationToken || "default"}`;
 
 function EmailVerificationContent() {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
@@ -67,6 +69,14 @@ function EmailVerificationContent() {
 
   useEffect(() => {
     if (!userId || !verificationToken || otpSent) return;
+    const storageKey = bootstrapOtpKey(userId, verificationToken);
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(storageKey) === "1") {
+      setTimer(59);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(storageKey, "1");
+    }
     let mounted = true;
     const bootstrapSend = async () => {
       try {
@@ -76,6 +86,9 @@ function EmailVerificationContent() {
           showToast({ title: "Code sent", variant: "success" });
         }
       } catch {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(storageKey);
+        }
         if (mounted) {
           setTimer(0);
         }
@@ -119,6 +132,9 @@ function EmailVerificationContent() {
     if (!userId || timer > 0) return;
     try {
       await sendEmailOtp(userId, verificationToken || undefined);
+      if (verificationToken && typeof window !== "undefined") {
+        window.sessionStorage.setItem(bootstrapOtpKey(userId, verificationToken), "1");
+      }
       setTimer(59);
       showToast({ title: "Code resent", variant: "success" });
     } catch (err) {

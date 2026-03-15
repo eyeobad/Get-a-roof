@@ -45,6 +45,7 @@ function BottomNav({
 export default function DashboardOverviewPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [hasHydratedSession, setHasHydratedSession] = useState(false);
 
   // --- Store Integration ---
   const authToken = useAppStore((state) => state.authToken);
@@ -78,15 +79,20 @@ export default function DashboardOverviewPage() {
 
   // --- Effects ---
   useEffect(() => {
+    setHasHydratedSession(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedSession) return;
     if (!authToken || !userId) {
       router.replace("/login");
     }
-  }, [authToken, userId, router]);
+  }, [authToken, hasHydratedSession, userId, router]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (!authToken || !userId) {
+      if (!hasHydratedSession || !authToken || !userId) {
         if (mounted) setIsLoading(false);
         return;
       }
@@ -106,12 +112,13 @@ export default function DashboardOverviewPage() {
     load();
     return () => { mounted = false; };
   }, [
-    fetchUserProfile, 
-    authToken, 
-    userId, 
+    fetchUserProfile,
+    authToken,
+    hasHydratedSession,
+    userId,
     user,
-    loadLandlordProperties, 
-    loadLandlordPropertiesWithMatches, 
+    loadLandlordProperties,
+    loadLandlordPropertiesWithMatches,
     loadConversations
   ]);
 

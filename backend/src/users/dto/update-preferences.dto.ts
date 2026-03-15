@@ -1,5 +1,6 @@
-import { IsObject, IsOptional, ValidateNested } from "class-validator";
+import { IsOptional, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
+import { LandlordPreferencesDto } from "./landlord-preferences.dto";
 import { TenantPreferencesDto } from "./tenant-preferences.dto";
 
 export class UpdatePreferencesDto {
@@ -9,6 +10,7 @@ export class UpdatePreferencesDto {
   tenant?: TenantPreferencesDto;
 
   @IsOptional()
-  @IsObject()
-  landlord?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => LandlordPreferencesDto)
+  landlord?: LandlordPreferencesDto;
 }

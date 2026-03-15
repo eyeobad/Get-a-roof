@@ -117,3 +117,18 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], TenantPreferencesDto.prototype, "hasSeenExploreTutorial", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], TenantPreferencesDto.prototype, "hasSeenMatchesTutorial", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], TenantPreferencesDto.prototype, "hasSeenMessagesTutorial", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], TenantPreferencesDto.prototype, "hasSeenProfileTutorial", void 0);

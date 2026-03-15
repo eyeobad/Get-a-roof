@@ -141,12 +141,36 @@ __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], TenantPreferences.prototype, "hasSeenExploreTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], TenantPreferences.prototype, "hasSeenMatchesTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], TenantPreferences.prototype, "hasSeenMessagesTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], TenantPreferences.prototype, "hasSeenProfileTutorial", void 0);
 class LandlordPreferences {
 }
 __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], LandlordPreferences.prototype, "hasSeenLandlordTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], LandlordPreferences.prototype, "hasSeenLandlordMatchesTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], LandlordPreferences.prototype, "hasSeenLandlordMessagesTutorial", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], LandlordPreferences.prototype, "hasSeenLandlordProfileTutorial", void 0);
 class Preferences {
 }
 __decorate([
@@ -282,6 +306,10 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], User.prototype, "emailOtpExpiresAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], User.prototype, "emailOtpSentAt", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)

@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, hasShownErrorToast, showToast } from "@/lib/alerts";
 import { getGoogleIdToken } from "@/lib/firebase";
+import { markTutorialFlow } from "@/lib/tutorialFlow";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24',
@@ -28,7 +29,6 @@ function SignUpContent() {
   const registerLandlord = useAppStore((state) => state.registerLandlord);
   const googleLogin = useAppStore((state) => state.googleLogin);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
-  const sendEmailOtp = useAppStore((state) => state.sendEmailOtp);
   const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,6 +53,7 @@ function SignUpContent() {
         return;
       }
       captureUserLocation().catch(() => { });
+      markTutorialFlow("landlord");
       router.push(postSignupRedirect);
     } catch (err) {
       if (!hasShownErrorToast(err)) {
@@ -147,16 +148,6 @@ function SignUpContent() {
       if (!userId) {
         throw new Error("Unable to start verification. Please try again.");
       }
-      let otpSent = false;
-      if (verificationToken) {
-        try {
-          await sendEmailOtp(userId, verificationToken);
-          otpSent = true;
-        } catch {
-          // resend is available on verification screen
-        }
-      }
-
       const query = new URLSearchParams({
         userId,
         email: payload.email,
@@ -165,12 +156,11 @@ function SignUpContent() {
           isAgentSignup && redirectParam
             ? decodeURIComponent(redirectParam)
             : "/verify-identity",
-        otpSent: otpSent ? "1" : "0",
         ...(verificationToken ? { verificationToken } : {}),
       });
       showToast({
         title: "Continue verification",
-        text: "We sent a verification code to your email.",
+        text: "Enter the verification code on the next step.",
         variant: "success",
       });
 

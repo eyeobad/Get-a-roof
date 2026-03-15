@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToastError } from "@/hooks/useToastError";
+import { markTutorialFlow } from "@/lib/tutorialFlow";
 
 const solidIconStyle: React.CSSProperties = {
   fontVariationSettings: '"FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24',
@@ -174,7 +175,10 @@ export default function FacialVerificationPage() {
           {matchState === "matched" && (
             <button
               type="button"
-              onClick={() => router.push("/auth/verification-success")}
+              onClick={() => {
+                markTutorialFlow("landlord");
+                router.push("/auth/verification-success");
+              }}
               className="w-full text-center text-[#0a44b8] text-base font-medium underline underline-offset-4 decoration-[#0a44b8]/30"
             >
               Continue after verification

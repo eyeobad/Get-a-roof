@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
+import MessagesTutorial from "@/components/MessagesTutorial";
 import { useAppStore } from "@/store/useAppStore";
 import { getSocket } from "@/lib/socket";
 import { showToast } from "@/lib/alerts";
@@ -565,7 +566,7 @@ function MessagesContent() {
               <div className="h-10 w-10" />
             </header>
 
-            <main className="flex-1 overflow-y-auto pb-24">
+            <main data-tour="messages-list" className="flex-1 overflow-y-auto pb-24">
               {isLoadingConversations ? (
                 <ConversationListSkeleton />
               ) : conversations.length === 0 ? (
@@ -767,7 +768,7 @@ function MessagesContent() {
               )}
             </main>
 
-            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 backdrop-blur-sm lg:hidden">
+            <div data-tour="messages-composer" className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 backdrop-blur-sm lg:hidden">
               <div className="mx-auto w-full max-w-md px-3 pt-3 pb-3">
                 <div className="relative flex items-end gap-2">
                   <RouteHintToast
@@ -868,6 +869,7 @@ function MessagesContent() {
 
               {/* Scrollable list: reserve space for BottomNav by adding pb */}
               <main
+                data-tour="messages-list"
                 ref={listRef}
                 className="flex-1 overflow-y-auto pr-2 pb-[76px]"
                 style={{
@@ -1101,7 +1103,7 @@ function MessagesContent() {
                     </div>
                   </main>
 
-                  <div className="border-t border-slate-100 bg-white/95 backdrop-blur-sm px-6 py-4">
+                  <div data-tour="messages-composer" className="border-t border-slate-100 bg-white/95 backdrop-blur-sm px-6 py-4">
                     <div className="relative mx-auto flex max-w-3xl items-end gap-3">
                       <RouteHintToast
                         visible={showRouteHint && !isLandlordContext}
@@ -1156,6 +1158,10 @@ function MessagesContent() {
             </section>
           </div>
         </div>
+        <MessagesTutorial
+          ready={Boolean(authToken && !isLoadingConversations)}
+          isLandlord={isLandlordContext}
+        />
       </div>
     </>
   );

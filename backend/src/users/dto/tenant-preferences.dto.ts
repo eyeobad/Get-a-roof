@@ -88,4 +88,16 @@ export class TenantPreferencesDto {
   @IsOptional()
   @IsBoolean()
   hasSeenExploreTutorial?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasSeenMatchesTutorial?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasSeenMessagesTutorial?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasSeenProfileTutorial?: boolean;
 }

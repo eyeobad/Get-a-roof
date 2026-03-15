@@ -105,11 +105,29 @@ class TenantPreferences {
 
   @Prop({ default: false })
   hasSeenExploreTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenMatchesTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenMessagesTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenProfileTutorial?: boolean;
 }
 
 class LandlordPreferences {
   @Prop({ default: false })
   hasSeenLandlordTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenLandlordMatchesTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenLandlordMessagesTutorial?: boolean;
+
+  @Prop({ default: false })
+  hasSeenLandlordProfileTutorial?: boolean;
 }
 
 class Preferences {
@@ -211,11 +229,14 @@ export class User {
   @Prop()
   emailOtpHash?: string;
 
-  @Prop()
-  emailOtpExpiresAt?: Date;
+    @Prop()
+    emailOtpExpiresAt?: Date;
 
-  @Prop({ default: 0 })
-  emailOtpAttempts?: number;
+    @Prop()
+    emailOtpSentAt?: Date;
+
+    @Prop({ default: 0 })
+    emailOtpAttempts?: number;
 
   @Prop()
   phoneOtp?: string;

@@ -26,6 +26,8 @@ let AuthService = AuthService_1 = class AuthService {
         this.logger = new common_1.Logger(AuthService_1.name);
         this.otpTtlMs = 10 * 60 * 1000;
         this.otpMaxAttempts = 5;
+        this.otpResendCooldownMs = 45 * 1000;
+        this.emailOtpInflight = new Map();
         this.otpSecret = process.env.OTP_SECRET || process.env.JWT_SECRET || "dev-otp-secret";
     }
     async login(dto) {
@@ -44,24 +46,13 @@ let AuthService = AuthService_1 = class AuthService {
         }
         if (!user.emailVerified) {
             const challenge = await this.usersService.createSignupVerificationChallenge(user);
-            let otpSent = true;
-            try {
-                await this.sendEmailOtp({
-                    userId: user.id,
-                    verificationToken: challenge.token,
-                });
-            }
-            catch (error) {
-                otpSent = false;
-                this.logger.warn(`Unable to auto-send verification OTP for ${user.email}: ${error?.message ?? "unknown error"}`);
-            }
             return {
                 status: "EMAIL_NOT_VERIFIED",
                 userId: user.id,
                 email: user.email,
                 verificationToken: challenge.token,
                 verificationTokenExpiresAt: challenge.expiresAt,
-                otpSent,
+                otpSent: false,
                 message: "Email not verified. Continue verification.",
             };
         }
@@ -126,20 +117,53 @@ let AuthService = AuthService_1 = class AuthService {
         }
     }
     async sendEmailOtp(dto) {
+        const inflightKey = `${dto.userId}:${dto.verificationToken ?? "direct"}`;
+        const existingInflight = this.emailOtpInflight.get(inflightKey);
+        if (existingInflight) {
+            return existingInflight;
+        }
+        const sendPromise = this.sendEmailOtpInternal(dto).finally(() => {
+            this.emailOtpInflight.delete(inflightKey);
+        });
+        this.emailOtpInflight.set(inflightKey, sendPromise);
+        return sendPromise;
+    }
+    async sendEmailOtpInternal(dto) {
         const user = await this.usersService.findById(dto.userId);
         if (!user.emailVerified && dto.verificationToken) {
             await this.usersService.validateSignupVerificationChallenge(dto.userId, dto.verificationToken);
+        }
+        const now = Date.now();
+        const hasRecentOtp = user.emailOtpHash &&
+            user.emailOtpExpiresAt &&
+            user.emailOtpExpiresAt.getTime() > now &&
+            user.emailOtpSentAt &&
+            now - user.emailOtpSentAt.getTime() < this.otpResendCooldownMs;
+        if (hasRecentOtp) {
+            return {
+                sent: true,
+                channel: "email",
+                expiresAt: user.emailOtpExpiresAt,
+                deduped: true,
+            };
         }
         const otp = this.generateOtp();
         user.emailOtp = undefined;
         user.emailOtpHash = this.hashOtp(otp, user.id, "email");
         user.emailOtpExpiresAt = new Date(Date.now() + this.otpTtlMs);
+        user.emailOtpSentAt = new Date(now);
         user.emailOtpAttempts = 0;
         await user.save();
         try {
             await this.mailService.sendVerificationOtp(user.email, otp);
         }
         catch (error) {
+            user.emailOtpHash = undefined;
+            user.emailOtp = undefined;
+            user.emailOtpExpiresAt = undefined;
+            user.emailOtpSentAt = undefined;
+            user.emailOtpAttempts = 0;
+            await user.save();
             this.logger.error(`Failed to send verification email to ${user.email}: ${error?.message ?? "unknown error"}`);
             throw new common_1.ServiceUnavailableException("Unable to deliver OTP email right now. Please try again shortly.");
         }
@@ -164,6 +188,7 @@ let AuthService = AuthService_1 = class AuthService {
         user.emailOtpHash = undefined;
         user.emailOtp = undefined;
         user.emailOtpExpiresAt = undefined;
+        user.emailOtpSentAt = undefined;
         user.emailOtpAttempts = 0;
         this.usersService.clearSignupVerificationChallenge(user);
         await user.save();
