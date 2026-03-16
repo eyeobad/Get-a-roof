@@ -1160,7 +1160,7 @@ function MessagesContent() {
         </div>
         <MessagesTutorial
           ready={Boolean(authToken && !isLoadingConversations)}
-          isLandlord={isLandlordContext}
+          isLandlord={Boolean(isLandlordContext)}
         />
       </div>
     </>
