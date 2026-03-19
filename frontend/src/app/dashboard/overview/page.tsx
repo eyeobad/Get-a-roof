@@ -8,6 +8,50 @@ import LandlordTutorial from "@/components/LandlordTutorial";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
 import { MatchTrendChart, PropertyPerformanceChart } from "@/components/DashboardCharts";
 
+function ChartCardSkeleton({ type }: { type: "line" | "bars" }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex lg:min-h-0 lg:flex-col">
+      <div className="mb-4 space-y-2">
+        <div className="h-6 w-52 rounded bg-slate-200 animate-pulse" />
+        <div className="h-4 w-64 max-w-full rounded bg-slate-100 animate-pulse" />
+      </div>
+      <div className="mb-3 flex items-center gap-2">
+        <div className="h-3 w-3 rounded-full bg-slate-200 animate-pulse" />
+        <div className="h-3 w-20 rounded bg-slate-100 animate-pulse" />
+      </div>
+      <div className="relative flex h-64 w-full items-end gap-2 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-4 lg:h-full lg:min-h-0">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:100%_24px]" />
+        {type === "line" ? (
+          <>
+            <div className="h-10 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-16 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-8 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-20 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-14 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-24 w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-[4.5rem] w-6 rounded bg-slate-200 animate-pulse" />
+            <div className="h-28 w-6 rounded bg-slate-200 animate-pulse" />
+          </>
+        ) : (
+          <>
+            <div className="h-24 w-10 rounded bg-slate-200 animate-pulse" />
+            <div className="h-36 w-10 rounded bg-slate-200 animate-pulse" />
+            <div className="h-20 w-10 rounded bg-slate-200 animate-pulse" />
+            <div className="h-44 w-10 rounded bg-slate-200 animate-pulse" />
+            <div className="h-28 w-10 rounded bg-slate-200 animate-pulse" />
+          </>
+        )}
+      </div>
+      <div className="mt-3 flex justify-between">
+        <div className="h-3 w-8 rounded bg-slate-100 animate-pulse" />
+        <div className="h-3 w-8 rounded bg-slate-100 animate-pulse" />
+        <div className="h-3 w-8 rounded bg-slate-100 animate-pulse" />
+        <div className="h-3 w-8 rounded bg-slate-100 animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 function BottomNav({
   active,
 }: {
@@ -124,7 +168,7 @@ export default function DashboardOverviewPage() {
 
   // --- Derived Dynamic Data ---
   const fullName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "Loading...";
-  const photoUrl = user?.photoUrl || "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P";
+  const photoUrl = user?.photoUrl || "/avatar-placeholder.svg";
 
   const listingsCount = landlordProperties.length || user?.listingsCount || 0;
   const matchesCount =
@@ -282,43 +326,45 @@ export default function DashboardOverviewPage() {
 
         {/* Charts / Analytics */}
         <section className="space-y-6 lg:min-h-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
-          
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex lg:min-h-0 lg:flex-col">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Matches Trend (Last 7 Days)</h3>
-              <p className="text-sm text-slate-500">Track how your properties are performing this week.</p>
-            </div>
-            
-            {isLoading ? (
-              <div className="h-64 w-full rounded-xl bg-slate-50 animate-pulse lg:h-full lg:min-h-0" />
-            ) : matchesCount > 0 ? (
-              <MatchTrendChart matchesData={weeklyMatchesData} className="lg:h-full lg:min-h-0" />
-            ) : (
-              <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400 lg:h-full lg:min-h-0">
-                <span className="material-symbols-outlined text-[48px] mb-2">trending_flat</span>
-                <p className="font-medium text-slate-500">No match data available yet</p>
-                <p className="text-sm">List more properties to start getting matches!</p>
+          {isLoading ? (
+            <>
+              <ChartCardSkeleton type="line" />
+              <ChartCardSkeleton type="bars" />
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex lg:min-h-0 lg:flex-col">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Matches Trend (Last 7 Days)</h3>
+                  <p className="text-sm text-slate-500">Track how your properties are performing this week.</p>
+                </div>
+                {matchesCount > 0 ? (
+                  <MatchTrendChart matchesData={weeklyMatchesData} className="lg:h-full lg:min-h-0" />
+                ) : (
+                  <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400 lg:h-full lg:min-h-0">
+                    <span className="material-symbols-outlined text-[48px] mb-2">trending_flat</span>
+                    <p className="font-medium text-slate-500">No match data available yet</p>
+                    <p className="text-sm">List more properties to start getting matches!</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex lg:min-h-0 lg:flex-col">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Top Performing Properties</h3>
-              <p className="text-sm text-slate-500">Which of your listings get the most matches?</p>
-            </div>
-
-            {isLoading ? (
-              <div className="h-64 w-full rounded-xl bg-slate-50 animate-pulse lg:h-full lg:min-h-0" />
-            ) : propertyChartData.length > 0 ? (
-              <PropertyPerformanceChart propertyData={propertyChartData} className="lg:h-full lg:min-h-0" />
-            ) : (
-             <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400 lg:h-full lg:min-h-0">
-                <span className="material-symbols-outlined text-[48px] mb-2">bar_chart</span>
-                <p className="font-medium text-slate-500">No property matches found</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex lg:min-h-0 lg:flex-col">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Top Performing Properties</h3>
+                  <p className="text-sm text-slate-500">Which of your listings get the most matches?</p>
+                </div>
+                {propertyChartData.length > 0 ? (
+                  <PropertyPerformanceChart propertyData={propertyChartData} className="lg:h-full lg:min-h-0" />
+                ) : (
+                  <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-400 lg:h-full lg:min-h-0">
+                    <span className="material-symbols-outlined text-[48px] mb-2">bar_chart</span>
+                    <p className="font-medium text-slate-500">No property matches found</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
         </section>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import LandlordProfileTutorial from "@/components/LandlordProfileTutorial";
@@ -65,12 +65,17 @@ export default function DashboardProfilePage() {
 
   // Edit State
   const [isPhotoModalOpen, setPhotoModalOpen] = useState(false);
+  const [isContactModalOpen, setContactModalOpen] = useState(false);
   const [photoDraft, setPhotoDraft] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [contactPhoneDraft, setContactPhoneDraft] = useState("");
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [contactError, setContactError] = useState<string | null>(null);
   const [isPhotoSaving, setIsPhotoSaving] = useState(false);
+  const [isContactSaving, setIsContactSaving] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   useToastError(photoError);
+  useToastError(contactError);
   useToastError(deleteError);
 
   // --- Effects ---
@@ -117,22 +122,9 @@ export default function DashboardProfilePage() {
   const roleLabel = roleValue
     ? `${String(roleValue).charAt(0).toUpperCase()}${String(roleValue).slice(1).toLowerCase()}`
     : "Landlord";
-  const photoUrl = user?.photoUrl || "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P";
+  const photoUrl = user?.photoUrl || "/avatar-placeholder.svg";
 
-  const sections = useMemo(() => [
-    { 
-        icon: "person", 
-        title: "Personal Information", 
-        description: [user?.email, user?.phoneNumber].filter(Boolean).join(", ") || "Email, Phone",
-    },
-    { 
-        icon: "verified_user", 
-        title: "Identity Verification", 
-        description: isVerified ? "Verified Status Active" : "Not Verified", 
-        action: isVerified ? undefined : () => router.push("/verify-identity"),
-        accent: isVerified 
-    },
-  ], [user, isVerified, router]);
+  const hasServerPhone = Boolean(user?.phoneNumber?.trim());
 
 
   // --- Handlers ---
@@ -144,10 +136,6 @@ export default function DashboardProfilePage() {
   const handlePhotoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setPhotoFile(file);
-    if (file) {
-      const previewUrl = URL.createObjectURL(file);
-      setPhotoDraft(previewUrl);
-    }
   };
 
   const handleSavePhoto = async () => {
@@ -176,6 +164,32 @@ export default function DashboardProfilePage() {
       showToast({ title: message, variant: "error" });
     } finally {
       setIsPhotoSaving(false);
+    }
+  };
+
+  const handleSaveContact = async () => {
+    setContactError(null);
+    if (hasServerPhone) {
+      setContactModalOpen(false);
+      return;
+    }
+    const nextPhone = contactPhoneDraft.trim();
+    if (!nextPhone) {
+      setContactError("Phone number is required.");
+      return;
+    }
+    setIsContactSaving(true);
+    try {
+      await updateUser({ phoneNumber: nextPhone });
+      showToast({ title: "Contact details updated", variant: "success" });
+      setContactModalOpen(false);
+      await fetchUserProfile();
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setContactError(message);
+      showToast({ title: message, variant: "error" });
+    } finally {
+      setIsContactSaving(false);
     }
   };
 
@@ -212,108 +226,110 @@ export default function DashboardProfilePage() {
     <div className="min-h-screen font-display antialiased flex flex-col pb-28 bg-slate-50 text-slate-900">
       
       {/* --- Header --- */}
-      <header data-tour="landlord-profile-header" className="bg-white px-6 pt-12 pb-8 border-b border-slate-200 shadow-sm relative">
-        <div className="flex items-center gap-6 max-w-2xl mx-auto">
-          <button
-            onClick={() => router.back()}
-            aria-label="Go back"
-            className=" text-slate-600 hover:bg-slate-50 rounded-full p-3 hidden md:block transition-colors"
-          >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </button>
-          {/* Avatar */}
-          <div
-            className="relative shrink-0 group cursor-pointer"
-            onClick={() => setPhotoModalOpen(true)}
-          >
-            <div
-              className="h-24 w-24 rounded-full bg-slate-200 bg-cover bg-center border-4 border-white shadow-md group-hover:brightness-90 transition-all"
-              style={{
-                backgroundImage: `url('${photoUrl}')`,
-              }}
-            />
-             <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="material-symbols-outlined text-white">edit</span>
-            </div>
-
-            {isVerified && (
-                <div className="absolute bottom-0 right-0 bg-white rounded-full p-1 shadow-sm border border-slate-100">
-                <span
-                    className="material-symbols-outlined text-primary text-[24px]"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                    verified
-                </span>
-                </div>
-            )}
+      <header
+        data-tour="landlord-profile-header"
+        className="border-b border-slate-200 bg-slate-100 px-6 py-4"
+      >
+        <div className="mx-auto grid max-w-2xl grid-cols-[40px_1fr_40px] items-center">
+          <div className="justify-self-start">
+            <button
+              onClick={() => router.back()}
+              aria-label="Go back"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-200/70 text-primary transition-colors hover:bg-slate-200"
+            >
+              <span className="material-symbols-outlined text-[19px]">arrow_back</span>
+            </button>
           </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold leading-tight text-primary">{fullName}</h1>
+          <div className="min-w-0 justify-self-center text-center">
+            <h1 className="text-2xl font-black tracking-tight text-primary">
+              My Profile
+            </h1>
+            <div className="mt-2 inline-flex items-center rounded-full bg-slate-200 px-3 py-1 text-xs font-extrabold uppercase tracking-[0.12em] text-primary">
+              {roleLabel}
             </div>
-            <div className="flex items-center gap-1 mt-1">
-              <span className="text-slate-500 font-medium text-lg">
-                {isVerified ? `Verified ${roleLabel}` : roleLabel}
-              </span>
-            </div>
+          </div>
+          <div className="justify-self-end">
+            <button
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-200/70 text-primary transition-colors hover:bg-slate-200"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+            </button>
           </div>
         </div>
       </header>
 
       {/* --- Main Content --- */}
       <main className="flex-1 space-y-8 px-6 pt-8 max-w-2xl mx-auto w-full">
-        
-        {/* Settings Links */}
-        <section data-tour="landlord-profile-settings" className="space-y-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-primary">Profile Settings</h2>
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manage</span>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+              Contact Details
+            </p>
+                    <button
+                      onClick={() => {
+                        setContactPhoneDraft(user?.phoneNumber ?? "");
+                        setContactError(null);
+                        setContactModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
+                      aria-label="Edit contact details"
+                    >
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+              Edit
+            </button>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            {sections.map((section) => (
-              <button
-                key={section.title}
-                onClick={section.action}
-                disabled={!section.action}
-                className="group flex w-full items-center justify-between border-b border-slate-100 p-5 text-left transition-colors hover:bg-slate-50 active:bg-slate-50 last:border-b-0 disabled:cursor-default disabled:bg-white"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 transition-colors group-hover:bg-blue-100">
-                    <span className="material-symbols-outlined text-primary">{section.icon}</span>
-                  </div>
-                  <div>
-                    <div className="text-base font-bold text-slate-900">{section.title}</div>
-                    <div className="text-sm text-slate-500 line-clamp-1">{section.description}</div>
-                  </div>
-                </div>
-                {section.accent ? (
-                  <div className="flex flex-col items-end">
-                    <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
-                    <span className="text-[11px] uppercase tracking-wide text-green-600 font-bold pt-1">Verified</span>
-                  </div>
-                ) : !section.action ? (
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                    Read-only
+
+          <div className="mt-5 flex flex-col items-center">
+            <div
+              className="relative group cursor-pointer"
+              onClick={() => setPhotoModalOpen(true)}
+            >
+              <div
+                className="h-24 w-24 rounded-full bg-slate-200 bg-cover bg-center border-4 border-white shadow-md group-hover:brightness-90 transition-all"
+                style={{ backgroundImage: `url('${photoUrl}')` }}
+              />
+              <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="material-symbols-outlined text-white">edit</span>
+              </div>
+              {isVerified && (
+                <div className="absolute bottom-0 right-0 bg-white rounded-full p-1 shadow-sm border border-slate-100">
+                  <span
+                    className="material-symbols-outlined text-primary text-[24px]"
+                    style={{ fontVariationSettings: "'FILL' 1" }}
+                  >
+                    verified
                   </span>
-                ) : (
-                  <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">chevron_right</span>
-                )}
-              </button>
-            ))}
+                </div>
+              )}
+            </div>
+
+            <p className="mt-4 text-2xl font-bold text-primary">{fullName}</p>
+            <p className="mt-1 text-sm text-slate-500">{user?.email}</p>
+            <p className="text-sm text-slate-500">{user?.phoneNumber}</p>
+            <button
+              onClick={() => {
+                if (!isVerified) router.push("/verify-identity");
+              }}
+              className={[
+                "mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors",
+                isVerified
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-blue-200 bg-blue-50 text-primary hover:bg-blue-100",
+              ].join(" ")}
+              disabled={isVerified}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {isVerified ? "verified" : "verified_user"}
+              </span>
+              {isVerified ? "Identity Verified" : "Verify Identity"}
+            </button>
           </div>
         </section>
 
         {/* Account Actions */}
         <section data-tour="landlord-profile-actions" className="space-y-3 pt-4">
-           {/* Sign Out */}
-          <button 
-            onClick={handleSignOut}
-            className="w-full py-4 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 active:bg-slate-100 transition-colors shadow-sm"
-          >
-            Sign Out
-          </button>
-          
           {/* Delete Account Trigger */}
           <button 
             onClick={() => {
@@ -331,51 +347,37 @@ export default function DashboardProfilePage() {
 
       <Modal
         open={isPhotoModalOpen}
-        title="Edit Photo"
+        title="Update Profile Photo"
         onClose={() => setPhotoModalOpen(false)}
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">
-            Upload a new photo from your device. Files are stored securely.
-          </p>
-          {photoDraft ? (
-            <div className="flex justify-center">
-              <div
-                className="h-28 w-28 rounded-full bg-slate-200 bg-cover bg-center border border-slate-200"
-                style={{ backgroundImage: `url('${photoDraft}')` }}
-              />
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-500">Upload from device</label>
-            <div className="flex flex-col items-center gap-3">
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className="flex h-20 w-20 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-slate-600 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                aria-label="Upload photo from device"
-              >
-                <span className="material-symbols-outlined text-[32px]">
-                  upload
-                </span>
-              </button>
-              <p className="text-xs font-medium text-slate-500 text-center">
-                Tap to choose a photo
-              </p>
-              {photoFile ? (
-                <span className="text-sm text-slate-500 text-center break-all">
-                  {photoFile.name}
-                </span>
-              ) : null}
-            </div>
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={isPhotoSaving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+              aria-label="Upload photo from device"
+            >
+              <span className="material-symbols-outlined text-[18px]">upload</span>
+              {isPhotoSaving ? "Uploading..." : "Upload from device"}
+            </button>
+            <p className="mt-2 text-center text-xs text-slate-500">
+              JPG, PNG, WEBP recommended
+            </p>
             <input
               ref={photoInputRef}
               type="file"
               accept="image/*"
-              className="hidden"
+              className="sr-only"
               onChange={handlePhotoFileChange}
             />
           </div>
+          {photoFile ? (
+            <span className="block text-sm text-slate-500 text-center break-all">
+              {photoFile.name}
+            </span>
+          ) : null}
           <div className="pt-2 flex gap-3">
             <button
               onClick={() => setPhotoModalOpen(false)}
@@ -389,6 +391,70 @@ export default function DashboardProfilePage() {
               className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-dark transition-colors shadow-sm disabled:opacity-70"
             >
               {isPhotoSaving ? "Saving..." : "Save Photo"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isContactModalOpen}
+        title="Edit Contact Details"
+        onClose={() => setContactModalOpen(false)}
+      >
+        <div className="space-y-4">
+          {[
+            { label: "Full Name", icon: "person", value: fullName },
+            { label: "Email", icon: "mail", value: user?.email ?? "" },
+          ].map((field) => (
+            <div key={field.label} className="space-y-2">
+              <label className="text-sm font-semibold text-slate-500">{field.label}</label>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <span className="material-symbols-outlined text-slate-400 text-[20px]">
+                  {field.icon}
+                </span>
+                <input
+                  className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                  value={field.value}
+                  readOnly
+                />
+              </div>
+            </div>
+          ))}
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-500">Phone Number</label>
+            <div
+              className={[
+                "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
+                hasServerPhone
+                  ? "border-slate-200 bg-slate-50"
+                  : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
+              ].join(" ")}
+            >
+              <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
+              <input
+                className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                value={contactPhoneDraft}
+                readOnly={hasServerPhone}
+                placeholder={hasServerPhone ? undefined : "Add phone number"}
+                onChange={(e) => setContactPhoneDraft(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex gap-3">
+            <button
+              onClick={() => setContactModalOpen(false)}
+              className="flex-1 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveContact}
+              disabled={isContactSaving}
+              className="flex-1 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-dark transition-colors shadow-sm disabled:opacity-70"
+            >
+              {isContactSaving ? "Saving..." : "Save Contact"}
             </button>
           </div>
         </div>

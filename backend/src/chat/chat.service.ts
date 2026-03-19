@@ -13,6 +13,11 @@ import { Property, PropertyDocument } from "../properties/schemas/property.schem
 import { MatchStatus, RouteAccessStatus } from "../common/enums";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { WorkspaceService } from "../common/services/workspace.service";
+import {
+  computeMatchScore,
+  type PropertyMatchInput,
+  type TenantPreferences,
+} from "../common/utils/match.utils";
 
 type RouteRequestPayload = {
   id: string;
@@ -23,6 +28,13 @@ type RouteRequestPayload = {
 };
 
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
+const CHAT_VISIBLE_STATUSES: MatchStatus[] = [MatchStatus.ChatInitiated, MatchStatus.Active];
+
+function isMongoDuplicateKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 11000;
+}
 
 @Injectable()
 export class ChatService {
@@ -33,6 +45,61 @@ export class ChatService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly workspaceService: WorkspaceService
   ) { }
+
+  private async applyMatchScore(
+    match: MatchDocument,
+    property: PropertyDocument,
+    tenantId: string
+  ) {
+    const tenant = await this.userModel.findById(tenantId).lean().exec();
+    if (!tenant) return false;
+
+    const tenantPrefs = ((tenant as unknown as { preferences?: { tenant?: TenantPreferences } })
+      .preferences?.tenant ?? {}) as TenantPreferences;
+    const tenantAddress = (tenant as unknown as { address?: { lat?: number; lng?: number } })
+      .address;
+    const propertyAddress = (property as unknown as { address?: { lat?: number; lng?: number } })
+      .address;
+
+    const matchInput: PropertyMatchInput = {
+      propertyType: property.propertyType,
+      monthlyPrice: property.monthlyPrice,
+      petFriendly: property.petFriendly,
+      landlordRequirements: property.landlordRequirements,
+      amenities: property.amenities,
+      lat: propertyAddress?.lat,
+      lng: propertyAddress?.lng,
+    };
+
+    const nextScore = computeMatchScore(
+      {
+        ...tenantPrefs,
+        lat: tenantAddress?.lat,
+        lng: tenantAddress?.lng,
+      },
+      matchInput
+    );
+
+    const changed =
+      match.matchScore !== nextScore.matchScore ||
+      match.preferencesMatchPercentage !== nextScore.preferencesMatchPercentage ||
+      match.apartmentPreferenceMatchPercentage !==
+        nextScore.apartmentPreferenceMatchPercentage ||
+      match.locationScore !== nextScore.locationScore ||
+      match.amenityScore !== nextScore.amenityScore ||
+      match.affordabilityScore !== nextScore.affordabilityScore;
+
+    if (!changed) return false;
+
+    match.matchScore = nextScore.matchScore;
+    match.preferencesMatchPercentage = nextScore.preferencesMatchPercentage;
+    match.apartmentPreferenceMatchPercentage =
+      nextScore.apartmentPreferenceMatchPercentage;
+    match.locationScore = nextScore.locationScore;
+    match.amenityScore = nextScore.amenityScore;
+    match.affordabilityScore = nextScore.affordabilityScore;
+    return true;
+  }
 
   private parseRouteRequestPayload(content: string): RouteRequestPayload | null {
     if (!content?.startsWith(ROUTE_REQUEST_PREFIX)) {
@@ -71,7 +138,8 @@ export class ChatService {
     match: MatchDocument,
     property: PropertyDocument,
     lastMessage?: MessageDocument | null,
-    participants?: { tenant?: UserDocument | null; landlord?: UserDocument | null }
+    participants?: { tenant?: UserDocument | null; landlord?: UserDocument | null },
+    currentUserId?: string
   ) {
     const propertyObject = property.toObject ? property.toObject() : property;
     const landlordId = (propertyObject as any)?.landlordId;
@@ -86,10 +154,17 @@ export class ChatService {
       },
       tenant: tenant ?? undefined,
       landlord: landlord ?? undefined,
-      lastMessage: lastMessage
-        ? { content: lastMessage.content, timestamp: lastMessage.timestamp }
-        : null,
-      unreadCount: 0,
+      lastMessage:
+        lastMessage || match.lastMessage
+          ? {
+              content: lastMessage?.content ?? match.lastMessage?.content,
+              timestamp: lastMessage?.timestamp ?? match.lastMessage?.timestamp,
+            }
+          : null,
+      unreadCount:
+        currentUserId && match.tenantId?.toString?.() === currentUserId
+          ? match.tenantUnreadCount ?? 0
+          : match.landlordUnreadCount ?? 0,
     };
   }
 
@@ -168,13 +243,30 @@ export class ChatService {
     });
 
     const saved = await created.save();
+    const senderIsTenant = dto.senderId === tenantId;
+    const nextStatus =
+      match.status === MatchStatus.Closed
+        ? MatchStatus.Closed
+        : MatchStatus.Active;
     await this.matchModel.findByIdAndUpdate(dto.matchId, {
-      status:
-        match.status === MatchStatus.LandlordQualified
-          ? MatchStatus.ChatInitiated
-          : match.status,
-      updatedAt: new Date(),
-      ...matchPatch,
+      $set: {
+        status: nextStatus,
+        updatedAt: new Date(),
+        landlordId: property.landlordId,
+        ...(senderIsTenant ? {} : { landlordReplied: true }),
+        lastMessage: {
+          content: saved.content,
+          senderId: saved.senderId,
+          timestamp: saved.timestamp,
+        },
+        ...(senderIsTenant
+          ? { tenantUnreadCount: 0 }
+          : { landlordUnreadCount: 0 }),
+        ...matchPatch,
+      },
+      $inc: senderIsTenant
+        ? { landlordUnreadCount: 1 }
+        : { tenantUnreadCount: 1 },
     });
     return saved;
   }
@@ -216,9 +308,9 @@ export class ChatService {
       { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
       {
         $match: {
-          status: { $ne: MatchStatus.Dismissed },
+          status: { $in: CHAT_VISIBLE_STATUSES },
           $or: [
-            { tenantId: userObjectId },
+            { tenantId: { $in: [userObjectId, userId] } },
             { "property.landlordId": { $in: landlordVisibilityIds } },
           ],
         },
@@ -260,62 +352,17 @@ export class ChatService {
       },
       { $unwind: { path: "$landlord", preserveNullAndEmptyArrays: true } },
       {
-        $lookup: {
-          from: "messages",
-          let: {
-            matchId: "$_id",
-            currentUserId: userId,
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [{ $toString: "$matchId" }, { $toString: "$$matchId" }],
-                },
-              },
-            },
-            { $sort: { timestamp: -1 } },
-            {
-              $group: {
-                _id: null,
-                lastMessage: { $first: "$$ROOT" },
-                unreadCount: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          {
-                            $eq: [
-                              { $toString: "$receiverId" },
-                              "$$currentUserId",
-                            ],
-                          },
-                          { $eq: ["$isRead", false] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-              },
-            },
-            { $project: { _id: 0, lastMessage: 1, unreadCount: 1 } },
-          ],
-          as: "messageMeta",
-        },
-      },
-      {
         $addFields: {
-          lastMessage: {
-            $ifNull: [{ $arrayElemAt: ["$messageMeta.lastMessage", 0] }, null],
-          },
+          lastMessage: "$lastMessage",
           unreadCount: {
-            $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
+            $cond: [
+              { $eq: [{ $toString: "$tenantId" }, userId] },
+              { $ifNull: ["$tenantUnreadCount", 0] },
+              { $ifNull: ["$landlordUnreadCount", 0] },
+            ],
           },
         },
       },
-      { $unset: "messageMeta" },
       {
         $project: {
           matchId: "$_id",
@@ -338,7 +385,7 @@ export class ChatService {
           updatedAt: 1,
         },
       },
-      { $sort: { "lastMessage.timestamp": -1, updatedAt: -1 } },
+      { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
     ];
 
     if (offset > 0) {
@@ -370,17 +417,27 @@ export class ChatService {
   }
 
   async markMatchRead(matchId: string, userId: string) {
-    await this.assertMatchMembership(matchId, userId);
+    const { match } = await this.assertMatchMembership(matchId, userId);
 
     const result = await this.messageModel.updateMany(
       { matchId, receiverId: userId, isRead: false },
       { $set: { isRead: true, readAt: new Date() } }
     );
 
+    const isTenant = match.tenantId.toString() === userId;
+    await this.matchModel.findByIdAndUpdate(matchId, {
+      $set: isTenant ? { tenantUnreadCount: 0 } : { landlordUnreadCount: 0 },
+    });
+
     return { updatedCount: result.modifiedCount };
   }
 
   async startThread(tenantId: string, propertyId: string, message?: string) {
+    if (!Types.ObjectId.isValid(tenantId) || !Types.ObjectId.isValid(propertyId)) {
+      throw new BadRequestException("Invalid tenantId or propertyId");
+    }
+    const tenantOid = new Types.ObjectId(tenantId);
+    const propertyOid = new Types.ObjectId(propertyId);
     const property = await this.propertyModel.findById(propertyId).exec();
     if (!property) {
       throw new NotFoundException("Property not found");
@@ -400,27 +457,79 @@ export class ChatService {
       throw new ForbiddenException("Cannot message your own property");
     }
 
-    let match = await this.matchModel
-      .findOne({ tenantId, propertyId })
-      .exec();
-
-    if (!match) {
-      match = new this.matchModel({
-        tenantId,
-        propertyId,
-        status: MatchStatus.TenantLiked,
-        tenantLiked: true,
-        timestamp: new Date(),
-      });
-      await match.save();
+    let match: MatchDocument | null = null;
+    try {
+      match = await this.matchModel
+        .findOneAndUpdate(
+          {
+            $or: [
+              { tenantId: tenantOid, propertyId: propertyOid },
+              { tenantId, propertyId },
+            ],
+          },
+          {
+            $setOnInsert: {
+              tenantId: tenantOid,
+              propertyId: propertyOid,
+              landlordId: property.landlordId,
+              status: MatchStatus.TenantLiked,
+              tenantLiked: true,
+              timestamp: new Date(),
+            },
+          },
+          {
+            upsert: true,
+            new: true,
+          }
+        )
+        .exec();
+    } catch (error) {
+      if (!isMongoDuplicateKeyError(error)) {
+        throw error;
+      }
+      match = await this.matchModel
+        .findOne({
+          $or: [
+            { tenantId: tenantOid, propertyId: propertyOid },
+            { tenantId, propertyId },
+          ],
+        })
+        .exec();
     }
 
-    if (match.status !== MatchStatus.ChatInitiated) {
+    if (!match) {
+      throw new NotFoundException("Match not found");
+    }
+
+    // Normalize legacy string IDs to ObjectId so all APIs see the same match.
+    let shouldNormalize = false;
+    const currentTenantId = match.tenantId?.toString?.() ?? String(match.tenantId);
+    const currentPropertyId = match.propertyId?.toString?.() ?? String(match.propertyId);
+    if (currentTenantId === tenantId && !(match.tenantId instanceof Types.ObjectId)) {
+      (match as unknown as { tenantId: Types.ObjectId }).tenantId = tenantOid;
+      shouldNormalize = true;
+    }
+    if (currentPropertyId === propertyId && !(match.propertyId instanceof Types.ObjectId)) {
+      (match as unknown as { propertyId: Types.ObjectId }).propertyId = propertyOid;
+      shouldNormalize = true;
+    }
+    if (shouldNormalize) {
+      await match.save();
+    }
+    if (!match.landlordId) {
+      match.landlordId = property.landlordId;
+    }
+
+    if (
+      match.status !== MatchStatus.ChatInitiated &&
+      match.status !== MatchStatus.Active
+    ) {
       match.status = MatchStatus.ChatInitiated;
     }
     if (match.tenantLiked !== true) {
       match.tenantLiked = true;
     }
+    await this.applyMatchScore(match, property, tenantId);
     await match.save();
 
     let createdMessage;
@@ -436,7 +545,7 @@ export class ChatService {
     return this.buildConversationResponse(match, property, createdMessage, {
       tenant: tenantUser,
       landlord: landlordUser,
-    });
+    }, tenantId);
   }
 
   async startLandlordThread(matchId: string, landlordId: string, message?: string) {
@@ -469,8 +578,22 @@ export class ChatService {
       throw new ForbiddenException("Access denied");
     }
 
-    if (match.status !== MatchStatus.ChatInitiated) {
+    let shouldSave = false;
+    if (!match.landlordId) {
+      match.landlordId = property.landlordId;
+      shouldSave = true;
+    }
+    if (
+      match.status !== MatchStatus.ChatInitiated &&
+      match.status !== MatchStatus.Active
+    ) {
       match.status = MatchStatus.ChatInitiated;
+      shouldSave = true;
+    }
+    if (await this.applyMatchScore(match, property, match.tenantId.toString())) {
+      shouldSave = true;
+    }
+    if (shouldSave) {
       await match.save();
     }
 
@@ -487,7 +610,7 @@ export class ChatService {
     return this.buildConversationResponse(match, property, createdMessage, {
       tenant: tenantUser,
       landlord: landlordUser,
-    });
+    }, landlordId);
   }
 
   private async assertMatchMembership(matchId: string, userId: string) {
@@ -550,6 +673,9 @@ export class ChatService {
       matchId,
       senderId
     );
+    if (!CHAT_VISIBLE_STATUSES.includes(match.status)) {
+      throw new ForbiddenException("Chat is not active for this match");
+    }
     const tenantId = match.tenantId.toString();
     const landlordId = property.landlordId.toString();
     const allowed = new Set([tenantId, landlordId]);

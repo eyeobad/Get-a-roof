@@ -531,7 +531,9 @@ let PropertiesService = class PropertiesService {
             tenantId: new mongoose_2.Types.ObjectId(tenantId),
         };
         if (!includeDismissed) {
-            filter.status = { $ne: enums_1.MatchStatus.Dismissed };
+            filter.status = {
+                $nin: [enums_1.MatchStatus.Dismissed, enums_1.MatchStatus.Archived, enums_1.MatchStatus.Closed],
+            };
         }
         return this.matchModel.find(filter).distinct("propertyId").exec();
     }
@@ -547,15 +549,28 @@ let PropertiesService = class PropertiesService {
             .filter(Boolean);
         if (!oids.length)
             return map;
+        const propertyIdVariants = [...oids, ...oids.map((id) => id.toString())];
         const matches = await this.matchModel
             .find({
-            tenantId: new mongoose_2.Types.ObjectId(tenantId),
-            propertyId: { $in: oids },
-            status: { $ne: enums_1.MatchStatus.Dismissed },
+            tenantId: { $in: [new mongoose_2.Types.ObjectId(tenantId), tenantId] },
+            propertyId: { $in: propertyIdVariants },
+            status: {
+                $nin: [enums_1.MatchStatus.Dismissed, enums_1.MatchStatus.Archived, enums_1.MatchStatus.Closed],
+            },
         })
-            .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
+            .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt updatedAt")
+            .sort({ updatedAt: -1 })
             .lean()
             .exec();
+        const rankRouteAccess = (candidate) => {
+            if (candidate.routeAccessStatus === enums_1.RouteAccessStatus.Approved)
+                return 3;
+            if (candidate.routeAccessStatus === enums_1.RouteAccessStatus.Pending)
+                return 2;
+            if (candidate.routeAccessStatus === enums_1.RouteAccessStatus.Denied)
+                return 1;
+            return 0;
+        };
         matches.forEach((match) => {
             const propertyId = match.propertyId?.toString?.();
             if (!propertyId)
@@ -567,22 +582,29 @@ let PropertiesService = class PropertiesService {
                 !!expiresAt &&
                 Number.isFinite(expiresAt.getTime()) &&
                 expiresAt.getTime() > Date.now();
-            map.set(propertyId, {
-                routeAccessStatus: isActiveApproval
-                    ? enums_1.RouteAccessStatus.Approved
-                    : (match.routeAccessStatus === enums_1.RouteAccessStatus.Approved
-                        ? enums_1.RouteAccessStatus.None
-                        : match.routeAccessStatus ?? enums_1.RouteAccessStatus.None),
+            const normalizedStatus = isActiveApproval
+                ? enums_1.RouteAccessStatus.Approved
+                : (match.routeAccessStatus === enums_1.RouteAccessStatus.Approved
+                    ? enums_1.RouteAccessStatus.None
+                    : match.routeAccessStatus ?? enums_1.RouteAccessStatus.None);
+            const candidate = {
+                routeAccessStatus: normalizedStatus,
                 routeOriginLat: isActiveApproval &&
-                    typeof match.routeOriginLat === "number" && Number.isFinite(match.routeOriginLat)
+                    typeof match.routeOriginLat === "number" &&
+                    Number.isFinite(match.routeOriginLat)
                     ? match.routeOriginLat
                     : undefined,
                 routeOriginLng: isActiveApproval &&
-                    typeof match.routeOriginLng === "number" && Number.isFinite(match.routeOriginLng)
+                    typeof match.routeOriginLng === "number" &&
+                    Number.isFinite(match.routeOriginLng)
                     ? match.routeOriginLng
                     : undefined,
                 routeAccessExpiresAt: isActiveApproval ? expiresAt : undefined,
-            });
+            };
+            const current = map.get(propertyId);
+            if (!current || rankRouteAccess(candidate) > rankRouteAccess(current)) {
+                map.set(propertyId, candidate);
+            }
         });
         return map;
     }

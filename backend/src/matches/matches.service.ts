@@ -28,15 +28,51 @@ const VALID_TRANSITIONS: Record<MatchStatus, MatchStatus[]> = {
   [MatchStatus.TenantLiked]: [
     MatchStatus.LandlordQualified,
     MatchStatus.ChatInitiated,
+    MatchStatus.Active,
+    MatchStatus.Archived,
+    MatchStatus.Closed,
     MatchStatus.Dismissed,
   ],
   [MatchStatus.LandlordQualified]: [
     MatchStatus.ChatInitiated,
+    MatchStatus.Active,
+    MatchStatus.Archived,
+    MatchStatus.Closed,
     MatchStatus.Dismissed,
   ],
-  [MatchStatus.ChatInitiated]: [MatchStatus.Dismissed],
+  [MatchStatus.ChatInitiated]: [
+    MatchStatus.Active,
+    MatchStatus.Archived,
+    MatchStatus.Closed,
+    MatchStatus.Dismissed,
+  ],
+  [MatchStatus.Active]: [MatchStatus.Archived, MatchStatus.Closed, MatchStatus.Dismissed],
+  [MatchStatus.Archived]: [
+    MatchStatus.TenantLiked,
+    MatchStatus.LandlordQualified,
+    MatchStatus.ChatInitiated,
+    MatchStatus.Active,
+    MatchStatus.Closed,
+    MatchStatus.Dismissed,
+  ],
+  [MatchStatus.Closed]: [
+    MatchStatus.TenantLiked,
+    MatchStatus.LandlordQualified,
+    MatchStatus.ChatInitiated,
+    MatchStatus.Active,
+    MatchStatus.Dismissed,
+  ],
   [MatchStatus.Dismissed]: [MatchStatus.TenantLiked], // recycling path
 };
+
+const ACTIVE_MATCH_STATUSES: MatchStatus[] = [
+  MatchStatus.TenantLiked,
+  MatchStatus.LandlordQualified,
+  MatchStatus.ChatInitiated,
+  MatchStatus.Active,
+];
+
+const CHAT_VISIBLE_STATUSES: MatchStatus[] = [MatchStatus.ChatInitiated, MatchStatus.Active];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,6 +87,12 @@ function paginationStages(page = 1, limit = DEFAULT_PAGE_LIMIT): PipelineStage[]
   const safePage = Math.max(1, page);
   const safeLimit = Math.min(Math.max(1, limit), 100);
   return [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }];
+}
+
+function isMongoDuplicateKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 11000;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,41 +157,75 @@ export class MatchesService {
     const tenantOid = toObjectId(dto.tenantId);
     const propertyOid = toObjectId(dto.propertyId);
 
-    const existing = await this.matchModel
-      .findOne({ tenantId: tenantOid, propertyId: propertyOid })
-      .exec();
+    const matchIdentityFilter = {
+      $or: [
+        { tenantId: tenantOid, propertyId: propertyOid },
+        { tenantId: dto.tenantId, propertyId: dto.propertyId },
+      ],
+    };
 
-    if (existing) {
+    const duplicates = await this.matchModel
+      .find(matchIdentityFilter)
+      .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
+      .exec();
+    let existing = duplicates[0] ?? null;
+
+    if (duplicates.length > 1 && existing) {
+      const redundantIds = duplicates
+        .slice(1)
+        .map((item) => item._id);
+      await Promise.all([
+        this.messageModel.deleteMany({ matchId: { $in: redundantIds } }),
+        this.matchModel.deleteMany({ _id: { $in: redundantIds } }),
+      ]);
+    }
+
+    const saveExisting = async (doc: MatchDocument) => {
       const nextStatus =
-        existing.status === MatchStatus.Dismissed && !isDismiss
+        doc.status === MatchStatus.Dismissed && !isDismiss
           ? MatchStatus.TenantLiked
           : computedStatus;
 
-      existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
-      existing.status = this.validateTransition(existing.status, nextStatus);
-      existing.matchScore = matchScoreData.matchScore;
-      existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
-      existing.apartmentPreferenceMatchPercentage =
+      doc.tenantLiked = dto.tenantLiked ?? doc.tenantLiked;
+      // Normalize legacy string IDs to ObjectId representation.
+      if (!(doc.tenantId instanceof Types.ObjectId)) {
+        doc.tenantId = tenantOid;
+      }
+      if (!(doc.propertyId instanceof Types.ObjectId)) {
+        doc.propertyId = propertyOid;
+      }
+      if (!doc.landlordId && property.landlordId) {
+        doc.landlordId = property.landlordId as Types.ObjectId;
+      }
+      doc.status = this.validateTransition(doc.status, nextStatus);
+      doc.matchScore = matchScoreData.matchScore;
+      doc.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
+      doc.apartmentPreferenceMatchPercentage =
         matchScoreData.apartmentPreferenceMatchPercentage;
-      existing.locationScore = matchScoreData.locationScore;
-      existing.amenityScore = matchScoreData.amenityScore;
-      existing.affordabilityScore = matchScoreData.affordabilityScore;
-      existing.timestamp = new Date();
+      doc.locationScore = matchScoreData.locationScore;
+      doc.amenityScore = matchScoreData.amenityScore;
+      doc.affordabilityScore = matchScoreData.affordabilityScore;
+      doc.timestamp = new Date();
 
       if (isDismiss) {
-        existing.dismissedAt = new Date();
-        existing.dismissReason = dto.dismissReason ?? DismissReason.Soft;
+        doc.dismissedAt = new Date();
+        doc.dismissReason = dto.dismissReason ?? DismissReason.Soft;
       } else {
-        existing.dismissedAt = undefined;
-        existing.dismissReason = undefined;
+        doc.dismissedAt = undefined;
+        doc.dismissReason = undefined;
       }
 
-      return existing.save();
+      return doc.save();
+    };
+
+    if (existing) {
+      return saveExisting(existing);
     }
 
     const created = new this.matchModel({
       tenantId: tenantOid,
       propertyId: propertyOid,
+      landlordId: property.landlordId,
       status: computedStatus,
       tenantLiked: dto.tenantLiked,
       matchScore: matchScoreData.matchScore,
@@ -165,8 +241,20 @@ export class MatchesService {
         ? dto.dismissReason ?? DismissReason.Soft
         : undefined,
     });
-
-    return created.save();
+    try {
+      return await created.save();
+    } catch (error) {
+      if (!isMongoDuplicateKeyError(error)) {
+        throw error;
+      }
+      const raced = await this.matchModel
+        .findOne(matchIdentityFilter)
+        .exec();
+      if (!raced) {
+        throw error;
+      }
+      return saveExisting(raced);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -213,6 +301,47 @@ export class MatchesService {
   }
 
   // -----------------------------------------------------------------------
+  // Delete match (unmatch / clear conv)
+  // -----------------------------------------------------------------------
+
+  async deleteMatch(matchId: string, tenantId: string) {
+    const match = await this.matchModel.findById(matchId).exec();
+    if (!match) {
+      throw new NotFoundException("Match not found");
+    }
+    if (match.tenantId.toString() !== tenantId) {
+      throw new ForbiddenException("Access denied");
+    }
+
+    // Remove all duplicate matches for this tenant+property pair to prevent
+    // "ghost" conversations from reappearing after relogin.
+    const duplicateMatches = await this.matchModel
+      .find({
+        tenantId: match.tenantId,
+        propertyId: match.propertyId,
+      })
+      .select("_id")
+      .lean()
+      .exec();
+
+    const matchIds = duplicateMatches.map((item) => item._id);
+    if (matchIds.length === 0) {
+      return { success: true, deletedMatches: 0, deletedMessages: 0 };
+    }
+
+    const [deletedMessagesResult, deletedMatchesResult] = await Promise.all([
+      this.messageModel.deleteMany({ matchId: { $in: matchIds } }),
+      this.matchModel.deleteMany({ _id: { $in: matchIds } }),
+    ]);
+
+    return {
+      success: true,
+      deletedMatches: deletedMatchesResult.deletedCount ?? 0,
+      deletedMessages: deletedMessagesResult.deletedCount ?? 0,
+    };
+  }
+
+  // -----------------------------------------------------------------------
   // Hard-block (permanent dismiss — never recycle)
   // -----------------------------------------------------------------------
 
@@ -229,6 +358,24 @@ export class MatchesService {
     match.dismissReason = DismissReason.Hard;
     match.dismissedAt = new Date();
     return match.save();
+  }
+
+  async archiveMatch(matchId: string, tenantId: string) {
+    const match = await this.matchModel.findById(matchId).exec();
+    if (!match) {
+      throw new NotFoundException("Match not found");
+    }
+    if (match.tenantId.toString() !== tenantId) {
+      throw new ForbiddenException("Access denied");
+    }
+    if (match.status === MatchStatus.Closed || match.status === MatchStatus.Dismissed) {
+      return { success: true, status: match.status };
+    }
+    match.status = this.validateTransition(match.status, MatchStatus.Archived);
+    match.tenantUnreadCount = 0;
+    match.landlordUnreadCount = 0;
+    await match.save();
+    return { success: true, status: match.status };
   }
 
   // -----------------------------------------------------------------------
@@ -361,7 +508,7 @@ export class MatchesService {
     return this.matchModel
       .find({
         propertyId: toObjectId(propertyId),
-        status: { $ne: MatchStatus.Dismissed },
+        status: { $in: ACTIVE_MATCH_STATUSES },
       })
       .exec();
   }
@@ -370,7 +517,7 @@ export class MatchesService {
     return this.matchModel
       .countDocuments({
         propertyId: toObjectId(propertyId),
-        status: { $ne: MatchStatus.Dismissed },
+        status: { $in: ACTIVE_MATCH_STATUSES },
       })
       .exec();
   }
@@ -379,7 +526,7 @@ export class MatchesService {
     return this.matchModel
       .countDocuments({
         propertyId: toObjectId(propertyId),
-        status: { $ne: MatchStatus.Dismissed },
+        status: { $in: ACTIVE_MATCH_STATUSES },
         $or: [
           { landlordSeenAt: { $exists: false } },
           { landlordSeenAt: null },
@@ -397,7 +544,7 @@ export class MatchesService {
       {
         $match: {
           propertyId: { $in: oids },
-          status: { $ne: MatchStatus.Dismissed },
+          status: { $in: ACTIVE_MATCH_STATUSES },
         },
       },
       { $group: { _id: "$propertyId", count: { $sum: 1 } } },
@@ -414,7 +561,7 @@ export class MatchesService {
       {
         $match: {
           propertyId: { $in: oids },
-          status: { $ne: MatchStatus.Dismissed },
+          status: { $in: ACTIVE_MATCH_STATUSES },
           $or: [
             { landlordSeenAt: { $exists: false } },
             { landlordSeenAt: null },
@@ -445,7 +592,7 @@ export class MatchesService {
         $match: {
           propertyId: { $in: oids },
           createdAt: { $gte: start },
-          status: { $ne: MatchStatus.Dismissed },
+          status: { $in: ACTIVE_MATCH_STATUSES },
         },
       },
       {
@@ -475,7 +622,7 @@ export class MatchesService {
         {
           $match: {
             propertyId: { $in: oids },
-            status: { $ne: MatchStatus.Dismissed },
+            status: { $in: ACTIVE_MATCH_STATUSES },
           },
         },
         { $group: { _id: "$propertyId" } },
@@ -494,7 +641,7 @@ export class MatchesService {
       {
         $match: {
           propertyId: propertyOid,
-          status: { $ne: MatchStatus.Dismissed },
+          status: { $in: ACTIVE_MATCH_STATUSES },
         },
       },
       {
@@ -562,7 +709,7 @@ export class MatchesService {
   async markMatchesSeenForProperty(propertyId: string) {
     const now = new Date();
     await this.matchModel.updateMany(
-      { propertyId: toObjectId(propertyId), status: { $ne: MatchStatus.Dismissed } },
+      { propertyId: toObjectId(propertyId), status: { $in: ACTIVE_MATCH_STATUSES } },
       { $set: { landlordSeenAt: now } }
     );
     return { propertyId, seenAt: now.toISOString() };
@@ -579,7 +726,7 @@ export class MatchesService {
     const exists = await this.matchModel.exists({
       propertyId: { $in: oids },
       tenantId: tenantOid,
-      status: { $ne: MatchStatus.Dismissed },
+      status: { $in: ACTIVE_MATCH_STATUSES },
     });
     return Boolean(exists);
   }
@@ -601,8 +748,8 @@ export class MatchesService {
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          tenantId: tenantOid,
-          status: { $ne: MatchStatus.Dismissed },
+          tenantId: { $in: [tenantOid, tenantId] },
+          status: { $in: ACTIVE_MATCH_STATUSES },
         },
       },
       {
@@ -615,91 +762,13 @@ export class MatchesService {
       },
       { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
       {
-        $lookup: {
-          from: "messages",
-          let: {
-            matchId: "$_id",
-            currentUserId: tenantId,
-            landlordId: "$property.landlordId",
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$matchId", "$$matchId"],
-                },
-              },
-            },
-            { $sort: { timestamp: -1 } },
-            {
-              $group: {
-                _id: null,
-                lastMessage: { $first: "$$ROOT" },
-                unreadCount: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          {
-                            $eq: [
-                              { $toString: "$receiverId" },
-                              "$$currentUserId",
-                            ],
-                          },
-                          { $eq: ["$isRead", false] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-                landlordReplied: {
-                  $max: {
-                    $cond: [
-                      {
-                        $eq: [
-                          { $toString: "$senderId" },
-                          { $toString: "$$landlordId" },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 0,
-                lastMessage: 1,
-                unreadCount: 1,
-                landlordReplied: 1,
-              },
-            },
-          ],
-          as: "messageMeta",
-        },
-      },
-      {
         $addFields: {
-          lastMessage: {
-            $ifNull: [{ $arrayElemAt: ["$messageMeta.lastMessage", 0] }, null],
-          },
-          unreadCount: {
-            $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
-          },
-          landlordReplied: {
-            $ifNull: [
-              { $arrayElemAt: ["$messageMeta.landlordReplied", 0] },
-              0,
-            ],
-          },
+          lastMessage: "$lastMessage",
+          unreadCount: { $ifNull: ["$tenantUnreadCount", 0] },
+          landlordReplied: { $ifNull: ["$landlordReplied", 0] },
         },
       },
-      { $project: { messageMeta: 0 } },
-      { $sort: { updatedAt: -1 } },
+      { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
       ...paginationStages(options?.page, options?.limit),
     ];
 

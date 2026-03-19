@@ -48,6 +48,12 @@ let MatchesController = class MatchesController {
     hardBlock(id, req) {
         return this.matchesService.hardBlockMatch(id, req.user?.sub);
     }
+    deleteMatch(id, req) {
+        return this.matchesService.deleteMatch(id, req.user?.sub);
+    }
+    archiveMatch(id, req) {
+        return this.matchesService.archiveMatch(id, req.user?.sub);
+    }
     update(id, dto, req) {
         return this.matchesService.updateMatchForLandlord(id, dto, req.user?.sub);
     }
@@ -116,6 +122,26 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], MatchesController.prototype, "hardBlock", null);
+__decorate([
+    (0, common_1.Delete)(":id"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "deleteMatch", null);
+__decorate([
+    (0, common_1.Patch)(":id/archive"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(enums_1.UserRole.Tenant),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], MatchesController.prototype, "archiveMatch", null);
 __decorate([
     (0, common_1.Patch)(":id"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

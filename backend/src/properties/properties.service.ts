@@ -695,7 +695,9 @@ export class PropertiesService {
       tenantId: new Types.ObjectId(tenantId),
     };
     if (!includeDismissed) {
-      filter.status = { $ne: MatchStatus.Dismissed };
+      filter.status = {
+        $nin: [MatchStatus.Dismissed, MatchStatus.Archived, MatchStatus.Closed],
+      };
     }
     return this.matchModel.find(filter).distinct("propertyId").exec();
   }
@@ -722,16 +724,32 @@ export class PropertiesService {
       })
       .filter(Boolean) as Types.ObjectId[];
     if (!oids.length) return map;
+    const propertyIdVariants = [...oids, ...oids.map((id) => id.toString())];
 
     const matches = await this.matchModel
       .find({
-        tenantId: new Types.ObjectId(tenantId),
-        propertyId: { $in: oids },
-        status: { $ne: MatchStatus.Dismissed },
+        tenantId: { $in: [new Types.ObjectId(tenantId), tenantId] },
+        propertyId: { $in: propertyIdVariants },
+        status: {
+          $nin: [MatchStatus.Dismissed, MatchStatus.Archived, MatchStatus.Closed],
+        },
       })
-      .select("propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt")
+      .select(
+        "propertyId routeAccessStatus routeOriginLat routeOriginLng routeAccessExpiresAt updatedAt"
+      )
+      .sort({ updatedAt: -1 })
       .lean()
       .exec();
+
+    const rankRouteAccess = (candidate: {
+      routeAccessStatus: RouteAccessStatus;
+      routeAccessExpiresAt?: Date;
+    }) => {
+      if (candidate.routeAccessStatus === RouteAccessStatus.Approved) return 3;
+      if (candidate.routeAccessStatus === RouteAccessStatus.Pending) return 2;
+      if (candidate.routeAccessStatus === RouteAccessStatus.Denied) return 1;
+      return 0;
+    };
 
     matches.forEach((match) => {
       const propertyId = match.propertyId?.toString?.();
@@ -744,25 +762,31 @@ export class PropertiesService {
         !!expiresAt &&
         Number.isFinite(expiresAt.getTime()) &&
         expiresAt.getTime() > Date.now();
-      map.set(
-        propertyId,
-        {
-          routeAccessStatus: isActiveApproval
-            ? RouteAccessStatus.Approved
-            : ((match.routeAccessStatus as RouteAccessStatus) === RouteAccessStatus.Approved
-              ? RouteAccessStatus.None
-              : (match.routeAccessStatus as RouteAccessStatus) ?? RouteAccessStatus.None),
-          routeOriginLat: isActiveApproval &&
-            typeof match.routeOriginLat === "number" && Number.isFinite(match.routeOriginLat)
+      const normalizedStatus = isActiveApproval
+        ? RouteAccessStatus.Approved
+        : ((match.routeAccessStatus as RouteAccessStatus) === RouteAccessStatus.Approved
+            ? RouteAccessStatus.None
+            : (match.routeAccessStatus as RouteAccessStatus) ?? RouteAccessStatus.None);
+      const candidate = {
+        routeAccessStatus: normalizedStatus,
+        routeOriginLat:
+          isActiveApproval &&
+          typeof match.routeOriginLat === "number" &&
+          Number.isFinite(match.routeOriginLat)
             ? match.routeOriginLat
             : undefined,
-          routeOriginLng: isActiveApproval &&
-            typeof match.routeOriginLng === "number" && Number.isFinite(match.routeOriginLng)
+        routeOriginLng:
+          isActiveApproval &&
+          typeof match.routeOriginLng === "number" &&
+          Number.isFinite(match.routeOriginLng)
             ? match.routeOriginLng
             : undefined,
-          routeAccessExpiresAt: isActiveApproval ? expiresAt : undefined,
-        }
-      );
+        routeAccessExpiresAt: isActiveApproval ? expiresAt : undefined,
+      };
+      const current = map.get(propertyId);
+      if (!current || rankRouteAccess(candidate) > rankRouteAccess(current)) {
+        map.set(propertyId, candidate);
+      }
     });
     return map;
   }

@@ -7,6 +7,7 @@ import Link from "next/link";
 import mapboxgl from "mapbox-gl";
 import BottomNav from "@/components/BottomNav";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/alerts";
 
 type ListingCard = {
   id: string;
@@ -30,6 +31,16 @@ type MapPoint = {
   displayLat: number;
   displayLng: number;
   isExact: boolean;
+};
+
+type RouteMetrics = {
+  durationSec: number;
+  distanceMeters: number;
+};
+
+type RouteEndpoints = {
+  origin: { lat: number; lng: number };
+  destination: { lat: number; lng: number };
 };
 
 const APPROX_RADIUS_METERS = 280;
@@ -71,6 +82,21 @@ if (MAPBOX_TOKEN) {
   mapboxgl.accessToken = MAPBOX_TOKEN;
 }
 
+const reportMapIssue = (scope: string, error: unknown, context?: Record<string, unknown>) => {
+  const normalized =
+    error instanceof Error
+      ? { message: error.message, stack: error.stack }
+      : { message: String(error) };
+  console.warn("[map-view]", scope, { ...normalized, ...(context ?? {}) });
+};
+
+const isLocationPermissionDeniedError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  const message = String((error as { message?: unknown }).message ?? "").toLowerCase();
+  return code === 1 || message.includes("permission denied");
+};
+
 const hashString = (value: string) => {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -103,6 +129,20 @@ const buildDisplayAddress = (address: string, neighborhood?: string) => {
   if (cityState) return cityState;
   if (neighborhood) return `Area near ${neighborhood}`;
   return "Area in this neighborhood";
+};
+
+const formatEta = (seconds?: number) => {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return "";
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem ? `${hours}h ${rem}m` : `${hours}h`;
+};
+
+const formatDistanceKm = (meters?: number) => {
+  if (!meters || !Number.isFinite(meters) || meters <= 0) return "";
+  return `${(meters / 1000).toFixed(1)} km`;
 };
 
 const randomizedSimilaritySort = <
@@ -360,6 +400,7 @@ function MapCanvas({
   onSelect,
   onMapReady,
   routeGeojson,
+  routeEndpoints,
   onMapError,
   onMapStatus,
 }: {
@@ -369,6 +410,7 @@ function MapCanvas({
   onSelect: (index: number) => void;
   onMapReady: (map: mapboxgl.Map) => void;
   routeGeojson: GeoJSON.Feature<GeoJSON.LineString> | null;
+  routeEndpoints: RouteEndpoints | null;
   onMapError: (message: string) => void;
   onMapStatus: (status: {
     supported: boolean;
@@ -384,6 +426,7 @@ function MapCanvas({
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const routeMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const mapLoadedRef = useRef(false);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
@@ -485,6 +528,20 @@ function MapCanvas({
           data: { type: "FeatureCollection", features: [] },
         });
         map.addLayer({
+          id: "route-line-shadow",
+          type: "line",
+          source: "route",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#1e3a8a",
+            "line-width": 8,
+            "line-opacity": 0.18,
+          },
+        });
+        map.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
@@ -537,6 +594,8 @@ function MapCanvas({
       resizeObserverRef.current = null;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      routeMarkersRef.current.forEach((marker) => marker.remove());
+      routeMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
       mapLoadedRef.current = false;
@@ -638,6 +697,39 @@ function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoadedRef.current) return;
+    routeMarkersRef.current.forEach((marker) => marker.remove());
+    routeMarkersRef.current = [];
+    if (!routeEndpoints) return;
+
+    const makeMarkerEl = (color: string, label: string) => {
+      const el = document.createElement("div");
+      el.style.width = "18px";
+      el.style.height = "18px";
+      el.style.borderRadius = "999px";
+      el.style.background = color;
+      el.style.border = "3px solid #fff";
+      el.style.boxShadow = "0 8px 16px rgba(15,23,42,0.25)";
+      el.setAttribute("aria-label", label);
+      return el;
+    };
+
+    const originMarker = new mapboxgl.Marker({
+      element: makeMarkerEl("#16a34a", "Route origin"),
+    })
+      .setLngLat([routeEndpoints.origin.lng, routeEndpoints.origin.lat])
+      .addTo(map);
+    const destinationMarker = new mapboxgl.Marker({
+      element: makeMarkerEl("#dc2626", "Route destination"),
+    })
+      .setLngLat([routeEndpoints.destination.lng, routeEndpoints.destination.lat])
+      .addTo(map);
+
+    routeMarkersRef.current = [originMarker, destinationMarker];
+  }, [routeEndpoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoadedRef.current) return;
     const routeSource = map.getSource("route") as mapboxgl.GeoJSONSource | undefined;
     if (!routeSource) return;
     if (!routeGeojson) {
@@ -719,8 +811,10 @@ function MapViewContent() {
   const searchParams = useSearchParams();
   const requestedPropertyId = searchParams?.get("propertyId") ?? "";
   const mapMatches = useAppStore((state) => state.mapMatches);
+  const matchSummaries = useAppStore((state) => state.matchSummaries);
   const listingsById = useAppStore((state) => state.listingsById);
   const loadMapMatches = useAppStore((state) => state.loadMapMatches);
+  const loadMatches = useAppStore((state) => state.loadMatches);
   const loadExploreListings = useAppStore((state) => state.loadExploreListings);
   const fetchPropertyById = useAppStore((state) => state.fetchPropertyById);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
@@ -736,18 +830,41 @@ function MapViewContent() {
   const [routeGeojson, setRouteGeojson] =
     useState<GeoJSON.Feature<GeoJSON.LineString> | null>(null);
   const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
-  const setRoutingError: (value: string | null) => void = () => { };
+  const [routingError, setRoutingError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [routeMetrics, setRouteMetrics] = useState<RouteMetrics | null>(null);
+  const [routeEndpoints, setRouteEndpoints] = useState<RouteEndpoints | null>(null);
+  const [liveUserLocation, setLiveUserLocation] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
   const [isBootstrappingPropertyView, setIsBootstrappingPropertyView] =
     useState(false);
 
   useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setLiveUserLocation({
+          lat: Number(position.coords.latitude.toFixed(6)),
+          lng: Number(position.coords.longitude.toFixed(6)),
+        });
+      },
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 12_000 }
+    );
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
+
+  useEffect(() => {
     if (authToken) {
       void captureUserLocation();
+      void loadMatches();
       void loadMapMatches();
     }
-  }, [authToken, loadMapMatches, captureUserLocation]);
+  }, [authToken, loadMatches, loadMapMatches, captureUserLocation]);
 
   useEffect(() => {
     if (!authToken || !requestedPropertyId) {
@@ -758,6 +875,7 @@ function MapViewContent() {
     setIsBootstrappingPropertyView(true);
     (async () => {
       await Promise.allSettled([
+        loadMatches(),
         fetchPropertyById(requestedPropertyId, { force: true }),
         loadMapMatches(),
         // Pull a broader pool so "similar properties" is not limited to current matched subset.
@@ -773,6 +891,7 @@ function MapViewContent() {
   }, [
     authToken,
     requestedPropertyId,
+    loadMatches,
     fetchPropertyById,
     loadMapMatches,
     loadExploreListings,
@@ -781,6 +900,7 @@ function MapViewContent() {
   useEffect(() => {
     if (!authToken || !requestedPropertyId) return;
     const refresh = () => {
+      void loadMatches();
       void loadMapMatches();
       void fetchPropertyById(requestedPropertyId, { force: true });
     };
@@ -791,7 +911,7 @@ function MapViewContent() {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
-  }, [authToken, requestedPropertyId, loadMapMatches, fetchPropertyById]);
+  }, [authToken, requestedPropertyId, loadMatches, loadMapMatches, fetchPropertyById]);
 
   const sourceListings = useMemo(() => {
     const cachedListings = Object.values(listingsById);
@@ -825,6 +945,23 @@ function MapViewContent() {
     const sorted = randomizedSimilaritySort(others, requestedAnchor).slice(0, 24);
     return [requestedAnchor, ...sorted];
   }, [mapMatches, listingsById, requestedPropertyId]);
+  const routeStatusByListingId = useMemo(() => {
+    const next = new Map<string, string>();
+    matchSummaries.forEach((summary) => {
+      if (summary.listingId && summary.routeAccessStatus) {
+        next.set(summary.listingId, summary.routeAccessStatus);
+      }
+    });
+    return next;
+  }, [matchSummaries]);
+  const resolveEffectiveRouteStatus = useCallback(
+    (listingId: string, listingRouteStatus?: string) => {
+      const summaryRouteStatus = routeStatusByListingId.get(listingId);
+      if (listingRouteStatus) return listingRouteStatus;
+      return summaryRouteStatus;
+    },
+    [routeStatusByListingId]
+  );
   const requestedAnchor =
     (requestedPropertyId ? listingsById[requestedPropertyId] : undefined) ??
     mapMatches.find((listing) => listing.id === requestedPropertyId);
@@ -845,9 +982,13 @@ function MapViewContent() {
 
   const listItems = useMemo<ListingCard[]>(() => {
     return sourceListings.map((listing) => {
+      const effectiveRouteStatus = resolveEffectiveRouteStatus(
+        listing.id,
+        listing.routeAccessStatus
+      );
       const isExact =
         !authToken ||
-        listing.routeAccessStatus === "Approved";
+        effectiveRouteStatus === "Approved";
       return {
         id: listing.id,
         price: listing.price,
@@ -862,14 +1003,18 @@ function MapViewContent() {
         isSaved: likedIds.includes(listing.id),
       };
     });
-  }, [sourceListings, authToken, likedIds]);
+  }, [sourceListings, authToken, likedIds, resolveEffectiveRouteStatus]);
 
   const mapPoints = useMemo<MapPoint[]>(() => {
     return mapSourceListings
       .map((listing, index) => {
+        const effectiveRouteStatus = resolveEffectiveRouteStatus(
+          listing.id,
+          listing.routeAccessStatus
+        );
         const isExact =
           !authToken ||
-          listing.routeAccessStatus === "Approved";
+          effectiveRouteStatus === "Approved";
         const lat = listing.lat;
         const lng = listing.lng;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -889,7 +1034,7 @@ function MapViewContent() {
         };
       })
       .filter((point): point is MapPoint => Boolean(point));
-  }, [mapSourceListings, authToken]);
+  }, [mapSourceListings, authToken, resolveEffectiveRouteStatus]);
   const hasApproxArea = useMemo(
     () => mapPoints.some((point) => !point.isExact),
     [mapPoints]
@@ -904,6 +1049,8 @@ function MapViewContent() {
     (activeListing
       ? mapPoints.find((point) => point.id === activeListing.id)?.index
       : undefined) ?? 0;
+  const isDirectionsAvailable = Boolean(!mapError && MAPBOX_TOKEN && MAPBOX_TOKEN.startsWith("pk."));
+  const canGetRoute = Boolean(activeListing?.isExact && isDirectionsAvailable);
 
   const mobileMapRef = useRef<mapboxgl.Map | null>(null);
   const desktopMapRef = useRef<mapboxgl.Map | null>(null);
@@ -999,6 +1146,22 @@ function MapViewContent() {
     };
   }, [viewMode, listItems.length]);
 
+  useEffect(() => {
+    if (!routingError) return;
+    reportMapIssue("routing_soft_error", new Error(routingError), {
+      listingId: activeListing?.id,
+      viewMode,
+    });
+  }, [routingError, activeListing?.id, viewMode]);
+
+  useEffect(() => {
+    if (!activeListing?.id) return;
+    setRouteGeojson(null);
+    setRouteMetrics(null);
+    setRouteEndpoints(null);
+    setRoutingError(null);
+  }, [activeListing?.id]);
+
   const requestDirections = async () => {
     if (!activeListing || !activeListing.isExact) {
       setRoutingError("Directions unlock after the landlord accepts your request.");
@@ -1006,11 +1169,22 @@ function MapViewContent() {
     }
     if (!MAPBOX_TOKEN || !MAPBOX_TOKEN.startsWith("pk.")) {
       setRoutingError("Directions unavailable: missing valid Mapbox token.");
+      reportMapIssue("directions_token_unavailable", new Error("Invalid or missing Mapbox token"));
+      return;
+    }
+    if (mapError) {
+      setRoutingError("Map unavailable.");
+      reportMapIssue("directions_map_unavailable", new Error("Map unavailable"), {
+        mapError,
+        listingId: activeListing.id,
+      });
       return;
     }
     setRoutingError(null);
     setIsRouting(true);
     setRouteGeojson(null);
+    setRouteMetrics(null);
+    setRouteEndpoints(null);
     try {
       const target = activeListing
         ? mapPoints.find((point) => point.id === activeListing.id)
@@ -1019,7 +1193,6 @@ function MapViewContent() {
         setRoutingError("Unable to find destination.");
         return;
       }
-      const sourceListing = sourceListings.find((listing) => listing.id === activeListing.id);
       let originLng: number | undefined;
       let originLat: number | undefined;
 
@@ -1033,26 +1206,44 @@ function MapViewContent() {
           });
           originLng = position.coords.longitude;
           originLat = position.coords.latitude;
-        } catch {
+        } catch (error) {
+          if (isLocationPermissionDeniedError(error)) {
+            showToast({
+              title: "Location permission denied",
+              text: "Allow location access to use Get Route.",
+              variant: "error",
+            });
+          }
           // Fall back to stored values.
         }
       }
       if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
-        if (userLocation) {
+        if (liveUserLocation) {
+          originLng = liveUserLocation.lng;
+          originLat = liveUserLocation.lat;
+        } else if (userLocation) {
           originLng = userLocation.lng;
           originLat = userLocation.lat;
         }
       }
       if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
-        originLng = sourceListing?.routeOriginLng;
-        originLat = sourceListing?.routeOriginLat;
-      }
-      if (!Number.isFinite(originLng) || !Number.isFinite(originLat)) {
-        setRoutingError("Allow location access to get directions.");
+        setRoutingError("Location is required to get directions.");
+        reportMapIssue("directions_origin_unavailable", new Error("Origin coordinates unavailable"), {
+          listingId: activeListing.id,
+          hasLiveLocation: Boolean(liveUserLocation),
+          hasUserLocation: Boolean(userLocation),
+        });
         return;
       }
       const url = `https://api.mapbox.com/directions/v5/mapbox/${routingProfile}/${originLng},${originLat};${target.lng},${target.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
-      const response = await fetch(url);
+      const response = await fetch(url).catch(async (error) => {
+        reportMapIssue("directions_fetch_failed_first_attempt", error, {
+          listingId: activeListing.id,
+          profile: routingProfile,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return fetch(url);
+      });
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           throw new Error(
@@ -1062,7 +1253,7 @@ function MapViewContent() {
         throw new Error("Failed to fetch route.");
       }
       const data = (await response.json()) as {
-        routes?: Array<{ geometry?: GeoJSON.LineString }>;
+        routes?: Array<{ geometry?: GeoJSON.LineString; duration?: number; distance?: number }>;
       };
       const route = data.routes?.[0]?.geometry;
       if (!route) {
@@ -1075,18 +1266,45 @@ function MapViewContent() {
         geometry: route,
         properties: {},
       });
+      setRouteMetrics({
+        durationSec: Number(data.routes?.[0]?.duration ?? 0),
+        distanceMeters: Number(data.routes?.[0]?.distance ?? 0),
+      });
+      setRouteEndpoints({
+        origin: { lat: Number(originLat), lng: Number(originLng) },
+        destination: { lat: target.lat, lng: target.lng },
+      });
     } catch (err) {
       setRoutingError(err instanceof Error ? err.message : "Unable to load directions.");
+      reportMapIssue("directions_failed", err, {
+        listingId: activeListing.id,
+        profile: routingProfile,
+        hasMapError: Boolean(mapError),
+      });
     } finally {
       setIsRouting(false);
     }
+  };
+
+  const startExternalNavigation = () => {
+    if (!routeEndpoints) return;
+    const origin = `${routeEndpoints.origin.lat},${routeEndpoints.origin.lng}`;
+    const destination = `${routeEndpoints.destination.lat},${routeEndpoints.destination.lng}`;
+    const href = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+      origin
+    )}&destination=${encodeURIComponent(destination)}&travelmode=${encodeURIComponent(
+      routingProfile
+    )}`;
+    window.open(href, "_blank", "noopener,noreferrer");
   };
 
   const requestRouteAccess = async () => {
     if (!activeListing) return;
     const threadId = await ensureThreadForListing(activeListing.id);
     if (threadId) {
-      router.push(`/messages?thread=${threadId}&from=/map-view&intent=route-access`);
+      router.push(
+        `/messages?thread=${threadId}&from=/map-view&intent=route-access&propertyId=${activeListing.id}`
+      );
     } else {
       router.push("/messages");
     }
@@ -1147,6 +1365,7 @@ function MapViewContent() {
                   onSelect={setSelectedIndex}
                   onMapReady={handleMobileMapReady}
                   routeGeojson={routeGeojson}
+                  routeEndpoints={routeEndpoints}
               onMapError={setMapError}
               onMapStatus={handleMapStatus}
             />
@@ -1178,7 +1397,7 @@ function MapViewContent() {
               </button>
             </div>
 
-            {hasApproxArea && (
+            {hasApproxArea && !routeMetrics && (
               <div className="absolute left-3 top-4 z-30">
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-primary shadow-sm backdrop-blur-sm">
                   <span className="material-symbols-outlined text-[14px]">
@@ -1207,6 +1426,14 @@ function MapViewContent() {
             {listItems.length > 0 && (
               <div className="absolute bottom-4 left-3 z-20 w-[78%] max-w-[340px]">
                 <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-sm">
+                  {routeMetrics && (
+                    <div className="mb-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-slate-700">
+                        {formatEta(routeMetrics.durationSec)} | {formatDistanceKm(routeMetrics.distanceMeters)}
+                      </p>
+                      <span className="text-[10px] font-medium text-slate-500">Fastest</span>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <div className="flex gap-3 items-start">
                       <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-200 relative">
@@ -1261,16 +1488,7 @@ function MapViewContent() {
                           View details
                         </Link>
                       )}
-                      {activeListing?.isExact ? (
-                        <button
-                          type="button"
-                          onClick={requestDirections}
-                          disabled={isRouting}
-                          className="inline-flex flex-1 items-center justify-center rounded-full border border-primary bg-white px-3 py-2 text-xs font-semibold text-primary disabled:opacity-60"
-                        >
-                          {isRouting ? "Routing..." : "Get route"}
-                        </button>
-                      ) : (
+                      {!activeListing?.isExact ? (
                         <button
                           type="button"
                           onClick={requestRouteAccess}
@@ -1278,8 +1496,43 @@ function MapViewContent() {
                         >
                           Request route
                         </button>
-                      )}
+                      ) : null}
                     </div>
+                    {activeListing?.isExact && !routeMetrics && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <select
+                          value={routingProfile}
+                          onChange={(event) =>
+                            setRoutingProfile(
+                              event.target.value as "driving" | "walking" | "cycling"
+                            )
+                          }
+                          className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                          disabled={!canGetRoute}
+                        >
+                          <option value="driving">Driving</option>
+                          <option value="walking">Walking</option>
+                          <option value="cycling">Cycling</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={requestDirections}
+                          disabled={isRouting || !canGetRoute}
+                          className="inline-flex flex-1 items-center justify-center rounded-full border border-primary bg-white px-3 py-2 text-xs font-semibold text-primary disabled:opacity-60"
+                        >
+                          {isRouting ? "Routing..." : "Get route"}
+                        </button>
+                      </div>
+                    )}
+                    {routeEndpoints && routeMetrics && (
+                      <button
+                        type="button"
+                        onClick={startExternalNavigation}
+                        className="inline-flex w-full items-center justify-center rounded-full border border-primary/20 bg-white px-3 py-2 text-xs font-semibold text-primary"
+                      >
+                        Start navigation
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1362,6 +1615,7 @@ function MapViewContent() {
             onSelect={setSelectedIndex}
             onMapReady={handleDesktopMapReady}
             routeGeojson={routeGeojson}
+            routeEndpoints={routeEndpoints}
             onMapError={setMapError}
             onMapStatus={handleMapStatus}
           />
@@ -1411,43 +1665,61 @@ function MapViewContent() {
 
           {activeListing && (
             <div className="absolute bottom-6 left-6 z-20 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl p-4">
+              {routeMetrics && (
+                <div className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-semibold text-slate-700">
+                    {formatEta(routeMetrics.durationSec)} | {formatDistanceKm(routeMetrics.distanceMeters)}
+                  </p>
+                  <span className="text-[10px] font-medium text-slate-500">Fastest</span>
+                </div>
+              )}
               <p className="text-sm font-semibold text-slate-700">Directions</p>
               <p className="text-xs text-slate-500 mt-1">
                 {activeListing.isExact
                   ? "Get a route to this property."
                   : "Directions unlock after the landlord accepts your request."}
               </p>
-              <div className="mt-3 flex items-center gap-2">
-                <select
-                  value={routingProfile}
-                  onChange={(event) =>
-                    setRoutingProfile(
-                      event.target.value as "driving" | "walking" | "cycling"
-                    )
-                  }
-                  className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                  disabled={!activeListing.isExact}
-                >
-                  <option value="driving">Driving</option>
-                  <option value="walking">Walking</option>
-                  <option value="cycling">Cycling</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={requestDirections}
-                  disabled={isRouting || !activeListing.isExact}
-                  className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                >
-                  {isRouting ? "Routing..." : "Get Route"}
-                </button>
-              </div>
-              {!activeListing.isExact && (
+              {!activeListing.isExact ? (
                 <button
                   type="button"
                   onClick={requestRouteAccess}
                   className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary cursor-pointer"
                 >
                   Message landlord to request directions
+                </button>
+              ) : !routeMetrics ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <select
+                    value={routingProfile}
+                    onChange={(event) =>
+                      setRoutingProfile(
+                        event.target.value as "driving" | "walking" | "cycling"
+                      )
+                    }
+                    className="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    disabled={!activeListing.isExact}
+                  >
+                    <option value="driving">Driving</option>
+                    <option value="walking">Walking</option>
+                    <option value="cycling">Cycling</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={requestDirections}
+                    disabled={isRouting || !canGetRoute}
+                    className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {isRouting ? "Routing..." : "Get Route"}
+                  </button>
+                </div>
+              ) : null}
+              {routeEndpoints && routeMetrics && (
+                <button
+                  type="button"
+                  onClick={startExternalNavigation}
+                  className="mt-3 w-full rounded-full border border-primary/20 bg-white px-4 py-2 text-xs font-semibold text-primary"
+                >
+                  Start navigation
                 </button>
               )}
             </div>

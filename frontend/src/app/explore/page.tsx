@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import {
@@ -175,19 +175,19 @@ export default function ExploreCards() {
     () =>
       tenantPrefs && typeof tenantPrefs === "object"
         ? {
-            preferredDistance:
-              typeof tenantPrefs.preferredDistance === "number"
-                ? tenantPrefs.preferredDistance
-                : undefined,
-            maxCommuteRadius:
-              typeof tenantPrefs.maxCommuteRadius === "number"
-                ? tenantPrefs.maxCommuteRadius
-                : undefined,
-            preferredState:
-              typeof tenantPrefs.preferredState === "string"
-                ? tenantPrefs.preferredState
-                : undefined,
-          }
+          preferredDistance:
+            typeof tenantPrefs.preferredDistance === "number"
+              ? tenantPrefs.preferredDistance
+              : undefined,
+          maxCommuteRadius:
+            typeof tenantPrefs.maxCommuteRadius === "number"
+              ? tenantPrefs.maxCommuteRadius
+              : undefined,
+          preferredState:
+            typeof tenantPrefs.preferredState === "string"
+              ? tenantPrefs.preferredState
+              : undefined,
+        }
         : null,
     [tenantPrefs]
   );
@@ -481,39 +481,53 @@ export default function ExploreCards() {
           </div>
         </div>
 
+
         {cardsToRender.length === 0 && deckPhase === "boot_loading" && !hasRenderedCards && (
           <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
-            <div className="relative h-full w-full max-w-md">
-              <div className="pointer-events-none absolute inset-x-10 top-[6%] h-20 rounded-full bg-primary/10 blur-3xl" />
-              <div className="absolute inset-x-12 top-[13%] h-[68%] scale-[0.94] rounded-[2.1rem] border border-slate-200/68 bg-white/60 shadow-[0_12px_30px_rgba(15,23,42,0.05)]" />
-              <div className="absolute inset-x-7 top-[8.5%] h-[74%] scale-[0.975] rounded-[2.3rem] border border-slate-200/80 bg-white/82 shadow-[0_18px_46px_rgba(15,23,42,0.09)]" />
-              <div className="absolute inset-x-2 top-[2%] h-[84%] overflow-hidden rounded-[2.45rem] border border-slate-200/90 bg-white shadow-[0_28px_72px_rgba(15,23,42,0.14)]">
-                <div className="relative h-[58%] min-h-[280px] overflow-hidden bg-slate-200">
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300" />
+            <div className="relative h-[min(68dvh,680px)] min-h-[500px] w-full max-w-md">
+
+              {/* Background Card 2 (Deepest) */}
+              <div className="absolute inset-x-8 top-12 h-full scale-[0.92] rounded-[2.5rem] border border-slate-200/50 bg-white/40 shadow-sm -z-20" />
+
+              {/* Background Card 1 (Middle) */}
+              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10" />
+
+              {/* Main Front Card Skeleton */}
+              <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl flex flex-col">
+
+                {/* Image Area Placeholder */}
+                <div className="relative h-[86%] md:h-[72%] w-full bg-slate-200 overflow-hidden">
                   <div className="skeleton-shimmer absolute inset-0" />
-                  <div className="absolute left-5 top-5 h-10 w-28 rounded-full bg-white/65" />
-                  <div className="absolute inset-x-0 top-5 flex justify-center gap-3">
-                    <div className="h-2 w-7 rounded-full bg-white/90" />
-                    <div className="h-2 w-2.5 rounded-full bg-white/65" />
-                    <div className="h-2 w-2.5 rounded-full bg-white/65" />
+                  {/* Tag placeholder */}
+                  <div className="absolute top-4 left-4 h-8 w-24 rounded-full bg-white/40 backdrop-blur-md" />
+                  {/* Dots placeholder */}
+                  <div className="absolute inset-x-0 top-4 flex justify-center gap-1.5">
+                    <div className="h-1.5 w-6 rounded-full bg-white/60" />
+                    <div className="h-1.5 w-2 rounded-full bg-white/30" />
                   </div>
+                  {/* Bottom gradient fade */}
+                  <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary/20 to-transparent" />
                 </div>
-                <div className="space-y-5 bg-primary px-5 py-5 md:px-6 md:py-6">
-                  <div className="space-y-2.5 border-b border-white/10 pb-4">
-                    <div className="h-10 w-52 rounded-full bg-white/25" />
-                    <div className="h-3.5 w-32 rounded-full bg-white/20" />
+
+                {/* Content Area (Matching bg-primary) */}
+                <div className="flex-1 bg-primary px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-3">
+                  {/* Price & Highlight */}
+                  <div className="space-y-2 border-b border-white/10 pb-3">
+                    <div className="h-8 w-32 rounded-lg bg-white/20" />
+                    <div className="h-3 w-48 rounded-md bg-white/10" />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
-                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
-                    <div className="h-16 rounded-2xl border border-white/10 bg-white/10" />
+
+                  {/* Stats Grid Placeholder (3 columns) */}
+                  <div className="grid grid-cols-3 gap-2 md:gap-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-12 md:h-16 rounded-xl bg-white/10 border border-white/5" />
+                    ))}
                   </div>
-                  <div className="flex items-start gap-3 rounded-[1.6rem] border border-white/10 bg-white/5 px-4 py-4">
-                    <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
-                    <div className="min-w-0 space-y-2">
-                      <div className="h-4.5 w-52 rounded-full bg-white/15" />
-                      <div className="h-8 w-28 rounded-xl border border-white/10 bg-white/10" />
-                    </div>
+
+                  {/* Bottom Button Placeholder */}
+                  <div className="h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center px-4 gap-3">
+                    <div className="h-6 w-6 rounded-full bg-white/10" />
+                    <div className="h-4 w-full rounded-md bg-white/10" />
                   </div>
                 </div>
               </div>

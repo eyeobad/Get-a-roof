@@ -12,6 +12,9 @@ export class Match {
   @Prop({ type: Types.ObjectId, ref: "Property", required: true })
   propertyId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  landlordId?: Types.ObjectId;
+
   @Prop({ type: String, enum: MatchStatus, default: MatchStatus.TenantLiked })
   status: MatchStatus;
 
@@ -52,6 +55,28 @@ export class Match {
   recycleCount?: number;
 
   @Prop({
+    type: {
+      content: { type: String },
+      senderId: { type: Types.ObjectId, ref: "User" },
+      timestamp: { type: Date },
+    },
+  })
+  lastMessage?: {
+    content?: string;
+    senderId?: Types.ObjectId;
+    timestamp?: Date;
+  };
+
+  @Prop({ default: 0 })
+  tenantUnreadCount?: number;
+
+  @Prop({ default: 0 })
+  landlordUnreadCount?: number;
+
+  @Prop({ default: false })
+  landlordReplied?: boolean;
+
+  @Prop({
     type: String,
     enum: RouteAccessStatus,
     default: RouteAccessStatus.None,
@@ -79,3 +104,4 @@ MatchSchema.index({ tenantId: 1, propertyId: 1 }, { unique: true });
 MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
 MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });
+MatchSchema.index({ landlordId: 1, status: 1, updatedAt: -1 });

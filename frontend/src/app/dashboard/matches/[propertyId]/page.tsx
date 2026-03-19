@@ -210,7 +210,7 @@ export default function LandlordMatchesPage() {
         noteTone: note ? "info" : undefined,
         avatarUrl:
           tenant?.photoUrl ??
-          "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P",
+          "/avatar-placeholder.svg",
         verified: tenant?.isVerified ?? false,
         tenantId: tenant?.id ?? match.tenantId,
         chatHref: `/dashboard/messages?thread=${match.id}`,

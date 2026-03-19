@@ -101,7 +101,7 @@ type ProfileState = {
   apartmentPrefs: Record<string, boolean>; // check label -> bool
 };
 
-type ModalType = "none" | "photo" | "preferences" | "delete";
+type ModalType = "none" | "photo" | "contact" | "preferences" | "delete";
 
 type ApiTenantPreferences = {
   lookingFor?: string[];
@@ -192,18 +192,12 @@ function Shimmer({ className }: { className: string }) {
 }
 
 function AvatarCircle({ photoUrl, size }: { photoUrl: string; size: string }) {
-  if (photoUrl) {
-    return (
-      <div
-        className={`${size} rounded-full border-4 border-white bg-cover bg-center shadow-lg`}
-        style={{ backgroundImage: `url('${photoUrl}')` }}
-      />
-    );
-  }
+  const src = photoUrl || "/avatar-placeholder.svg";
   return (
-    <div className={`${size} rounded-full border-4 border-white bg-slate-100 shadow-lg flex items-center justify-center`}>
-      <span className="material-symbols-outlined text-slate-400 text-[48px]">person</span>
-    </div>
+    <div
+      className={`${size} rounded-full border-4 border-white bg-cover bg-center shadow-lg`}
+      style={{ backgroundImage: `url('${src}')` }}
+    />
   );
 }
 
@@ -434,12 +428,24 @@ export default function ProfilePage() {
   };
 
   const singleSelectSummary = useMemo(() => {
-    return preferenceGroups.map((g) => ({
-      key: g.key,
-      title: g.title,
-      value: profile.preferences[g.key] || "—",
-    }));
-  }, [profile.preferences]);
+    const annualIncome = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(profile.annualEarnings || 0);
+    return [
+      ...preferenceGroups.map((g) => ({
+        key: g.key,
+        title: g.title,
+        value: profile.preferences[g.key] || "-",
+      })),
+      {
+        key: "annualIncome",
+        title: "Annual Income",
+        value: annualIncome,
+      },
+    ];
+  }, [profile.preferences, profile.annualEarnings]);
 
   useEffect(() => {
     setHasHydratedSession(true);
@@ -605,7 +611,12 @@ export default function ProfilePage() {
             <span className="material-symbols-outlined text-[28px]">arrow_back</span>
           </button>
 
-          <h2 className="flex-1 text-center text-2xl font-bold tracking-tight text-primary">My Profile</h2>
+          <div className="flex-1 text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-primary">My Profile</h2>
+            <span className="mt-1 inline-flex items-center rounded-full bg-slate-200 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.12em] text-primary">
+              Tenant
+            </span>
+          </div>
 
           <button
             onClick={handleSignOut}
@@ -624,26 +635,32 @@ export default function ProfilePage() {
               <div className="sticky top-[76px] space-y-6">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Profile</p>
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                      Contact Details
+                    </p>
                     <button
-                      onClick={() => openModal("photo")}
+                      onClick={() => openModal("contact")}
                       className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
+                      aria-label="Edit contact details"
                     >
-                      <span className="material-symbols-outlined text-[18px]">photo_camera</span>
-                      Edit Photo
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                      Edit
                     </button>
                   </div>
 
                   <div className="mt-5 flex flex-col items-center">
-                    <div className="relative">
+                    <div
+                      className="relative group cursor-pointer"
+                      onClick={() => openModal("photo")}
+                      role="button"
+                      aria-label="Edit photo"
+                    >
                       <AvatarCircle photoUrl={profile.photoUrl} size="h-32 w-32" />
-                      <button
-                        onClick={() => openModal("photo")}
-                        className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
-                        aria-label="Edit photo"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">edit</span>
-                      </button>
+                      <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="material-symbols-outlined text-white text-[18px]">
+                          edit
+                        </span>
+                      </div>
                     </div>
 
                     <p className="mt-4 text-xl font-bold text-primary">{profile.fullName}</p>
@@ -684,93 +701,51 @@ export default function ProfilePage() {
           {/* MAIN content */}
           <main className="flex-1 overflow-visible pb-28 pt-6 lg:pb-10 lg:pt-0">
             {isLoading ? <ProfileSkeleton /> : (<>
-              {/* Mobile photo section */}
-              <section className="flex flex-col items-center gap-4 lg:hidden">
-                <div className="relative">
-                  <AvatarCircle photoUrl={profile.photoUrl} size="h-32 w-32" />
-                  <button
-                    onClick={() => openModal("photo")}
-                    className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
-                    aria-label="Edit photo"
-                  >
-                    <span className="material-symbols-outlined text-lg">edit</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => openModal("photo")}
-                  className="text-sm font-semibold text-primary hover:underline"
-                >
-                  Update photo
-                </button>
-              </section>
+              <section className="mt-6 lg:hidden">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                      Contact Details
+                    </p>
+                    <button
+                      onClick={() => openModal("contact")}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-slate-50 transition-colors"
+                      aria-label="Edit contact details"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                      Edit
+                    </button>
+                  </div>
 
-              <section className="mt-6 space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-bold text-primary">Contact Details</h3>
-                  {profile.phone ? (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                      Read-only
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-                      Phone missing
-                    </span>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="space-y-4">
-                    {/* Full Name — always read-only */}
-                    {[
-                      { label: "Full Name", icon: "person", value: profile.fullName },
-                      { label: "Email", icon: "mail", value: profile.email },
-                    ].map((field) => (
-                      <div key={field.label} className="space-y-2">
-                        <label className="text-sm font-semibold text-slate-500">{field.label}</label>
-                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <span className="material-symbols-outlined text-slate-400 text-[20px]">
-                            {field.icon}
-                          </span>
-                          <input
-                            className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
-                            value={field.value}
-                            readOnly
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Phone — editable when missing */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-slate-500">Phone Number</label>
+                  <div className="mt-5 flex flex-col items-center">
+                    <div className="relative">
                       <div
-                        className={[
-                          "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-                          profile.phone && hasServerPhone
-                            ? "border-slate-200 bg-slate-50"
-                            : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
-                        ].join(" ")}
+                        className="cursor-pointer"
+                        onClick={() => openModal("photo")}
+                        role="button"
+                        aria-label="Edit photo"
                       >
-                        <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
-                        <input
-                          className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                          value={profile.phone}
-                          readOnly={hasServerPhone}
-                          placeholder={hasServerPhone ? undefined : "Add phone number"}
-                          onChange={(e) =>
-                            setProfile((prev) => ({ ...prev, phone: e.target.value }))
-                          }
-                        />
-                        {!hasServerPhone && (
-                          <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
-                        )}
+                        <AvatarCircle photoUrl={profile.photoUrl} size="h-32 w-32" />
                       </div>
-
+                      <button
+                        onClick={() => openModal("photo")}
+                        className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-md hover:brightness-110 transition"
+                        aria-label="Edit photo"
+                      >
+                        <span className="material-symbols-outlined text-lg">edit</span>
+                      </button>
                     </div>
+
+                    <p className="mt-4 text-2xl font-bold text-primary">{profile.fullName}</p>
+                    <p className="mt-1 text-base text-slate-500">{profile.email}</p>
+                    <p className="text-base text-slate-500">{profile.phone}</p>
+
+                    <p className="mt-4 text-sm font-medium text-slate-500">
+                      Name and email are read-only. Phone can be added if missing.
+                    </p>
                   </div>
                 </div>
               </section>
-
-              {/* My Profile section (read view) - UPDATED: Hidden on Desktop */}
               <section className="mt-8 space-y-6 lg:hidden">
                 <div className="flex items-center justify-between">
                   <h3 className="text-2xl font-bold text-primary">My Profile</h3>
@@ -783,68 +758,18 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {preferenceGroups.map((group) => (
-                    <div key={group.key} className="rounded-3xl border border-slate-200 bg-white p-5">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">
-                          {group.icon || "star"}
-                        </span>
-                        <p className="text-lg font-bold text-primary">{group.title}</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="space-y-3">
+                    {singleSelectSummary.map((row) => (
+                      <div key={row.key} className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-600">{row.title}</span>
+                        <span className="text-sm font-bold text-slate-900">{row.value}</span>
                       </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {group.options.map((opt) => {
-                          const active = profile.preferences[group.key] === opt.label;
-                          return (
-                            <span
-                              key={opt.label}
-                              className={`rounded-full px-4 py-2 text-base font-semibold border transition-colors ${active
-                                ? "border-2 border-primary bg-blue-50 text-primary"
-                                : "border-slate-200 bg-white text-slate-600"
-                                }`}
-                            >
-                              {opt.label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Annual earnings */}
-              <section className="mt-8 space-y-5">
-                <h3 className="text-2xl font-bold text-primary">Annual Earnings</h3>
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-slate-900">Total Yearly Income</span>
-                    <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                      ₦{new Intl.NumberFormat("en-NG").format(profile.annualEarnings)}
-                    </span>
-                  </div>
-
-                  <div className="mt-4">
-                    <input
-                      type="range"
-                      min={1500000}
-                      max={20000000}
-                      step={50000}
-                      value={profile.annualEarnings}
-                      onChange={(e) =>
-                        setProfile((prev) => ({ ...prev, annualEarnings: Number(e.target.value) }))
-                      }
-                      className="w-full accent-primary"
-                    />
-                    <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                      <span>₦1.5m</span>
-                      <span>₦10m</span>
-                      <span>₦20m+</span>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </section>
+
 
               {/* Apartment Preference toggles - UPDATED WITH TOGGLE LOGIC */}
               <section className="mt-8 space-y-3">
@@ -871,7 +796,6 @@ export default function ProfilePage() {
                 </div>
               </section>
 
-                  {/* Commute radius */}
               <section className="mt-8 space-y-5">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex items-center justify-between">
@@ -890,7 +814,7 @@ export default function ProfilePage() {
                           preferredState: event.target.value,
                         }))
                       }
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 lg:max-w-xs"
                     >
                       <option value="">Any state</option>
                       {NIGERIA_STATES.map((state) => (
@@ -900,34 +824,31 @@ export default function ProfilePage() {
                       ))}
                     </select>
                   </div>
-                </div>
-              </section>
 
-              {/* Commute radius */}
-              <section className="mt-8 space-y-5">
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-slate-900">Max Commute Radius (km)</span>
-                    <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
-                      {profile.commuteRadius} km
-                    </span>
-                  </div>
+                  <div className="mt-6 border-t border-slate-200 pt-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-slate-900">Max Commute Radius (km)</span>
+                      <span className="rounded-lg bg-slate-100 px-3 py-1 text-xl font-bold text-primary">
+                        {profile.commuteRadius} km
+                      </span>
+                    </div>
 
-                  <div className="mt-4">
-                    <input
-                      type="range"
-                      min={0}
-                      max={50}
-                      value={profile.commuteRadius}
-                      onChange={(e) =>
-                        setProfile((prev) => ({ ...prev, commuteRadius: Number(e.target.value) }))
-                      }
-                      className="w-full accent-primary"
-                    />
-                    <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
-                      <span>0 km</span>
-                      <span>25 km</span>
-                      <span>50 km</span>
+                    <div className="mt-4">
+                      <input
+                        type="range"
+                        min={0}
+                        max={50}
+                        value={profile.commuteRadius}
+                        onChange={(e) =>
+                          setProfile((prev) => ({ ...prev, commuteRadius: Number(e.target.value) }))
+                        }
+                        className="w-full accent-primary"
+                      />
+                      <div className="mt-2 flex justify-between text-sm text-slate-400 font-medium">
+                        <span>0 km</span>
+                        <span>25 km</span>
+                        <span>50 km</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -949,12 +870,12 @@ export default function ProfilePage() {
         </div>
 
         {/* Footer (mobile sticky) */}
-        <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-background-light/95 px-4 py-4 backdrop-blur-sm lg:static lg:bg-transparent lg:border-0 lg:px-0 lg:py-0">
+        <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-background-light/95 px-4 py-4 backdrop-blur-sm lg:static lg:bg-transparent lg:border-0 lg:px-0 lg:py-6 lg:grid lg:grid-cols-[380px_1fr] lg:gap-8">
             <button
               data-tour="tenant-profile-save"
               onClick={handleSaveProfile}
               disabled={isSaving || isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 lg:max-w-md lg:ml-auto disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-xl font-bold text-white shadow-lg transition-transform active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed lg:col-start-2"
             >
               <span className="material-symbols-outlined">save</span>
               {isSaving ? "Saving..." : "Save Profile"}
@@ -1012,6 +933,76 @@ export default function ProfilePage() {
               className="sr-only"
               onChange={handlePhotoFileChange}
             />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Contact Details */}
+      <Modal
+        open={activeModal === "contact"}
+        title="Edit Contact Details"
+        onClose={closeModal}
+        footer={
+          <div className="flex gap-3">
+            <button
+              onClick={closeModal}
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveDraft}
+              className="flex-[2] rounded-2xl bg-primary px-4 py-3 text-sm font-bold text-white hover:brightness-110 active:scale-[0.98] transition"
+            >
+              Save Contact
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {[
+            { label: "Full Name", icon: "person", value: draft.fullName },
+            { label: "Email", icon: "mail", value: draft.email },
+          ].map((field) => (
+            <div key={field.label} className="space-y-2">
+              <label className="text-sm font-semibold text-slate-500">{field.label}</label>
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <span className="material-symbols-outlined text-slate-400 text-[20px]">
+                  {field.icon}
+                </span>
+                <input
+                  className="w-full bg-transparent text-base font-medium text-slate-800 outline-none"
+                  value={field.value}
+                  readOnly
+                />
+              </div>
+            </div>
+          ))}
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-500">Phone Number</label>
+            <div
+              className={[
+                "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
+                draft.phone && hasServerPhone
+                  ? "border-slate-200 bg-slate-50"
+                  : "border-blue-200 bg-blue-50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-300",
+              ].join(" ")}
+            >
+              <span className="material-symbols-outlined text-slate-400 text-[20px]">phone</span>
+              <input
+                className="w-full bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                value={draft.phone}
+                readOnly={hasServerPhone}
+                placeholder={hasServerPhone ? undefined : "Add phone number"}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, phone: e.target.value }))
+                }
+              />
+              {!hasServerPhone && (
+                <span className="material-symbols-outlined text-blue-400 text-[18px]">edit</span>
+              )}
+            </div>
           </div>
         </div>
       </Modal>
@@ -1084,6 +1075,40 @@ export default function ProfilePage() {
               </p>
             </div>
           ))}
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-slate-900">Annual Income</p>
+              <span className="rounded-lg bg-slate-100 px-3 py-1 text-base font-bold text-primary">
+                {new Intl.NumberFormat("en-NG", {
+                  style: "currency",
+                  currency: "NGN",
+                  maximumFractionDigits: 0,
+                }).format(draft.annualEarnings || 0)}
+              </span>
+            </div>
+            <div className="mt-3">
+              <input
+                type="range"
+                min={1500000}
+                max={20000000}
+                step={50000}
+                value={draft.annualEarnings}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    annualEarnings: Number(e.target.value),
+                  }))
+                }
+                className="w-full accent-primary"
+              />
+              <div className="mt-2 flex justify-between text-xs text-slate-400 font-medium">
+                <span>NGN 1.5m</span>
+                <span>NGN 10m</span>
+                <span>NGN 20m+</span>
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -1144,3 +1169,8 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+
+
+
+

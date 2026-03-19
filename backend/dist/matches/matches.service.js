@@ -29,15 +29,49 @@ const VALID_TRANSITIONS = {
     [enums_1.MatchStatus.TenantLiked]: [
         enums_1.MatchStatus.LandlordQualified,
         enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Active,
+        enums_1.MatchStatus.Archived,
+        enums_1.MatchStatus.Closed,
         enums_1.MatchStatus.Dismissed,
     ],
     [enums_1.MatchStatus.LandlordQualified]: [
         enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Active,
+        enums_1.MatchStatus.Archived,
+        enums_1.MatchStatus.Closed,
         enums_1.MatchStatus.Dismissed,
     ],
-    [enums_1.MatchStatus.ChatInitiated]: [enums_1.MatchStatus.Dismissed],
+    [enums_1.MatchStatus.ChatInitiated]: [
+        enums_1.MatchStatus.Active,
+        enums_1.MatchStatus.Archived,
+        enums_1.MatchStatus.Closed,
+        enums_1.MatchStatus.Dismissed,
+    ],
+    [enums_1.MatchStatus.Active]: [enums_1.MatchStatus.Archived, enums_1.MatchStatus.Closed, enums_1.MatchStatus.Dismissed],
+    [enums_1.MatchStatus.Archived]: [
+        enums_1.MatchStatus.TenantLiked,
+        enums_1.MatchStatus.LandlordQualified,
+        enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Active,
+        enums_1.MatchStatus.Closed,
+        enums_1.MatchStatus.Dismissed,
+    ],
+    [enums_1.MatchStatus.Closed]: [
+        enums_1.MatchStatus.TenantLiked,
+        enums_1.MatchStatus.LandlordQualified,
+        enums_1.MatchStatus.ChatInitiated,
+        enums_1.MatchStatus.Active,
+        enums_1.MatchStatus.Dismissed,
+    ],
     [enums_1.MatchStatus.Dismissed]: [enums_1.MatchStatus.TenantLiked],
 };
+const ACTIVE_MATCH_STATUSES = [
+    enums_1.MatchStatus.TenantLiked,
+    enums_1.MatchStatus.LandlordQualified,
+    enums_1.MatchStatus.ChatInitiated,
+    enums_1.MatchStatus.Active,
+];
+const CHAT_VISIBLE_STATUSES = [enums_1.MatchStatus.ChatInitiated, enums_1.MatchStatus.Active];
 function toObjectId(id) {
     if (id instanceof mongoose_2.Types.ObjectId)
         return id;
@@ -47,6 +81,12 @@ function paginationStages(page = 1, limit = DEFAULT_PAGE_LIMIT) {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(Math.max(1, limit), 100);
     return [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }];
+}
+function isMongoDuplicateKeyError(error) {
+    if (!error || typeof error !== "object")
+        return false;
+    const code = error.code;
+    return code === 11000;
 }
 let MatchesService = class MatchesService {
     constructor(matchModel, messageModel, usersService, propertiesService, workspaceService) {
@@ -89,36 +129,66 @@ let MatchesService = class MatchesService {
                 : baseStatus);
         const tenantOid = toObjectId(dto.tenantId);
         const propertyOid = toObjectId(dto.propertyId);
-        const existing = await this.matchModel
-            .findOne({ tenantId: tenantOid, propertyId: propertyOid })
+        const matchIdentityFilter = {
+            $or: [
+                { tenantId: tenantOid, propertyId: propertyOid },
+                { tenantId: dto.tenantId, propertyId: dto.propertyId },
+            ],
+        };
+        const duplicates = await this.matchModel
+            .find(matchIdentityFilter)
+            .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
             .exec();
-        if (existing) {
-            const nextStatus = existing.status === enums_1.MatchStatus.Dismissed && !isDismiss
+        let existing = duplicates[0] ?? null;
+        if (duplicates.length > 1 && existing) {
+            const redundantIds = duplicates
+                .slice(1)
+                .map((item) => item._id);
+            await Promise.all([
+                this.messageModel.deleteMany({ matchId: { $in: redundantIds } }),
+                this.matchModel.deleteMany({ _id: { $in: redundantIds } }),
+            ]);
+        }
+        const saveExisting = async (doc) => {
+            const nextStatus = doc.status === enums_1.MatchStatus.Dismissed && !isDismiss
                 ? enums_1.MatchStatus.TenantLiked
                 : computedStatus;
-            existing.tenantLiked = dto.tenantLiked ?? existing.tenantLiked;
-            existing.status = this.validateTransition(existing.status, nextStatus);
-            existing.matchScore = matchScoreData.matchScore;
-            existing.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
-            existing.apartmentPreferenceMatchPercentage =
+            doc.tenantLiked = dto.tenantLiked ?? doc.tenantLiked;
+            if (!(doc.tenantId instanceof mongoose_2.Types.ObjectId)) {
+                doc.tenantId = tenantOid;
+            }
+            if (!(doc.propertyId instanceof mongoose_2.Types.ObjectId)) {
+                doc.propertyId = propertyOid;
+            }
+            if (!doc.landlordId && property.landlordId) {
+                doc.landlordId = property.landlordId;
+            }
+            doc.status = this.validateTransition(doc.status, nextStatus);
+            doc.matchScore = matchScoreData.matchScore;
+            doc.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
+            doc.apartmentPreferenceMatchPercentage =
                 matchScoreData.apartmentPreferenceMatchPercentage;
-            existing.locationScore = matchScoreData.locationScore;
-            existing.amenityScore = matchScoreData.amenityScore;
-            existing.affordabilityScore = matchScoreData.affordabilityScore;
-            existing.timestamp = new Date();
+            doc.locationScore = matchScoreData.locationScore;
+            doc.amenityScore = matchScoreData.amenityScore;
+            doc.affordabilityScore = matchScoreData.affordabilityScore;
+            doc.timestamp = new Date();
             if (isDismiss) {
-                existing.dismissedAt = new Date();
-                existing.dismissReason = dto.dismissReason ?? enums_1.DismissReason.Soft;
+                doc.dismissedAt = new Date();
+                doc.dismissReason = dto.dismissReason ?? enums_1.DismissReason.Soft;
             }
             else {
-                existing.dismissedAt = undefined;
-                existing.dismissReason = undefined;
+                doc.dismissedAt = undefined;
+                doc.dismissReason = undefined;
             }
-            return existing.save();
+            return doc.save();
+        };
+        if (existing) {
+            return saveExisting(existing);
         }
         const created = new this.matchModel({
             tenantId: tenantOid,
             propertyId: propertyOid,
+            landlordId: property.landlordId,
             status: computedStatus,
             tenantLiked: dto.tenantLiked,
             matchScore: matchScoreData.matchScore,
@@ -133,7 +203,21 @@ let MatchesService = class MatchesService {
                 ? dto.dismissReason ?? enums_1.DismissReason.Soft
                 : undefined,
         });
-        return created.save();
+        try {
+            return await created.save();
+        }
+        catch (error) {
+            if (!isMongoDuplicateKeyError(error)) {
+                throw error;
+            }
+            const raced = await this.matchModel
+                .findOne(matchIdentityFilter)
+                .exec();
+            if (!raced) {
+                throw error;
+            }
+            return saveExisting(raced);
+        }
     }
     async updateMatch(id, dto) {
         const match = await this.matchModel.findById(id).exec();
@@ -161,6 +245,36 @@ let MatchesService = class MatchesService {
         match.landlordSeenAt = new Date();
         return match.save();
     }
+    async deleteMatch(matchId, tenantId) {
+        const match = await this.matchModel.findById(matchId).exec();
+        if (!match) {
+            throw new common_1.NotFoundException("Match not found");
+        }
+        if (match.tenantId.toString() !== tenantId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        const duplicateMatches = await this.matchModel
+            .find({
+            tenantId: match.tenantId,
+            propertyId: match.propertyId,
+        })
+            .select("_id")
+            .lean()
+            .exec();
+        const matchIds = duplicateMatches.map((item) => item._id);
+        if (matchIds.length === 0) {
+            return { success: true, deletedMatches: 0, deletedMessages: 0 };
+        }
+        const [deletedMessagesResult, deletedMatchesResult] = await Promise.all([
+            this.messageModel.deleteMany({ matchId: { $in: matchIds } }),
+            this.matchModel.deleteMany({ _id: { $in: matchIds } }),
+        ]);
+        return {
+            success: true,
+            deletedMatches: deletedMatchesResult.deletedCount ?? 0,
+            deletedMessages: deletedMessagesResult.deletedCount ?? 0,
+        };
+    }
     async hardBlockMatch(matchId, tenantId) {
         const match = await this.matchModel.findById(matchId).exec();
         if (!match) {
@@ -173,6 +287,23 @@ let MatchesService = class MatchesService {
         match.dismissReason = enums_1.DismissReason.Hard;
         match.dismissedAt = new Date();
         return match.save();
+    }
+    async archiveMatch(matchId, tenantId) {
+        const match = await this.matchModel.findById(matchId).exec();
+        if (!match) {
+            throw new common_1.NotFoundException("Match not found");
+        }
+        if (match.tenantId.toString() !== tenantId) {
+            throw new common_1.ForbiddenException("Access denied");
+        }
+        if (match.status === enums_1.MatchStatus.Closed || match.status === enums_1.MatchStatus.Dismissed) {
+            return { success: true, status: match.status };
+        }
+        match.status = this.validateTransition(match.status, enums_1.MatchStatus.Archived);
+        match.tenantUnreadCount = 0;
+        match.landlordUnreadCount = 0;
+        await match.save();
+        return { success: true, status: match.status };
     }
     async getRecyclableMatches(tenantId, options) {
         const cooldownDays = options?.cooldownDays ?? RECYCLE_COOLDOWN_DAYS;
@@ -282,7 +413,7 @@ let MatchesService = class MatchesService {
         return this.matchModel
             .find({
             propertyId: toObjectId(propertyId),
-            status: { $ne: enums_1.MatchStatus.Dismissed },
+            status: { $in: ACTIVE_MATCH_STATUSES },
         })
             .exec();
     }
@@ -290,7 +421,7 @@ let MatchesService = class MatchesService {
         return this.matchModel
             .countDocuments({
             propertyId: toObjectId(propertyId),
-            status: { $ne: enums_1.MatchStatus.Dismissed },
+            status: { $in: ACTIVE_MATCH_STATUSES },
         })
             .exec();
     }
@@ -298,7 +429,7 @@ let MatchesService = class MatchesService {
         return this.matchModel
             .countDocuments({
             propertyId: toObjectId(propertyId),
-            status: { $ne: enums_1.MatchStatus.Dismissed },
+            status: { $in: ACTIVE_MATCH_STATUSES },
             $or: [
                 { landlordSeenAt: { $exists: false } },
                 { landlordSeenAt: null },
@@ -315,7 +446,7 @@ let MatchesService = class MatchesService {
             {
                 $match: {
                     propertyId: { $in: oids },
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                 },
             },
             { $group: { _id: "$propertyId", count: { $sum: 1 } } },
@@ -330,7 +461,7 @@ let MatchesService = class MatchesService {
             {
                 $match: {
                     propertyId: { $in: oids },
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                     $or: [
                         { landlordSeenAt: { $exists: false } },
                         { landlordSeenAt: null },
@@ -355,7 +486,7 @@ let MatchesService = class MatchesService {
                 $match: {
                     propertyId: { $in: oids },
                     createdAt: { $gte: start },
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                 },
             },
             {
@@ -383,7 +514,7 @@ let MatchesService = class MatchesService {
             {
                 $match: {
                     propertyId: { $in: oids },
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                 },
             },
             { $group: { _id: "$propertyId" } },
@@ -397,7 +528,7 @@ let MatchesService = class MatchesService {
             {
                 $match: {
                     propertyId: propertyOid,
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                 },
             },
             {
@@ -462,7 +593,7 @@ let MatchesService = class MatchesService {
     }
     async markMatchesSeenForProperty(propertyId) {
         const now = new Date();
-        await this.matchModel.updateMany({ propertyId: toObjectId(propertyId), status: { $ne: enums_1.MatchStatus.Dismissed } }, { $set: { landlordSeenAt: now } });
+        await this.matchModel.updateMany({ propertyId: toObjectId(propertyId), status: { $in: ACTIVE_MATCH_STATUSES } }, { $set: { landlordSeenAt: now } });
         return { propertyId, seenAt: now.toISOString() };
     }
     async landlordHasTenantMatch(landlordPropertyIds, tenantId) {
@@ -473,7 +604,7 @@ let MatchesService = class MatchesService {
         const exists = await this.matchModel.exists({
             propertyId: { $in: oids },
             tenantId: tenantOid,
-            status: { $ne: enums_1.MatchStatus.Dismissed },
+            status: { $in: ACTIVE_MATCH_STATUSES },
         });
         return Boolean(exists);
     }
@@ -485,8 +616,8 @@ let MatchesService = class MatchesService {
         const pipeline = [
             {
                 $match: {
-                    tenantId: tenantOid,
-                    status: { $ne: enums_1.MatchStatus.Dismissed },
+                    tenantId: { $in: [tenantOid, tenantId] },
+                    status: { $in: ACTIVE_MATCH_STATUSES },
                 },
             },
             {
@@ -499,91 +630,13 @@ let MatchesService = class MatchesService {
             },
             { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
             {
-                $lookup: {
-                    from: "messages",
-                    let: {
-                        matchId: "$_id",
-                        currentUserId: tenantId,
-                        landlordId: "$property.landlordId",
-                    },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: ["$matchId", "$$matchId"],
-                                },
-                            },
-                        },
-                        { $sort: { timestamp: -1 } },
-                        {
-                            $group: {
-                                _id: null,
-                                lastMessage: { $first: "$$ROOT" },
-                                unreadCount: {
-                                    $sum: {
-                                        $cond: [
-                                            {
-                                                $and: [
-                                                    {
-                                                        $eq: [
-                                                            { $toString: "$receiverId" },
-                                                            "$$currentUserId",
-                                                        ],
-                                                    },
-                                                    { $eq: ["$isRead", false] },
-                                                ],
-                                            },
-                                            1,
-                                            0,
-                                        ],
-                                    },
-                                },
-                                landlordReplied: {
-                                    $max: {
-                                        $cond: [
-                                            {
-                                                $eq: [
-                                                    { $toString: "$senderId" },
-                                                    { $toString: "$$landlordId" },
-                                                ],
-                                            },
-                                            1,
-                                            0,
-                                        ],
-                                    },
-                                },
-                            },
-                        },
-                        {
-                            $project: {
-                                _id: 0,
-                                lastMessage: 1,
-                                unreadCount: 1,
-                                landlordReplied: 1,
-                            },
-                        },
-                    ],
-                    as: "messageMeta",
-                },
-            },
-            {
                 $addFields: {
-                    lastMessage: {
-                        $ifNull: [{ $arrayElemAt: ["$messageMeta.lastMessage", 0] }, null],
-                    },
-                    unreadCount: {
-                        $ifNull: [{ $arrayElemAt: ["$messageMeta.unreadCount", 0] }, 0],
-                    },
-                    landlordReplied: {
-                        $ifNull: [
-                            { $arrayElemAt: ["$messageMeta.landlordReplied", 0] },
-                            0,
-                        ],
-                    },
+                    lastMessage: "$lastMessage",
+                    unreadCount: { $ifNull: ["$tenantUnreadCount", 0] },
+                    landlordReplied: { $ifNull: ["$landlordReplied", 0] },
                 },
             },
-            { $project: { messageMeta: 0 } },
-            { $sort: { updatedAt: -1 } },
+            { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
             ...paginationStages(options?.page, options?.limit),
         ];
         return this.matchModel.aggregate(pipeline).exec();

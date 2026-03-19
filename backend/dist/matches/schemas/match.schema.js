@@ -25,6 +25,10 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], Match.prototype, "propertyId", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: "User" }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Match.prototype, "landlordId", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ type: String, enum: enums_1.MatchStatus, default: enums_1.MatchStatus.TenantLiked }),
     __metadata("design:type", String)
 ], Match.prototype, "status", void 0);
@@ -78,6 +82,28 @@ __decorate([
 ], Match.prototype, "recycleCount", void 0);
 __decorate([
     (0, mongoose_1.Prop)({
+        type: {
+            content: { type: String },
+            senderId: { type: mongoose_2.Types.ObjectId, ref: "User" },
+            timestamp: { type: Date },
+        },
+    }),
+    __metadata("design:type", Object)
+], Match.prototype, "lastMessage", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Match.prototype, "tenantUnreadCount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Match.prototype, "landlordUnreadCount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Match.prototype, "landlordReplied", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
         type: String,
         enum: enums_1.RouteAccessStatus,
         default: enums_1.RouteAccessStatus.None,
@@ -112,3 +138,4 @@ exports.MatchSchema.index({ tenantId: 1, propertyId: 1 }, { unique: true });
 exports.MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 exports.MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
 exports.MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });
+exports.MatchSchema.index({ landlordId: 1, status: 1, updatedAt: -1 });

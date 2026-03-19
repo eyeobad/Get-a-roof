@@ -1,4 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import {
+  BadGatewayException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 @Injectable()
@@ -18,7 +23,9 @@ export class AppwriteStorageService {
     const apiKey = this.configService.get<string>("APPWRITE_API_SECRET");
 
     if (!apiKey) {
-      throw new Error("Appwrite API key is not configured");
+      throw new ServiceUnavailableException(
+        "File upload is not configured on the server (missing APPWRITE_API_SECRET)."
+      );
     }
 
     const form = new FormData();
@@ -40,7 +47,11 @@ export class AppwriteStorageService {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       this.logger.warn("Appwrite upload failed", payload);
-      throw new Error(payload?.message ?? "Unable to upload file");
+      const reason =
+        typeof payload?.message === "string" && payload.message.trim()
+          ? payload.message
+          : `Upload provider error (${response.status})`;
+      throw new BadGatewayException(`Unable to upload file: ${reason}`);
     }
     const fileUrl = `${endpoint}/storage/buckets/${bucketId}/files/${payload.$id}/view?project=${projectId}`;
     return { url: fileUrl, fileId: payload?.$id };

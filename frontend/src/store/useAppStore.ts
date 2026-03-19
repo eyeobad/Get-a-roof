@@ -6,7 +6,14 @@ import { type Listing } from "@/lib/listings";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 
-type MatchStatus = "TenantLiked" | "LandlordQualified" | "ChatInitiated" | "Dismissed";
+type MatchStatus =
+  | "TenantLiked"
+  | "LandlordQualified"
+  | "ChatInitiated"
+  | "Active"
+  | "Archived"
+  | "Closed"
+  | "Dismissed";
 type RouteAccessStatus = "None" | "Pending" | "Approved" | "Denied";
 
 export type MatchSummary = {
@@ -436,13 +443,15 @@ type AppState = {
     landlord?: Record<string, unknown>;
   }) => Promise<ApiUser | null>;
   deleteAccount: () => Promise<boolean>;
+  saveConversation: (matchId: string) => Promise<boolean>;
   likeListing: (listingId: string) => Promise<void>;
   unlikeListing: (listingId: string) => Promise<void>;
+  unmatchListing: (matchId: string) => Promise<boolean>;
   createMatchForListing: (
     listingId: string,
     tenantLiked: boolean,
     dismissReason?: "Soft" | "Hard"
-  ) => Promise<void>;
+  ) => Promise<ApiMatch | null>;
   toggleLikeListing: (listingId: string) => Promise<void>;
   passListing: (listingId: string) => Promise<void>;
   advanceQueue: () => void;
@@ -696,6 +705,160 @@ const formatMessagePreview = (content?: string) => {
   return content;
 };
 
+type ParsedRouteRequest = {
+  id: string;
+  kind: "route-access";
+  status: "pending" | "approved" | "denied";
+  propertyId?: string;
+  tenantLocation?: { lat: number; lng: number };
+  ttlMinutes?: number;
+};
+
+const parseRouteRequest = (content?: string): ParsedRouteRequest | null => {
+  if (!content || !content.startsWith(ROUTE_REQUEST_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(content.slice(ROUTE_REQUEST_PREFIX.length)) as ParsedRouteRequest;
+    if (
+      parsed?.kind === "route-access" &&
+      typeof parsed.id === "string" &&
+      (parsed.status === "pending" ||
+        parsed.status === "approved" ||
+        parsed.status === "denied")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const toRouteAccessStatus = (
+  status: ParsedRouteRequest["status"]
+): RouteAccessStatus =>
+  status === "pending"
+    ? "Pending"
+    : status === "approved"
+      ? "Approved"
+      : "Denied";
+
+const applyRouteAccessContentToState = (
+  state: Pick<
+    AppState,
+    | "matchSummaries"
+    | "recycledMatchSummaries"
+    | "listingsById"
+    | "conversations"
+    | "threadsById"
+    | "mapMatches"
+  >,
+  matchId: string,
+  content?: string
+) => {
+  const routeRequest = parseRouteRequest(content);
+  if (!routeRequest) return {};
+
+  const routeAccessStatus = toRouteAccessStatus(routeRequest.status);
+  const listingIdFromPayload = toIdString(routeRequest.propertyId);
+  const listingIdFromState =
+    state.matchSummaries.find((item) => item.id === matchId)?.listingId ??
+    state.recycledMatchSummaries.find((item) => item.id === matchId)?.listingId ??
+    state.conversations.find((item) => item.id === matchId)?.listingId ??
+    state.threadsById[matchId]?.listingId;
+  const listingId = listingIdFromPayload || listingIdFromState;
+
+  const nextExpiresAt =
+    routeRequest.status === "approved"
+      ? new Date(Date.now() + (routeRequest.ttlMinutes ?? 30) * 60 * 1000).toISOString()
+      : routeRequest.status === "denied"
+        ? null
+        : undefined;
+
+  const hasActiveSummary = state.matchSummaries.some((item) => item.id === matchId);
+  const hasRecycledSummary = state.recycledMatchSummaries.some((item) => item.id === matchId);
+  const shouldCreateActiveSummary = Boolean(listingId && !hasActiveSummary && !hasRecycledSummary);
+
+  const nextMatchSummaries = shouldCreateActiveSummary
+    ? upsertMatchSummary(state.matchSummaries, {
+        id: matchId,
+        listingId: listingId ?? "",
+        status: "ChatInitiated",
+        routeAccessStatus,
+      })
+    : state.matchSummaries.map((item) =>
+        item.id === matchId ? { ...item, routeAccessStatus } : item
+      );
+
+  return {
+    matchSummaries: nextMatchSummaries,
+    recycledMatchSummaries: state.recycledMatchSummaries.map((item) =>
+      item.id === matchId ? { ...item, routeAccessStatus } : item
+    ),
+    mapMatches:
+      listingId && state.mapMatches.some((listing) => listing.id === listingId)
+        ? state.mapMatches.map((listing) =>
+            listing.id === listingId
+              ? {
+                  ...listing,
+                  routeAccessStatus,
+                  routeOriginLat: routeRequest.tenantLocation?.lat ?? listing.routeOriginLat,
+                  routeOriginLng: routeRequest.tenantLocation?.lng ?? listing.routeOriginLng,
+                  routeAccessExpiresAt:
+                    nextExpiresAt === undefined
+                      ? listing.routeAccessExpiresAt
+                      : nextExpiresAt ?? undefined,
+                }
+              : listing
+          )
+        : state.mapMatches,
+    listingsById:
+      listingId && state.listingsById[listingId]
+        ? {
+            ...state.listingsById,
+            [listingId]: {
+              ...state.listingsById[listingId],
+              routeAccessStatus,
+              routeOriginLat:
+                routeRequest.tenantLocation?.lat ?? state.listingsById[listingId].routeOriginLat,
+              routeOriginLng:
+                routeRequest.tenantLocation?.lng ?? state.listingsById[listingId].routeOriginLng,
+              routeAccessExpiresAt:
+                nextExpiresAt === undefined
+                  ? state.listingsById[listingId].routeAccessExpiresAt
+                  : nextExpiresAt ?? undefined,
+            },
+          }
+        : state.listingsById,
+  };
+};
+
+const mergeListingWithRouteState = (
+  state: Pick<AppState, "listingsById" | "matchSummaries" | "recycledMatchSummaries">,
+  listing: Listing
+): Listing => {
+  const existing = state.listingsById[listing.id];
+  const matchRouteStatus =
+    state.matchSummaries.find((item) => item.listingId === listing.id)?.routeAccessStatus ??
+    state.recycledMatchSummaries.find((item) => item.listingId === listing.id)?.routeAccessStatus;
+  const routeAccessStatus =
+    listing.routeAccessStatus === "Approved" || matchRouteStatus === "Approved"
+      ? "Approved"
+      : listing.routeAccessStatus === "Pending" || matchRouteStatus === "Pending"
+      ? "Pending"
+      : matchRouteStatus ?? existing?.routeAccessStatus ?? listing.routeAccessStatus;
+
+  return {
+    ...listing,
+    routeAccessStatus,
+    routeOriginLat: existing?.routeOriginLat ?? listing.routeOriginLat,
+    routeOriginLng: existing?.routeOriginLng ?? listing.routeOriginLng,
+    routeAccessExpiresAt:
+      routeAccessStatus === "Approved"
+        ? existing?.routeAccessExpiresAt ?? listing.routeAccessExpiresAt
+        : listing.routeAccessExpiresAt,
+  };
+};
+
 const buildConversationSummary = (item: ApiConversation, currentUserId?: string) => {
   const matchId = toIdString(item.matchId);
   const listing = item.property ? mapPropertyToListing(item.property) : null;
@@ -730,13 +893,35 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
     title,
     preview: formatMessagePreview(item.lastMessage?.content),
     time: formatTime(item.lastMessage?.timestamp),
-    image: otherPhoto || listing?.image,
+    image: otherPhoto || "/avatar-placeholder.svg",
     unread: (item.unreadCount ?? 0) > 0,
     unreadCount: item.unreadCount ?? 0,
     tenantId,
     landlordId,
   };
   return { summary, listing };
+};
+
+const upsertMatchSummary = (
+  summaries: MatchSummary[],
+  nextSummary: MatchSummary
+) => {
+  const existingIndex = summaries.findIndex(
+    (summary) =>
+      summary.id === nextSummary.id ||
+      (summary.listingId && summary.listingId === nextSummary.listingId)
+  );
+  if (existingIndex === -1) {
+    return [nextSummary, ...summaries];
+  }
+
+  const updated = [...summaries];
+  updated[existingIndex] = {
+    ...updated[existingIndex],
+    ...nextSummary,
+  };
+  const [active] = updated.splice(existingIndex, 1);
+  return [active, ...updated];
 };
 
 export const mapPropertyToListing = (property: ApiProperty): Listing => {
@@ -1293,10 +1478,96 @@ export const useAppStore = create<AppState>()(
           throw error;
         }
       },
+      saveConversation: async (matchId) => {
+        const state = get();
+        if (!state.authToken || !matchId) return false;
+
+        const listingId =
+          state.conversations.find((conv) => conv.id === matchId)?.listingId ??
+          state.matchSummaries.find((summary) => summary.id === matchId)?.listingId ??
+          state.recycledMatchSummaries.find((summary) => summary.id === matchId)?.listingId ??
+          state.threadsById[matchId]?.listingId;
+
+        try {
+          if (state.userId && listingId && isMongoId(listingId)) {
+            await apiFetch(`/api/users/${state.userId}/saved-properties`, {
+              method: "POST",
+              body: JSON.stringify({ propertyId: listingId }),
+              token: state.authToken,
+            });
+          }
+
+          await apiFetch(`/api/matches/${matchId}/archive`, {
+            method: "PATCH",
+            token: state.authToken,
+          });
+
+          set((prev) => {
+            const relatedConversationIds = prev.conversations
+              .filter(
+                (conv) =>
+                  conv.id === matchId ||
+                  (listingId ? conv.listingId === listingId : false)
+              )
+              .map((conv) => conv.id);
+            const nextMatchSummaries = prev.matchSummaries.filter(
+              (summary) =>
+                summary.id !== matchId &&
+                !(listingId && summary.listingId === listingId)
+            );
+            const nextRecycledMatchSummaries = prev.recycledMatchSummaries.filter(
+              (summary) =>
+                summary.id !== matchId &&
+                !(listingId && summary.listingId === listingId)
+            );
+            const nextConversations = prev.conversations.filter(
+              (conv) =>
+                conv.id !== matchId &&
+                !(listingId && conv.listingId === listingId)
+            );
+            const nextMessagesByMatch = { ...prev.messagesByMatch };
+            const nextThreadsById = { ...prev.threadsById };
+            relatedConversationIds.forEach((id) => {
+              delete nextMessagesByMatch[id];
+              delete nextThreadsById[id];
+            });
+
+            return {
+              likedIds:
+                listingId && isMongoId(listingId) && !prev.likedIds.includes(listingId)
+                  ? [...prev.likedIds, listingId]
+                  : prev.likedIds,
+              suppressedMatchListingIds:
+                listingId && isMongoId(listingId)
+                  ? Array.from(
+                      new Set([...prev.suppressedMatchListingIds, listingId])
+                    )
+                  : prev.suppressedMatchListingIds,
+              matchSummaries: nextMatchSummaries,
+              recycledMatchSummaries: nextRecycledMatchSummaries,
+              conversations: nextConversations,
+              messagesByMatch: nextMessagesByMatch,
+              threadsById: nextThreadsById,
+              selectedThreadId:
+                prev.selectedThreadId &&
+                relatedConversationIds.includes(prev.selectedThreadId)
+                  ? nextConversations[0]?.id ?? null
+                  : prev.selectedThreadId,
+            };
+          });
+          await Promise.all([
+            get().loadMatches().catch(() => undefined),
+            get().loadConversations().catch(() => undefined),
+          ]);
+          return true;
+        } catch {
+          return false;
+        }
+      },
       createMatchForListing: async (listingId, tenantLiked, dismissReason) => {
         const state = get();
-        if (!state.authToken || !isMongoId(listingId)) return;
-        await apiFetch(`/api/matches`, {
+        if (!state.authToken || !isMongoId(listingId)) return null;
+        return apiFetch<ApiMatch>(`/api/matches`, {
           method: "POST",
           body: JSON.stringify({
             propertyId: listingId,
@@ -1309,15 +1580,41 @@ export const useAppStore = create<AppState>()(
       likeListing: async (listingId) => {
         const state = get();
         const alreadyLiked = state.likedIds.includes(listingId);
+        const listing = state.listingsById[listingId];
 
         if (!alreadyLiked) {
-          set({
-            likedIds: [...state.likedIds, listingId],
-            suppressedMatchListingIds: state.suppressedMatchListingIds.filter(
+          set((current) => ({
+            likedIds: [...current.likedIds, listingId],
+            suppressedMatchListingIds: current.suppressedMatchListingIds.filter(
               (id) => id !== listingId
             ),
             selectedListingId: listingId,
-          });
+            matchSummaries: upsertMatchSummary(current.matchSummaries, {
+              id:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)?.id ??
+                `optimistic-match:${listingId}`,
+              listingId,
+              status: "TenantLiked",
+              matchScore:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.matchScore ?? listing?.matchScore,
+              lastMessage:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.lastMessage,
+              lastMessageAt:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.lastMessageAt,
+              unreadCount:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.unreadCount ?? 0,
+              landlordReplied:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.landlordReplied ?? false,
+              routeAccessStatus:
+                current.matchSummaries.find((summary) => summary.listingId === listingId)
+                  ?.routeAccessStatus ?? listing?.routeAccessStatus ?? "None",
+            }),
+          }));
         }
 
         if (state.authToken && isMongoId(listingId)) {
@@ -1339,12 +1636,41 @@ export const useAppStore = create<AppState>()(
                   }
                 }
 
-                await get().createMatchForListing(listingId, true);
+                const response = await get().createMatchForListing(listingId, true);
+                const persistedMatchId = toIdString(response?._id ?? response?.id);
+                if (persistedMatchId) {
+                  set((current) => ({
+                    matchSummaries: upsertMatchSummary(current.matchSummaries, {
+                      id: persistedMatchId,
+                      listingId,
+                      status: (response?.status as MatchStatus) ?? "TenantLiked",
+                      matchScore: response?.matchScore ?? listing?.matchScore,
+                      lastMessage:
+                        current.matchSummaries.find((summary) => summary.listingId === listingId)
+                          ?.lastMessage,
+                      lastMessageAt:
+                        current.matchSummaries.find((summary) => summary.listingId === listingId)
+                          ?.lastMessageAt,
+                      unreadCount:
+                        current.matchSummaries.find((summary) => summary.listingId === listingId)
+                          ?.unreadCount ?? 0,
+                      landlordReplied:
+                        current.matchSummaries.find((summary) => summary.listingId === listingId)
+                          ?.landlordReplied ?? false,
+                      routeAccessStatus:
+                        current.matchSummaries.find((summary) => summary.listingId === listingId)
+                          ?.routeAccessStatus ?? listing?.routeAccessStatus ?? "None",
+                    }),
+                  }));
+                }
                 scheduleMatchesReload(get().loadMatches);
               },
               () => {
                 set((current) => ({
                   likedIds: current.likedIds.filter((id) => id !== listingId),
+                  matchSummaries: current.matchSummaries.filter(
+                    (summary) => summary.listingId !== listingId
+                  ),
                   selectedListingId:
                     current.exploreQueue.find((id) => id !== listingId) ?? current.selectedListingId,
                 }));
@@ -1355,17 +1681,38 @@ export const useAppStore = create<AppState>()(
       },
       unlikeListing: async (listingId) => {
         const state = get();
-        set({
-          likedIds: state.likedIds.filter((id) => id !== listingId),
-          suppressedMatchListingIds: Array.from(
-            new Set([...state.suppressedMatchListingIds, listingId])
-          ),
-          matchSummaries: state.matchSummaries.filter(
-            (summary) => summary.listingId !== listingId
-          ),
-          recycledMatchSummaries: state.recycledMatchSummaries.filter(
-            (summary) => summary.listingId !== listingId
-          ),
+        set((prev) => {
+          const relatedConversationIds = prev.conversations
+            .filter((conv) => conv.listingId === listingId)
+            .map((conv) => conv.id);
+          const nextMessagesByMatch = { ...prev.messagesByMatch };
+          const nextThreadsById = { ...prev.threadsById };
+          relatedConversationIds.forEach((id) => {
+            delete nextMessagesByMatch[id];
+            delete nextThreadsById[id];
+          });
+          return {
+            likedIds: prev.likedIds.filter((id) => id !== listingId),
+            suppressedMatchListingIds: Array.from(
+              new Set([...prev.suppressedMatchListingIds, listingId])
+            ),
+            matchSummaries: prev.matchSummaries.filter(
+              (summary) => summary.listingId !== listingId
+            ),
+            recycledMatchSummaries: prev.recycledMatchSummaries.filter(
+              (summary) => summary.listingId !== listingId
+            ),
+            conversations: prev.conversations.filter(
+              (conv) => conv.listingId !== listingId
+            ),
+            messagesByMatch: nextMessagesByMatch,
+            threadsById: nextThreadsById,
+            selectedThreadId:
+              prev.selectedThreadId &&
+              relatedConversationIds.includes(prev.selectedThreadId)
+                ? null
+                : prev.selectedThreadId,
+          };
         });
 
         if (state.authToken && isMongoId(listingId)) {
@@ -1400,6 +1747,80 @@ export const useAppStore = create<AppState>()(
               }
             );
           });
+        }
+      },
+      unmatchListing: async (matchId) => {
+        const state = get();
+        if (!state.authToken || !matchId) return false;
+
+        const listingId =
+          state.conversations.find((conv) => conv.id === matchId)?.listingId ??
+          state.matchSummaries.find((summary) => summary.id === matchId)?.listingId ??
+          state.recycledMatchSummaries.find((summary) => summary.id === matchId)?.listingId ??
+          state.threadsById[matchId]?.listingId;
+
+        try {
+          await apiFetch(`/api/matches/${matchId}/hard-block`, {
+            method: "POST",
+            token: state.authToken,
+          });
+
+          set((prev) => {
+            const relatedConversationIds = prev.conversations
+              .filter(
+                (conv) =>
+                  conv.id === matchId ||
+                  (listingId ? conv.listingId === listingId : false)
+              )
+              .map((conv) => conv.id);
+            const nextMatchSummaries = prev.matchSummaries.filter(
+              (summary) =>
+                summary.id !== matchId &&
+                !(listingId && summary.listingId === listingId)
+            );
+            const nextRecycledMatchSummaries = prev.recycledMatchSummaries.filter(
+              (summary) =>
+                summary.id !== matchId &&
+                !(listingId && summary.listingId === listingId)
+            );
+            const nextConversations = prev.conversations.filter(
+              (conv) =>
+                conv.id !== matchId &&
+                !(listingId && conv.listingId === listingId)
+            );
+            const nextMessagesByMatch = { ...prev.messagesByMatch };
+            const nextThreadsById = { ...prev.threadsById };
+            relatedConversationIds.forEach((id) => {
+              delete nextMessagesByMatch[id];
+              delete nextThreadsById[id];
+            });
+
+            return {
+              suppressedMatchListingIds:
+                listingId && isMongoId(listingId)
+                  ? Array.from(
+                      new Set([...prev.suppressedMatchListingIds, listingId])
+                    )
+                  : prev.suppressedMatchListingIds,
+              matchSummaries: nextMatchSummaries,
+              recycledMatchSummaries: nextRecycledMatchSummaries,
+              conversations: nextConversations,
+              messagesByMatch: nextMessagesByMatch,
+              threadsById: nextThreadsById,
+              selectedThreadId:
+                prev.selectedThreadId &&
+                relatedConversationIds.includes(prev.selectedThreadId)
+                  ? nextConversations[0]?.id ?? null
+                  : prev.selectedThreadId,
+            };
+          });
+          await Promise.all([
+            get().loadMatches().catch(() => undefined),
+            get().loadConversations().catch(() => undefined),
+          ]);
+          return true;
+        } catch {
+          return false;
         }
       },
       toggleLikeListing: async (listingId) => {
@@ -1476,6 +1897,7 @@ export const useAppStore = create<AppState>()(
           response,
           state.userId ?? undefined
         );
+        const threadId = response.matchId;
         if (listing) {
           set((prev) => ({
             listingsById: { ...prev.listingsById, [listing.id]: listing },
@@ -1484,8 +1906,44 @@ export const useAppStore = create<AppState>()(
         if (summary.id) {
           set((prev) => {
             const next = prev.conversations.filter((item) => item.id !== summary.id);
+            const existingThread = prev.threadsById[summary.id];
+            const nextThread = existingThread
+              ? {
+                  ...existingThread,
+                  listingId: existingThread.listingId || listingId,
+                }
+              : createThreadObject(listingId, summary.id);
             return {
               conversations: [summary, ...next],
+              selectedThreadId: summary.id,
+              threadsById: {
+                ...prev.threadsById,
+                [summary.id]: nextThread,
+              },
+              matchSummaries: listing
+                ? upsertMatchSummary(prev.matchSummaries, {
+                    id: summary.id,
+                    listingId: listing.id,
+                    status: "ChatInitiated",
+                    matchScore:
+                      prev.matchSummaries.find((item) => item.listingId === listing.id)
+                        ?.matchScore ?? listing.matchScore,
+                    lastMessage:
+                      summary.preview && summary.preview !== "Start a conversation"
+                        ? summary.preview
+                        : prev.matchSummaries.find((item) => item.listingId === listing.id)
+                            ?.lastMessage,
+                    lastMessageAt:
+                      summary.time ||
+                      prev.matchSummaries.find((item) => item.listingId === listing.id)
+                        ?.lastMessageAt,
+                    unreadCount: 0,
+                    landlordReplied:
+                      prev.matchSummaries.find((item) => item.listingId === listing.id)
+                        ?.landlordReplied ?? false,
+                    routeAccessStatus: listing.routeAccessStatus ?? "None",
+                  })
+                : prev.matchSummaries,
             };
           });
         } else {
@@ -1501,6 +1959,15 @@ export const useAppStore = create<AppState>()(
           Boolean(response.landlord?.firstName || response.landlord?.lastName);
         if (!hasNames) {
           await get().loadConversations();
+        }
+
+        if (threadId) {
+          set((prev) => ({
+            messagesByMatch: {
+              ...prev.messagesByMatch,
+              [threadId]: prev.messagesByMatch[threadId] ?? [],
+            },
+          }));
         }
 
         return response.matchId;
@@ -1557,7 +2024,7 @@ export const useAppStore = create<AppState>()(
 
         const listings = (data ?? []).map(mapPropertyToListing);
         const nextMap = listings.reduce<Record<string, Listing>>((acc, listing) => {
-          acc[listing.id] = listing;
+          acc[listing.id] = mergeListingWithRouteState(state, listing);
           return acc;
         }, {});
 
@@ -1641,7 +2108,7 @@ export const useAppStore = create<AppState>()(
 
         const recycledIds = recycledListings.map((listing) => listing.id);
         const recycledMap = recycledListings.reduce<Record<string, Listing>>((acc, listing) => {
-          acc[listing.id] = listing;
+          acc[listing.id] = mergeListingWithRouteState(state, listing);
           return acc;
         }, {});
 
@@ -1728,10 +2195,11 @@ export const useAppStore = create<AppState>()(
         const listings = (fallback ?? []).map(mapPropertyToListing);
         set((prev) => {
           const nextMap = { ...prev.listingsById };
-          listings.forEach((listing) => {
+          const nextListings = listings.map((listing) => mergeListingWithRouteState(prev, listing));
+          nextListings.forEach((listing) => {
             nextMap[listing.id] = listing;
           });
-          return { mapMatches: listings, listingsById: nextMap };
+          return { mapMatches: nextListings, listingsById: nextMap };
         });
       },
       loadMatches: async () => {
@@ -1742,14 +2210,12 @@ export const useAppStore = create<AppState>()(
         });
 
         const summaries = (data ?? [])
-          .filter((match) => match.status !== "Dismissed")
-          .filter((match) => {
-            const listingId =
-              toIdString(match.property?._id ?? match.property?.id) ??
-              toIdString(match.propertyId);
-            if (!listingId) return true;
-            return !state.suppressedMatchListingIds.includes(listingId);
-          })
+          .filter(
+            (match) =>
+              match.status !== "Dismissed" &&
+              match.status !== "Archived" &&
+              match.status !== "Closed"
+          )
           .map((match) => {
           const listing = match.property ? mapPropertyToListing(match.property) : null;
           if (listing) {
@@ -1848,18 +2314,14 @@ export const useAppStore = create<AppState>()(
           }
           return summary;
         });
-
-        if (!conversations.length) {
-          set({
-            conversations: [],
-            messagesByMatch: {},
-            threadsById: {},
-            selectedThreadId: null,
-          });
-          return;
-        }
+        const conversationListingById = new Map(
+          conversations
+            .filter((conversation) => Boolean(conversation.id && conversation.listingId))
+            .map((conversation) => [conversation.id, conversation.listingId as string])
+        );
 
         set((prev) => {
+          const incomingIds = new Set(conversations.map((item) => item.id));
           const prevById = new Map(prev.conversations.map((item) => [item.id, item]));
           const merged = conversations.map((next) => {
             const prevItem = prevById.get(next.id);
@@ -1878,7 +2340,38 @@ export const useAppStore = create<AppState>()(
               image: next.image || prevItem.image,
             };
           });
-          return { conversations: merged };
+          const nextThreadsById = { ...prev.threadsById };
+          conversationListingById.forEach((mappedListingId, conversationId) => {
+            const existing = nextThreadsById[conversationId];
+            if (existing) {
+              nextThreadsById[conversationId] = {
+                ...existing,
+                listingId: existing.listingId || mappedListingId,
+              };
+              return;
+            }
+            nextThreadsById[conversationId] = createThreadObject(
+              mappedListingId,
+              conversationId
+            );
+          });
+          const nextMessagesByMatch = Object.fromEntries(
+            Object.entries(prev.messagesByMatch).filter(([id]) => incomingIds.has(id))
+          );
+          Object.keys(nextThreadsById).forEach((id) => {
+            if (!incomingIds.has(id)) {
+              delete nextThreadsById[id];
+            }
+          });
+          return {
+            conversations: merged,
+            threadsById: nextThreadsById,
+            messagesByMatch: nextMessagesByMatch,
+            selectedThreadId:
+              prev.selectedThreadId && incomingIds.has(prev.selectedThreadId)
+                ? prev.selectedThreadId
+                : merged[0]?.id ?? null,
+          };
         });
       },
       loadMessagesForMatch: async (matchId, options) => {
@@ -1896,8 +2389,13 @@ export const useAppStore = create<AppState>()(
           .map(mapApiMessageToChat)
           .reverse();
 
+        const latestRouteMessage = [...messages]
+          .reverse()
+          .find((message) => Boolean(parseRouteRequest(message.content)));
+
         set((prev) => ({
           messagesByMatch: { ...prev.messagesByMatch, [matchId]: messages },
+          ...applyRouteAccessContentToState(prev, matchId, latestRouteMessage?.content),
         }));
       },
       sendMessage: async (matchId, receiverId, content) => {
@@ -1945,6 +2443,7 @@ export const useAppStore = create<AppState>()(
               [matchId]: nextMessages,
             },
             conversations: reordered,
+            ...applyRouteAccessContentToState(prev, matchId, nextMessage.content),
           };
         });
       },
@@ -1991,7 +2490,7 @@ export const useAppStore = create<AppState>()(
               preview:
                 formatMessagePreview(nextMessage.content) || "Start a conversation",
               time: formatTime(nextMessage.timestamp),
-              image: "/hero.png",
+              image: "/avatar-placeholder.svg",
               unread: shouldCountUnread,
               unreadCount: shouldCountUnread ? 1 : 0,
             };
@@ -2012,6 +2511,7 @@ export const useAppStore = create<AppState>()(
               [matchId]: nextMessages,
             },
             conversations: updatedConversations,
+            ...applyRouteAccessContentToState(prev, matchId, nextMessage.content),
           };
         });
 
@@ -2060,7 +2560,10 @@ export const useAppStore = create<AppState>()(
         if (!property) return;
         const listing = mapPropertyToListing(property);
         set((prev) => ({
-          listingsById: { ...prev.listingsById, [listing.id]: listing },
+          listingsById: {
+            ...prev.listingsById,
+            [listing.id]: mergeListingWithRouteState(prev, listing),
+          },
           exploreQueue: prev.exploreQueue.includes(listing.id)
             ? prev.exploreQueue
             : [...prev.exploreQueue, listing.id],
@@ -2389,7 +2892,9 @@ export const useAppStore = create<AppState>()(
         exploreQueue: state.exploreQueue,
         likedIds: state.likedIds,
         passedIds: state.passedIds,
+        suppressedMatchListingIds: state.suppressedMatchListingIds,
         matchSummaries: state.matchSummaries,
+        recycledMatchSummaries: state.recycledMatchSummaries,
         mapMatches: state.mapMatches,
         selectedListingId: state.selectedListingId,
         threadsById: state.threadsById,

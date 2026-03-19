@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -88,6 +89,26 @@ export class MatchesController {
     @Req() req: Request & { user?: any }
   ) {
     return this.matchesService.hardBlockMatch(id, req.user?.sub);
+  }
+
+  @Delete(":id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Tenant)
+  deleteMatch(
+    @Param("id") id: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    return this.matchesService.deleteMatch(id, req.user?.sub);
+  }
+
+  @Patch(":id/archive")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.Tenant)
+  archiveMatch(
+    @Param("id") id: string,
+    @Req() req: Request & { user?: any }
+  ) {
+    return this.matchesService.archiveMatch(id, req.user?.sub);
   }
 
   @Patch(":id")

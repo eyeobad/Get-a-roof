@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import AdaptiveBottomNav from "@/components/AdaptiveBottomNav";
 import DashboardBottomNav from "@/components/DashboardBottomNav";
@@ -17,6 +17,7 @@ type RouteRequestPayload = {
   id: string;
   status: RouteRequestStatus;
   kind: "route-access";
+  propertyId?: string;
   tenantLocation?: {
     lat: number;
     lng: number;
@@ -47,9 +48,12 @@ const parseRouteRequest = (value: string): RouteRequestPayload | null => {
   }
   return null;
 };
+const isMongoObjectId = (value?: string | null) =>
+  Boolean(value && /^[a-f\d]{24}$/i.test(value));
 
 type Conversation = {
   id: string;
+  listingId?: string;
   name: string;
   preview: string;
   time: string;
@@ -222,17 +226,24 @@ function MessagesContent() {
   const pathname = usePathname();
   const threadParam = searchParams?.get("thread") ?? "";
   const fromParam = searchParams?.get("from") ?? "";
+  const intentParam = searchParams?.get("intent") ?? "";
+  const propertyIdParam = searchParams?.get("propertyId") ?? "";
   const draftParam = searchParams?.get("draft") ?? "";
   const isLandlordContext =
     fromParam.startsWith("/dashboard") || pathname?.startsWith("/dashboard");
   const storeConversations = useAppStore((state) => state.conversations);
+  const threadsById = useAppStore((state) => state.threadsById);
+  const listingsById = useAppStore((state) => state.listingsById);
   const messagesByMatch = useAppStore((state) => state.messagesByMatch);
   const loadConversations = useAppStore((state) => state.loadConversations);
   const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
   const markMatchRead = useAppStore((state) => state.markMatchRead);
   const sendMessageToApi = useAppStore((state) => state.sendMessage);
   const setSelectedThreadId = useAppStore((state) => state.setSelectedThreadId);
+  const saveConversation = useAppStore((state) => state.saveConversation);
+  const unmatchListing = useAppStore((state) => state.unmatchListing);
   const userId = useAppStore((state) => state.userId);
+  const user = useAppStore((state) => state.user);
   const authToken = useAppStore((state) => state.authToken);
   const typingByMatch = useAppStore((state) => state.typingByMatch);
 
@@ -240,15 +251,42 @@ function MessagesContent() {
     () =>
       storeConversations.map((conversation) => ({
         id: conversation.id,
+        listingId: conversation.listingId,
         name: conversation.title,
         preview: conversation.preview ?? "Start a conversation",
         time: conversation.time ?? "",
-        image: conversation.image ?? "/hero.png",
+        image: conversation.image ?? "/avatar-placeholder.svg",
         unread: conversation.unread,
         tenantId: conversation.tenantId,
         landlordId: conversation.landlordId,
       })),
     [storeConversations]
+  );
+
+  const pendingConversation = useMemo<Conversation | null>(() => {
+    if (!threadParam) return null;
+    if (conversations.some((conversation) => conversation.id === threadParam)) {
+      return null;
+    }
+    const thread = threadsById[threadParam];
+    const listingId = thread?.listingId;
+    const listing = listingId ? listingsById[listingId] : undefined;
+    return {
+      id: threadParam,
+      listingId,
+      name: isLandlordContext ? "Tenant" : "Landlord",
+      preview: "Start a conversation",
+      time: "",
+      image: "/avatar-placeholder.svg",
+      tenantId: isLandlordContext ? undefined : userId ?? undefined,
+      landlordId: isLandlordContext ? userId ?? undefined : undefined,
+    };
+  }, [threadParam, conversations, threadsById, listingsById, isLandlordContext, userId]);
+
+  const renderableConversations = useMemo(
+    () =>
+      pendingConversation ? [pendingConversation, ...conversations] : conversations,
+    [pendingConversation, conversations]
   );
 
   const [activeId, setActiveId] = useState(() => threadParam);
@@ -259,18 +297,19 @@ function MessagesContent() {
   const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showRouteHint, setShowRouteHint] = useState(false);
+  const [isMatchActionPending, setIsMatchActionPending] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [routeAccessDurationByRequestId, setRouteAccessDurationByRequestId] =
     useState<Record<string, 5 | 30 | 1440>>({});
   const activeConversationId =
-    activeId || threadParam || conversations[0]?.id || "";
+    activeId || threadParam || renderableConversations[0]?.id || "";
 
   const activeConversation = useMemo(
     () =>
-      conversations.find((c) => c.id === activeConversationId) ??
-      conversations[0],
-    [conversations, activeConversationId]
+      renderableConversations.find((c) => c.id === activeConversationId) ??
+      renderableConversations[0],
+    [renderableConversations, activeConversationId]
   );
 
   const activeMessages = useMemo(
@@ -279,6 +318,7 @@ function MessagesContent() {
       return thread.map((message) => ({
         id: message.id,
         convoId: activeConversationId,
+        senderId: message.senderId,
         from: message.senderId === userId ? "me" : "them",
         text: message.content,
         routeRequest: parseRouteRequest(message.content),
@@ -291,9 +331,17 @@ function MessagesContent() {
     [messagesByMatch, activeConversationId, userId]
   );
 
+  const userHasTenantRole = useMemo(() => {
+    if (!user?.role) return false;
+    return Array.isArray(user.role)
+      ? user.role.includes("Tenant")
+      : user.role === "Tenant";
+  }, [user?.role]);
+
   const listRef = useRef<HTMLDivElement | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledIntentKeyRef = useRef<string>("");
   const isOtherTyping = Boolean(
     activeConversationId && typingByMatch[activeConversationId]
   );
@@ -333,27 +381,29 @@ function MessagesContent() {
     });
   };
 
-  const sendRouteRequest = async () => {
+  const sendRouteRequest = useCallback(async () => {
     if (!activeConversation || !activeConversationId) return;
-    if (!userId || userId !== activeConversation.tenantId) {
+    const isTenantInConversation = activeConversation.tenantId
+      ? userId === activeConversation.tenantId
+      : userHasTenantRole;
+    if (!userId || !isTenantInConversation) {
       showToast({
         title: "Only tenants can request route access.",
         variant: "error",
       });
-      return;
+      return false;
     }
     if (!navigator.geolocation) {
       showToast({
         title: "Location is not supported on this browser.",
         variant: "error",
       });
-      return;
+      return false;
     }
     const receiverId =
-      userId === activeConversation.tenantId
-        ? activeConversation.landlordId
-        : activeConversation.tenantId;
-    if (!receiverId || isSending) return;
+      activeConversation.landlordId ??
+      activeMessages.find((message) => message.from === "them")?.senderId;
+    if (!receiverId || isSending) return false;
     let tenantLocation: RouteRequestPayload["tenantLocation"];
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -371,7 +421,7 @@ function MessagesContent() {
         title: "Allow location access first to request route directions.",
         variant: "error",
       });
-      return;
+      return false;
     }
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setIsSending(true);
@@ -383,18 +433,64 @@ function MessagesContent() {
           id,
           kind: "route-access",
           status: "pending",
+          propertyId: activeConversation.listingId || propertyIdParam || undefined,
           tenantLocation,
         })
       );
+      return true;
     } finally {
       setIsSending(false);
     }
-  };
+  }, [
+    activeConversation,
+    activeConversationId,
+    isSending,
+    propertyIdParam,
+    sendMessageToApi,
+    userId,
+    userHasTenantRole,
+    activeMessages,
+  ]);
+
+  const hasRouteRequestInThread = useMemo(
+    () => activeMessages.some((message) => Boolean(message.routeRequest)),
+    [activeMessages]
+  );
+
+  useEffect(() => {
+    if (intentParam !== "route-access") return;
+    if (!activeConversation || !activeConversationId) return;
+    if (isLoadingConversations || isLoadingMessages) return;
+    const intentKey = `${intentParam}:${activeConversationId}:${propertyIdParam}`;
+    if (handledIntentKeyRef.current === intentKey) return;
+    if (hasRouteRequestInThread) {
+      handledIntentKeyRef.current = intentKey;
+      return;
+    }
+
+    handledIntentKeyRef.current = intentKey;
+    void (async () => {
+      const sent = await sendRouteRequest();
+      if (!sent) {
+        handledIntentKeyRef.current = "";
+      }
+    })();
+  }, [
+    activeConversation,
+    activeConversationId,
+    hasRouteRequestInThread,
+    intentParam,
+    isLoadingConversations,
+    isLoadingMessages,
+    propertyIdParam,
+    sendRouteRequest,
+  ]);
 
   const sendRouteDecision = async (
     id: string,
     status: "approved" | "denied",
-    ttlMinutes?: 5 | 30 | 1440
+    ttlMinutes?: 5 | 30 | 1440,
+    propertyId?: string
   ) => {
     if (!activeConversation || !activeConversationId) return;
     const receiverId =
@@ -407,7 +503,7 @@ function MessagesContent() {
       await sendMessageToApi(
         activeConversationId,
         receiverId,
-        encodeRouteRequest({ id, kind: "route-access", status, ttlMinutes })
+        encodeRouteRequest({ id, kind: "route-access", status, ttlMinutes, propertyId })
       );
     } finally {
       setIsSending(false);
@@ -569,19 +665,19 @@ function MessagesContent() {
             <main data-tour="messages-list" className="flex-1 overflow-y-auto pb-24">
               {isLoadingConversations ? (
                 <ConversationListSkeleton />
-              ) : conversations.length === 0 ? (
+              ) : renderableConversations.length === 0 ? (
                 <EmptyState
                   title={isLandlordContext ? "No tenant messages yet" : "No conversations yet"}
                   message={
                     isLandlordContext
                       ? "When a tenant contacts you about a property, their chat will show up here."
-                      : "Once you like a listing, you can start chatting with the landlord here."
+                      : "Once you contact a landlord about a listing, the chat will show up here."
                   }
                   ctaLabel={isLandlordContext ? "View properties" : "Find listings"}
                   ctaHref={isLandlordContext ? "/dashboard/properties" : "/explore"}
                 />
               ) : (
-                conversations.map((conversation) => (
+                renderableConversations.map((conversation) => (
                   <button
                     key={conversation.id}
                     onClick={() => selectConversation(conversation.id, true)}
@@ -731,7 +827,8 @@ function MessagesContent() {
                                     void sendRouteDecision(
                                       m.routeRequest!.id,
                                       "approved",
-                                      getDurationForRequest(m.routeRequest!.id)
+                                      getDurationForRequest(m.routeRequest!.id),
+                                      m.routeRequest?.propertyId
                                     )
                                   }
                                   className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
@@ -740,7 +837,14 @@ function MessagesContent() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
+                                  onClick={() =>
+                                    void sendRouteDecision(
+                                      m.routeRequest!.id,
+                                      "denied",
+                                      undefined,
+                                      m.routeRequest?.propertyId
+                                    )
+                                  }
                                   className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
                                 >
                                   Deny
@@ -849,7 +953,7 @@ function MessagesContent() {
                     Conversations
                   </h1>
                   <p className="text-sm text-slate-500 mt-0.5">
-                    {conversations.length} chats
+                    {renderableConversations.length} chats
                   </p>
                 </div>
                 <div className="h-10 w-10" />
@@ -885,7 +989,7 @@ function MessagesContent() {
                   {isLoadingConversations ? (
                     <ConversationListSkeleton />
                   ) : (
-                    conversations.map((conversation) => {
+                    renderableConversations.map((conversation) => {
                       const isActive = conversation.id === activeConversationId;
                       return (
                         <button
@@ -951,7 +1055,7 @@ function MessagesContent() {
                 <div className="flex-1 px-8 py-6">
                   <ChatSkeleton />
                 </div>
-              ) : conversations.length === 0 ? (
+              ) : renderableConversations.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center px-8">
                   <EmptyState
                     title={isLandlordContext ? "No tenant messages yet" : "No messages yet"}
@@ -988,7 +1092,92 @@ function MessagesContent() {
                       </div>
                     </div>
 
-                    <div className="h-9 w-9" />
+                    {!isLandlordContext ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={async () => {
+                            if (!activeConversation || isMatchActionPending) return;
+                            if (!isMongoObjectId(activeConversation.id)) {
+                              showToast({
+                                title: "Conversation is not ready yet.",
+                                variant: "error",
+                              });
+                              return;
+                            }
+                            setIsMatchActionPending(true);
+                            try {
+                              const success = await unmatchListing(activeConversation.id);
+                              if (success) {
+                                showToast({
+                                  title: "Unmatched successfully",
+                                  variant: "success",
+                                });
+                              } else {
+                                showToast({
+                                  title: "Could not unmatch. Please try again.",
+                                  variant: "error",
+                                });
+                              }
+                            } finally {
+                              setIsMatchActionPending(false);
+                            }
+                          }}
+                          disabled={!activeConversation || isMatchActionPending}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-rose-500 transition-colors"
+                          title="Unmatch"
+                        >
+                          <Icon name="delete" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!activeConversation || isMatchActionPending) return;
+                            if (!isMongoObjectId(activeConversation.id)) {
+                              showToast({
+                                title: "Conversation is not ready yet.",
+                                variant: "error",
+                              });
+                              return;
+                            }
+                            showToast({
+                              title:
+                                "Are you sure? You're no longer interested. Chat will be removed.",
+                              variant: "info",
+                            });
+                            const confirmed =
+                              typeof window === "undefined"
+                                ? false
+                                : window.confirm(
+                                    "Are you sure? You're no longer interested. This chat will be removed."
+                                  );
+                            if (!confirmed) return;
+                            setIsMatchActionPending(true);
+                            try {
+                              const success = await saveConversation(activeConversation.id);
+                              if (success) {
+                                showToast({
+                                  title: "Conversation saved",
+                                  variant: "success",
+                                });
+                              } else {
+                                showToast({
+                                  title: "Could not save conversation.",
+                                  variant: "error",
+                                });
+                              }
+                            } finally {
+                              setIsMatchActionPending(false);
+                            }
+                          }}
+                          disabled={!activeConversation || isMatchActionPending}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-blue-500 transition-colors"
+                          title="Save Conversation"
+                        >
+                          <Icon name="bookmark" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-9 w-9" />
+                    )}
                   </header>
 
                   <main
@@ -1064,7 +1253,8 @@ function MessagesContent() {
                                               void sendRouteDecision(
                                                 m.routeRequest!.id,
                                                 "approved",
-                                                getDurationForRequest(m.routeRequest!.id)
+                                                getDurationForRequest(m.routeRequest!.id),
+                                                m.routeRequest?.propertyId
                                               )
                                             }
                                             className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white"
@@ -1073,7 +1263,14 @@ function MessagesContent() {
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => void sendRouteDecision(m.routeRequest!.id, "denied")}
+                                            onClick={() =>
+                                              void sendRouteDecision(
+                                                m.routeRequest!.id,
+                                                "denied",
+                                                undefined,
+                                                m.routeRequest?.propertyId
+                                              )
+                                            }
                                             className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white"
                                           >
                                             Deny

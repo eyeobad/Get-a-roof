@@ -46,6 +46,9 @@ export enum MatchStatus {
   TenantLiked = "TenantLiked",
   LandlordQualified = "LandlordQualified",
   ChatInitiated = "ChatInitiated",
+  Active = "Active",
+  Archived = "Archived",
+  Closed = "Closed",
   Dismissed = "Dismissed",
 }
 

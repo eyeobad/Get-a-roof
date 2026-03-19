@@ -118,7 +118,10 @@ export default function MatchesPage() {
           image: listing.image,
           tags: [listingMode],
           primaryTag: listingMode,
-          badge: summary.matchScore ? `${summary.matchScore}%` : undefined,
+          badge:
+            typeof summary.matchScore === "number"
+              ? `${Math.max(0, Math.round(summary.matchScore))}%`
+              : undefined,
           score: summary.matchScore ?? 0,
         };
       })

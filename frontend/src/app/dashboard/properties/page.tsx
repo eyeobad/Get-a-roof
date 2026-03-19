@@ -594,8 +594,7 @@ function LandlordDashboardContent() {
           <Image
             alt="Profile avatar"
             src={
-              user?.photoUrl ||
-              "https://lh3.googleusercontent.com/aida-public/AB6AXuDfCV60c8Lx3OwS6F6pZlph9DX90dUTo4gA-2YMIEaOfPWkF0OHDzVIPspyJrie7yszZDJ8i3bhK9EnT2M8zTDYy8P4IKH2cs9FIy0PJW0j7AukRcImec7aji1iXCosy05vO23XbOMn2NC5IzoLg_4wAEMKJaEeUhUnvhl1H4GoUSg30PBswRZsVoscA5v1ZuxEZ1pALXC3zJGeTCY1-4rsmKIaTCim5Sr4qpQRoBvLxb1TWRGOIuIaZJ3oxRP0qomRnhWGfzJhIm8P"
+              user?.photoUrl || "/avatar-placeholder.svg"
             }
             fill
             className="object-cover"
@@ -622,7 +621,7 @@ function LandlordDashboardContent() {
 
         {isOrgContext ? (
           <section className="space-y-4 rounded-2xl bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3">
               <div>
                 <p className="text-[18px] font-bold text-gray-900">
                   {isOrgOwner ? "Organisation" : "Agent"} Controls
@@ -632,12 +631,12 @@ function LandlordDashboardContent() {
                 </p>
               </div>
 
-              <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+              <div className="inline-flex w-full self-start rounded-xl border border-gray-200 bg-white p-1 sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setPropertyScope("mine")}
                   className={[
-                    "h-9 rounded-lg px-3 text-sm font-bold transition-colors",
+                    "min-w-[112px] h-9 rounded-lg px-3 text-sm font-bold transition-colors",
                     propertyScope === "mine"
                       ? "bg-[#0a44b8] text-white shadow"
                       : "text-gray-600 hover:bg-gray-100",
@@ -650,7 +649,7 @@ function LandlordDashboardContent() {
                   onClick={() => setPropertyScope("all")}
                   disabled={!isOrgOwner}
                   className={[
-                    "h-9 rounded-lg px-3 text-sm font-bold transition-colors",
+                    "min-w-[176px] h-9 rounded-lg px-3 text-sm font-bold transition-colors",
                     propertyScope === "all"
                       ? "bg-[#0a44b8] text-white shadow"
                       : "text-gray-600 hover:bg-gray-100",
