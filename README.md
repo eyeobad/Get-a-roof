@@ -237,7 +237,7 @@ Production notes:
 ## Detailed Architecture, Security, Matching, and Implementation Guide
 > **Audience**: Backend and frontend developers working on this codebase.  
 > **Last Updated**: March 2026  
-> **Stack**: NestJS (backend) · Next.js (frontend) · MongoDB · Firebase Admin SDK · JWT (Passport.js)
+> **Stack**: NestJS (backend) ï¿½ Next.js (frontend) ï¿½ MongoDB ï¿½ Firebase Admin SDK ï¿½ JWT (Passport.js)
 
 ---
 
@@ -297,7 +297,7 @@ User ? Email + Password Form  ?                    ? POST /api/auth/login  ? JWT
 3. **Backend** (`backend/src/auth/firebase-admin.ts`) calls `getFirebaseAuth().verifyIdToken(token)`. This:
    - Validates the token's **cryptographic signature** against Firebase's public keys.
    - Verifies the token is not expired.
-   - Checks the `email_verified` claim — **unverified Google emails are rejected** with a 401.
+   - Checks the `email_verified` claim ï¿½ **unverified Google emails are rejected** with a 401.
    - Extracts `email`, `name`, and `uid` from the decoded payload.
 
 4. Backend then upserts the user in MongoDB and issues a JWT.
@@ -309,14 +309,14 @@ User ? Email + Password Form  ?                    ? POST /api/auth/login  ? JWT
 | Token is authentic | Firebase Admin SDK verifies the RS256 signature |
 | Email is verified | `decoded.email_verified` is checked and enforced |
 | Token cannot be forged | Private key is never sent to the client |
-| `firebaseIdToken` is mandatory | DTO uses `@IsString() @IsNotEmpty()` — requests without it are rejected with 400 |
+| `firebaseIdToken` is mandatory | DTO uses `@IsString() @IsNotEmpty()` ï¿½ requests without it are rejected with 400 |
 
 ### Key Files
 
-- `backend/src/auth/firebase-admin.ts` — initialises Firebase Admin SDK; handles private key parsing from `.env`
-- `backend/src/auth/auth.service.ts` ? `resolveFirebaseIdentity()` — verifies token and extracts identity
-- `backend/src/auth/dto/google-login.dto.ts` — DTO requiring `firebaseIdToken`
-- `frontend/src/lib/firebase.ts` — client-side Firebase SDK and token retrieval
+- `backend/src/auth/firebase-admin.ts` ï¿½ initialises Firebase Admin SDK; handles private key parsing from `.env`
+- `backend/src/auth/auth.service.ts` ? `resolveFirebaseIdentity()` ï¿½ verifies token and extracts identity
+- `backend/src/auth/dto/google-login.dto.ts` ï¿½ DTO requiring `firebaseIdToken`
+- `frontend/src/lib/firebase.ts` ï¿½ client-side Firebase SDK and token retrieval
 
 ### Common Pitfall: Private Key Format
 
@@ -326,7 +326,7 @@ The `FIREBASE_PRIVATE_KEY` in `.env` must be wrapped in double quotes with liter
 # ? Correct
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----"
 
-# ? Wrong — double-escaped, key will be corrupted at runtime
+# ? Wrong ï¿½ double-escaped, key will be corrupted at runtime
 FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\\nMIIE...
 ```
 
@@ -393,13 +393,13 @@ JWTs are signed with `HS256` using the `JWT_SECRET` environment variable. The pa
 
 | Field | Purpose |
 |-------|---------|
-| `sub` | MongoDB User `_id` — used to fetch the user on every request |
+| `sub` | MongoDB User `_id` ï¿½ used to fetch the user on every request |
 | `role` | User's role for RBAC checks |
-| `tv` | Token version — used for instant revocation (see §9) |
+| `tv` | Token version ï¿½ used for instant revocation (see ï¿½9) |
 
 ### Token Expiry
 
-Tokens expire after **7 days** (configured in `backend/src/auth/auth.module.ts`). There is no refresh token mechanism — the user must re-authenticate after expiry.
+Tokens expire after **7 days** (configured in `backend/src/auth/auth.module.ts`). There is no refresh token mechanism ï¿½ the user must re-authenticate after expiry.
 
 > If you add a refresh token system in the future, store the refresh token as a hashed value in MongoDB (same pattern as password reset tokens) and rotate on each use.
 
@@ -409,11 +409,11 @@ Every protected endpoint triggers `JwtStrategy.validate()` (`backend/src/auth/jw
 
 1. Extracts `sub` (userId) from the payload.
 2. **Fetches the user from MongoDB** (live check, not just token claims).
-3. **Rejects suspended users immediately** — `isSuspended: true` returns 401.
-4. **Checks token version** — if `payload.tv !== user.tokenVersion`, the token has been revoked.
+3. **Rejects suspended users immediately** ï¿½ `isSuspended: true` returns 401.
+4. **Checks token version** ï¿½ if `payload.tv !== user.tokenVersion`, the token has been revoked.
 5. Returns the user context (`sub`, `email`, `role`) to the request object.
 
-This live DB check on every request is intentional — it enables server-driven security (instant suspension/revocation) at the cost of one DB read per request.
+This live DB check on every request is intentional ï¿½ it enables server-driven security (instant suspension/revocation) at the cost of one DB read per request.
 
 ---
 
@@ -429,11 +429,11 @@ OTPs are used for:
 | Property | Implementation |
 |----------|---------------|
 | **Not stored in plaintext** | HMAC-SHA256 hash stored: `createHmac("sha256", OTP_SECRET).update("email:{userId}:{otp}").digest("hex")` |
-| **6-digit, random** | `randomInt(100000, 1000000)` — uses `crypto.randomInt`, not `Math.random` |
-| **10-minute TTL** | `otpTtlMs = 10 * 60 * 1000` — expired OTPs are cleared on first access |
+| **6-digit, random** | `randomInt(100000, 1000000)` ï¿½ uses `crypto.randomInt`, not `Math.random` |
+| **10-minute TTL** | `otpTtlMs = 10 * 60 * 1000` ï¿½ expired OTPs are cleared on first access |
 | **Rate-limited attempts** | Max 5 attempts; after 5 wrong guesses the OTP is invalidated |
-| **Timing-safe comparison** | `timingSafeEqual()` used — prevents timing attacks |
-| **Channel scoping** | Hash includes channel (`email` / `phone`) — prevents cross-channel replay |
+| **Timing-safe comparison** | `timingSafeEqual()` used ï¿½ prevents timing attacks |
+| **Channel scoping** | Hash includes channel (`email` / `phone`) ï¿½ prevents cross-channel replay |
 
 ### OTP Secret
 
@@ -445,7 +445,7 @@ Set `OTP_SECRET` in `.env`. If unset, it falls back to `JWT_SECRET`. The fallbac
 
 ```
 POST /api/auth/request-password-reset  (email)
-  +- User looked up silently (no error if email not found — prevents enumeration)
+  +- User looked up silently (no error if email not found ï¿½ prevents enumeration)
   +- Cryptographically random 32-char hex token generated
   +- Token HASHED with HMAC-SHA256 before DB storage
   +- Reset URL with raw token emailed to user
@@ -522,9 +522,9 @@ const recaptchaToken = await grecaptcha.execute(siteKey, { action: "tenant_signu
 
 `UsersService.assertRecaptchaToken()` (`backend/src/users/users.service.ts`):
 1. POSTs the token to Google's verification endpoint.
-2. Checks `result.success` — if false, throws 400.
-3. Checks `result.action` — must be `tenant_signup` or `landlord_signup` (configurable via `RECAPTCHA_EXPECTED_ACTION`).
-4. Checks `result.score` — must be = 0.5 (configurable via `RECAPTCHA_MIN_SCORE`).
+2. Checks `result.success` ï¿½ if false, throws 400.
+3. Checks `result.action` ï¿½ must be `tenant_signup` or `landlord_signup` (configurable via `RECAPTCHA_EXPECTED_ACTION`).
+4. Checks `result.score` ï¿½ must be = 0.5 (configurable via `RECAPTCHA_MIN_SCORE`).
 
 ### Environment Variables
 
@@ -569,8 +569,8 @@ New JWTs issued after the increment will carry `tv: 1` and will pass validation.
 ### Backend
 
 Two guards work together:
-- `JwtAuthGuard` (`backend/src/common/guards/jwt-auth.guard.ts`) — validates the JWT and populates `req.user`.
-- `RolesGuard` (`backend/src/common/guards/roles.guard.ts`) — checks `req.user.role` against the `@Roles()` decorator.
+- `JwtAuthGuard` (`backend/src/common/guards/jwt-auth.guard.ts`) ï¿½ validates the JWT and populates `req.user`.
+- `RolesGuard` (`backend/src/common/guards/roles.guard.ts`) ï¿½ checks `req.user.role` against the `@Roles()` decorator.
 
 Usage pattern:
 
@@ -590,7 +590,7 @@ Available roles (`backend/src/common/enums.ts`): `Tenant`, `Landlord`, `Admin`, 
 2. Redirects unauthenticated users to `/login`.
 3. Enforces role-based routing (e.g., landlords can't access `/explore`, tenants can't access `/dashboard`).
 
-> The frontend middleware is a UX guard only. **Always enforce permissions on the backend** — the frontend can be bypassed.
+> The frontend middleware is a UX guard only. **Always enforce permissions on the backend** ï¿½ the frontend can be bypassed.
 
 ---
 
@@ -646,7 +646,7 @@ Profile photo uploads (`POST /api/users/:id/photo`) are validated in `UsersServi
 
 - **MIME type whitelist**: Only `image/jpeg`, `image/png`, `image/webp`, `image/gif` are accepted.
 - **Size limit**: Multer is configured with a maximum file size.
-- Files are uploaded to **Appwrite Storage** — they are never stored on the backend server's filesystem.
+- Files are uploaded to **Appwrite Storage** ï¿½ they are never stored on the backend server's filesystem.
 
 ---
 
@@ -677,7 +677,7 @@ Profile photo uploads (`POST /api/users/:id/photo`) are validated in `UsersServi
 
 ### Rules
 
-- **Never commit `.env` files** — both `.gitignore` files exclude them correctly.
+- **Never commit `.env` files** ï¿½ both `.gitignore` files exclude them correctly.
 - **Never expose `FIREBASE_PRIVATE_KEY` or `JWT_SECRET` to the client**.
 - Rotate `JWT_SECRET` by incrementing all users' `tokenVersion` first (to invalidate existing tokens), changing the secret, then deploying.
 
@@ -698,7 +698,7 @@ When the backend returns `401` or `403`, `apiFetch()` in `frontend/src/lib/api.t
 
 ### Location Permission
 
-Location is requested via `navigator.geolocation` after login. This is **optional** — if the user denies it, they can still use the app. Location denial is silently caught and the redirect to `/explore` or `/dashboard` proceeds normally. Location-based features (nearby listings, map view) will simply not show distance-sorted results.
+Location is requested via `navigator.geolocation` after login. This is **optional** ï¿½ if the user denies it, they can still use the app. Location denial is silently caught and the redirect to `/explore` or `/dashboard` proceeds normally. Location-based features (nearby listings, map view) will simply not show distance-sorted results.
 
 ---
 
@@ -720,52 +720,52 @@ When adding a new backend endpoint, go through this checklist:
 
 ```
                         +-----------------------------+
-                        ¦        FRONTEND (Next.js)    ¦
-                        ¦                              ¦
-                        ¦  Pages ? Zustand Store       ¦
-                        ¦  middleware.ts (JWT verify)  ¦
-                        ¦  /api/auth/session (cookie)  ¦
+                        ï¿½        FRONTEND (Next.js)    ï¿½
+                        ï¿½                              ï¿½
+                        ï¿½  Pages ? Zustand Store       ï¿½
+                        ï¿½  middleware.ts (JWT verify)  ï¿½
+                        ï¿½  /api/auth/session (cookie)  ï¿½
                         +-----------------------------+
-                                     ¦ HTTPS
+                                     ï¿½ HTTPS
                         +------------?----------------+
-                        ¦       BACKEND (NestJS)       ¦
-                        ¦                              ¦
-                        ¦  ThrottlerGuard (rate limit) ¦
-                        ¦  ValidationPipe (DTO)        ¦
-                        ¦  mongo-sanitize (NoSQL)      ¦
-                        ¦  Helmet (HTTP headers)       ¦
-                        ¦                              ¦
-                        ¦  +----------------------+   ¦
-                        ¦  ¦  AuthController       ¦   ¦
-                        ¦  ¦  - POST /login        ¦   ¦
-                        ¦  ¦  - POST /google       ¦   ¦
-                        ¦  ¦  - POST /otp          ¦   ¦
-                        ¦  ¦  - POST /reset        ¦   ¦
-                        ¦  +----------------------+   ¦
-                        ¦             ¦               ¦
-                        ¦  +----------?-----------+   ¦
-                        ¦  ¦  JwtStrategy          ¦   ¦
-                        ¦  ¦  - DB user fetch      ¦   ¦
-                        ¦  ¦  - Suspension check   ¦   ¦
-                        ¦  ¦  - TokenVersion check ¦   ¦
-                        ¦  +----------------------+   ¦
-                        ¦             ¦               ¦
-                        ¦  +----------?-----------+   ¦
-                        ¦  ¦  Match Engine         ¦   ¦
-                        ¦  ¦  - 5-dim scoring      ¦   ¦
-                        ¦  ¦  - State machine      ¦   ¦
-                        ¦  ¦  - Smart recycling    ¦   ¦
-                        ¦  ¦  - Pagination         ¦   ¦
-                        ¦  +----------------------+   ¦
+                        ï¿½       BACKEND (NestJS)       ï¿½
+                        ï¿½                              ï¿½
+                        ï¿½  ThrottlerGuard (rate limit) ï¿½
+                        ï¿½  ValidationPipe (DTO)        ï¿½
+                        ï¿½  mongo-sanitize (NoSQL)      ï¿½
+                        ï¿½  Helmet (HTTP headers)       ï¿½
+                        ï¿½                              ï¿½
+                        ï¿½  +----------------------+   ï¿½
+                        ï¿½  ï¿½  AuthController       ï¿½   ï¿½
+                        ï¿½  ï¿½  - POST /login        ï¿½   ï¿½
+                        ï¿½  ï¿½  - POST /google       ï¿½   ï¿½
+                        ï¿½  ï¿½  - POST /otp          ï¿½   ï¿½
+                        ï¿½  ï¿½  - POST /reset        ï¿½   ï¿½
+                        ï¿½  +----------------------+   ï¿½
+                        ï¿½             ï¿½               ï¿½
+                        ï¿½  +----------?-----------+   ï¿½
+                        ï¿½  ï¿½  JwtStrategy          ï¿½   ï¿½
+                        ï¿½  ï¿½  - DB user fetch      ï¿½   ï¿½
+                        ï¿½  ï¿½  - Suspension check   ï¿½   ï¿½
+                        ï¿½  ï¿½  - TokenVersion check ï¿½   ï¿½
+                        ï¿½  +----------------------+   ï¿½
+                        ï¿½             ï¿½               ï¿½
+                        ï¿½  +----------?-----------+   ï¿½
+                        ï¿½  ï¿½  Match Engine         ï¿½   ï¿½
+                        ï¿½  ï¿½  - 5-dim scoring      ï¿½   ï¿½
+                        ï¿½  ï¿½  - State machine      ï¿½   ï¿½
+                        ï¿½  ï¿½  - Smart recycling    ï¿½   ï¿½
+                        ï¿½  ï¿½  - Pagination         ï¿½   ï¿½
+                        ï¿½  +----------------------+   ï¿½
                         +------------+----------------+
-                                     ¦
+                                     ï¿½
               +----------------------+----------------------+
-              ¦                      ¦                       ¦
+              ï¿½                      ï¿½                       ï¿½
    +----------?----------+  +-------?--------+  +---------?--------+
-   ¦   MongoDB (Mongoose) ¦  ¦ Firebase Admin ¦  ¦  Google reCAPTCHA¦
-   ¦   - Users            ¦  ¦ (token verify) ¦  ¦  (bot protection)¦
-   ¦   - Properties       ¦  +----------------+  +------------------+
-   ¦   - Matches          ¦
+   ï¿½   MongoDB (Mongoose) ï¿½  ï¿½ Firebase Admin ï¿½  ï¿½  Google reCAPTCHAï¿½
+   ï¿½   - Users            ï¿½  ï¿½ (token verify) ï¿½  ï¿½  (bot protection)ï¿½
+   ï¿½   - Properties       ï¿½  +----------------+  +------------------+
+   ï¿½   - Matches          ï¿½
    +---------------------+
 ```
 
@@ -779,7 +779,7 @@ This section documents the matching algorithm used to score tenant-property comp
 
 | File | Purpose |
 |------|---------|
-| `backend/src/common/utils/match.utils.ts` | Core scoring engine — all score computations |
+| `backend/src/common/utils/match.utils.ts` | Core scoring engine ï¿½ all score computations |
 | `backend/src/matches/matches.service.ts` | Match CRUD, state machine, recycling logic |
 | `backend/src/matches/matches.controller.ts` | REST endpoints |
 | `backend/src/matches/schemas/match.schema.ts` | MongoDB schema with indexes |
@@ -792,11 +792,11 @@ This section documents the matching algorithm used to score tenant-property comp
 Every match is scored across **five weighted dimensions**:
 
 ```
-matchScore = preferences × 0.30
-           + apartmentType × 0.20
-           + location × 0.25
-           + amenity × 0.10
-           + affordability × 0.15
+matchScore = preferences ï¿½ 0.30
+           + apartmentType ï¿½ 0.20
+           + location ï¿½ 0.25
+           + amenity ï¿½ 0.10
+           + affordability ï¿½ 0.15
 ```
 
 Weights are configurable via the `DEFAULT_MATCH_WEIGHTS` constant in `match.utils.ts`.
@@ -827,13 +827,13 @@ Uses the **haversine formula** to calculate the great-circle distance (in km) be
 
 | Distance (% of max radius) | Score |
 |-----------------------------|-------|
-| = 25% | **100** — very close |
+| = 25% | **100** ï¿½ very close |
 | = 50% | **85** |
 | = 75% | **65** |
-| = 100% | **40** — at the edge |
-| = 150% | **20** — slightly beyond |
-| > 150% | **10** — far |
-| No coordinates available | **50** — neutral (no penalty) |
+| = 100% | **40** ï¿½ at the edge |
+| = 150% | **20** ï¿½ slightly beyond |
+| > 150% | **10** ï¿½ far |
+| No coordinates available | **50** ï¿½ neutral (no penalty) |
 
 Default max radius: 20 km if tenant has not specified `maxCommuteRadius`.
 
@@ -842,7 +842,7 @@ Default max radius: 20 km if tenant has not specified `maxCommuteRadius`.
 Compares the tenant's `desiredAmenities` list against the property's `amenities` array:
 
 ```
-amenityScore = (matching amenities / total desired amenities) × 100
+amenityScore = (matching amenities / total desired amenities) ï¿½ 100
 ```
 
 | Scenario | Score |
@@ -854,7 +854,7 @@ amenityScore = (matching amenities / total desired amenities) × 100
 
 #### 17.1.4 Affordability Gradient
 
-Based on the **rent-to-income ratio** (monthly rent ÷ (annual earnings / 12 / 3)):
+Based on the **rent-to-income ratio** (monthly rent ï¿½ (annual earnings / 12 / 3)):
 
 | Ratio of rent to affordable threshold | Score | Meaning |
 |---------------------------------------|-------|---------|
@@ -869,7 +869,7 @@ Based on the **rent-to-income ratio** (monthly rent ÷ (annual earnings / 12 / 3)
 
 Compares landlord's `idealTenantPreferences` against the tenant's profile across: `employmentStatus`, `maritalStatus`, `vehicles`, `smokingHabits`, `drinkingHabits`, `religionPreference`, `educationLevel`, `socialHabits`, `hasChildren`. Also checks income range and pet compatibility.
 
-Score = `(matched criteria / considered criteria) × 100`. If no requirements are set, defaults to 100%.
+Score = `(matched criteria / considered criteria) ï¿½ 100`. If no requirements are set, defaults to 100%.
 
 ---
 
@@ -879,23 +879,23 @@ Matches follow a strict state machine. Invalid transitions are rejected with `40
 
 ```
                     +-----------------+
-                    ¦   TenantLiked   ¦
+                    ï¿½   TenantLiked   ï¿½
                     +----------------+
-                       ¦      ¦   ¦
-         +-------------?--+   ¦   ¦
-         ¦ LandlordQualified¦   ¦   ¦
-         +----------------+   ¦   ¦
-            ¦                 ¦   ¦
-    +-------?------+         ¦   ¦
-    ¦ ChatInitiated ¦?--------+   ¦
-    +--------------+              ¦
-           ¦                      ¦
+                       ï¿½      ï¿½   ï¿½
+         +-------------?--+   ï¿½   ï¿½
+         ï¿½ LandlordQualifiedï¿½   ï¿½   ï¿½
+         +----------------+   ï¿½   ï¿½
+            ï¿½                 ï¿½   ï¿½
+    +-------?------+         ï¿½   ï¿½
+    ï¿½ ChatInitiated ï¿½?--------+   ï¿½
+    +--------------+              ï¿½
+           ï¿½                      ï¿½
     +------?----------------------?--+
-    ¦           Dismissed            ¦
-    ¦   (Soft ? recyclable)          ¦
-    ¦   (Hard ? permanent block)     ¦
+    ï¿½           Dismissed            ï¿½
+    ï¿½   (Soft ? recyclable)          ï¿½
+    ï¿½   (Hard ? permanent block)     ï¿½
     +-------------------------------+
-                 ¦ recycle (Soft only)
+                 ï¿½ recycle (Soft only)
                  ?
            TenantLiked (recycled)
 ```
@@ -920,7 +920,7 @@ When a tenant runs out of new properties to swipe, dismissed listings can be rec
 | Type | Enum | Behaviour |
 |------|------|-----------|
 | **Soft dismiss** | `DismissReason.Soft` | Recyclable after a 14-day cooldown |
-| **Hard block** | `DismissReason.Hard` | Permanently excluded — never re-shown |
+| **Hard block** | `DismissReason.Hard` | Permanently excluded ï¿½ never re-shown |
 
 Default dismiss is `Soft` unless the tenant explicitly calls the hard-block endpoint.
 
@@ -954,12 +954,12 @@ Each match tracks `recycleCount` to monitor how many times it has been re-shown.
 | `tenantId` | ObjectId | Tenant who swiped |
 | `propertyId` | ObjectId | Property that was swiped |
 | `status` | MatchStatus | Current state (see state machine) |
-| `matchScore` | Number | Composite weighted score (0–100) |
+| `matchScore` | Number | Composite weighted score (0ï¿½100) |
 | `preferencesMatchPercentage` | Number | Landlord requirement match % |
 | `apartmentPreferenceMatchPercentage` | Number | Property type match % |
-| `locationScore` | Number | Geo proximity score (0–100) |
-| `amenityScore` | Number | Amenity overlap score (0–100) |
-| `affordabilityScore` | Number | Rent-to-income affordability (0–100) |
+| `locationScore` | Number | Geo proximity score (0ï¿½100) |
+| `amenityScore` | Number | Amenity overlap score (0ï¿½100) |
+| `affordabilityScore` | Number | Rent-to-income affordability (0ï¿½100) |
 | `dismissedAt` | Date | When the match was dismissed |
 | `dismissReason` | DismissReason | Soft (recyclable) or Hard (permanent) |
 | `recycleCount` | Number | How many times this match was recycled |
@@ -995,12 +995,12 @@ All list endpoints support **pagination** (`?page=1&limit=20`, max 100 per page)
 
 All match queries use **native ObjectId comparisons** (not `$toString`/`$expr`), which allows MongoDB to fully utilise the compound indexes defined above. This is critical for query performance at scale.
 
-**Before** (slow — full collection scan):
+**Before** (slow ï¿½ full collection scan):
 ```javascript
 $expr: { $eq: [{ $toString: "$propertyId" }, propertyIdString] }
 ```
 
-**After** (fast — uses index):
+**After** (fast ï¿½ uses index):
 ```javascript
 { propertyId: new Types.ObjectId(propertyId) }
 ```
