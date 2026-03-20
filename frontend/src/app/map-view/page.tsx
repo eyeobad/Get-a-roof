@@ -539,7 +539,7 @@ function MapCanvas({
             "line-cap": "round",
           },
           paint: {
-            "line-color": "#16a34a",
+            "line-color": "#0a44b8",
             "line-width": 5,
             "line-opacity": 0.82,
           },
@@ -638,6 +638,7 @@ function MapCanvas({
 
       points.forEach((point) => {
         if (!point.isExact) return;
+        if (routeEndpoints && point.index === activeIndex) return;
         const markerEl = document.createElement("div");
         markerEl.className = "map-price-marker map-dot-marker";
         markerEl.textContent = "";
@@ -681,7 +682,7 @@ function MapCanvas({
     return () => {
       map.off("load", renderMapPoints);
     };
-  }, [points, activeIndex, onSelect]);
+  }, [points, activeIndex, onSelect, routeEndpoints]);
 
   useEffect(() => {
     const map = mapRef.current;
