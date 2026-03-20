@@ -1736,16 +1736,7 @@ export const useAppStore = create<AppState>()(
                 await get().createMatchForListing(listingId, false, "Soft");
                 scheduleMatchesReload(get().loadMatches);
               },
-              () => {
-                set((current) => ({
-                  likedIds: current.likedIds.includes(listingId)
-                    ? current.likedIds
-                    : [...current.likedIds, listingId],
-                  suppressedMatchListingIds: current.suppressedMatchListingIds.filter(
-                    (id) => id !== listingId
-                  ),
-                }));
-              }
+              () => {}
             );
           });
         }

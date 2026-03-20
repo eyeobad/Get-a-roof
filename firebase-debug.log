@@ -1,0 +1,6 @@
+[debug] [2026-03-20T13:44:14.326Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-20T13:44:14.339Z] > authorizing via signed-in user (ogudavictor492@gmail.com)
+[debug] [2026-03-20T13:44:14.343Z] Checked if tokens are valid: true, expires at: 1774016857593
+[debug] [2026-03-20T13:44:14.344Z] Checked if tokens are valid: true, expires at: 1774016857593
+[debug] [2026-03-20T13:44:14.347Z] >>> [apiv2][query] GET https://cloudbilling.googleapis.com/v1/projects/get-a-roof-fa009/billingInfo [none]
+[debug] [2026-03-20T13:44:16.559Z] <<< [apiv2][status] GET https://cloudbilling.googleapis.com/v1/projects/get-a-roof-fa009/billingInfo 200

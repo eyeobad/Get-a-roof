@@ -1259,3 +1259,33 @@ Relevant files:
 - `frontend/src/app/facial-verification/page.tsx`
 - `frontend/src/app/auth/email-verification/page.tsx`
 - `backend/src/auth/auth.service.ts`
+
+### 18.12 Didit Verification Setup (Landlord)
+
+Frontend env (`frontend/.env.local`):
+
+```env
+NEXT_PUBLIC_DIDIT_LANDLORD_VERIFICATION_URL=https://verify.didit.me/u/...
+```
+
+Didit workflow callback URL examples:
+
+- Local: `http://localhost:3000/auth/verification-success?next=/dashboard/overview`
+- Production: `https://your-domain.com/auth/verification-success?next=/dashboard/overview`
+
+Implementation summary:
+
+- Landlord onboarding and profile verification CTA launch Didit first (with `/verify-identity` fallback when env is missing)
+- Verification-success route now supports outcome branching for success/failed/abandoned flows
+- Explore controls and tutorial were updated to the new `Rewind / Pass / Interested` layout and targeting
+
+Relevant files:
+
+- `frontend/src/lib/didit.ts`
+- `frontend/src/app/auth/email-verification/page.tsx`
+- `frontend/src/app/auth/verification-success/page.tsx`
+- `frontend/src/app/landlord-signup/page.tsx`
+- `frontend/src/app/dashboard/profile/page.tsx`
+- `frontend/src/app/explore/page.tsx`
+- `frontend/src/components/ExploreTutorial.tsx`
+- `frontend/src/components/PreferenceTutorial.tsx`

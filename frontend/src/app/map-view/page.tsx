@@ -327,9 +327,11 @@ function MapSkeleton({ isMobile }: { isMobile?: boolean }) {
 function PropertyCard({
   item,
   onToggleSave,
+  isSavePending = false,
 }: {
   item: ListingCard;
-  onToggleSave?: (id: string) => void;
+  onToggleSave?: (id: string) => Promise<void> | void;
+  isSavePending?: boolean;
 }) {
   return (
     <article className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden group cursor-pointer transform transition active:scale-[0.99]">
@@ -346,7 +348,8 @@ function PropertyCard({
             event.stopPropagation();
             onToggleSave?.(item.id);
           }}
-          className="absolute top-3 right-3 h-9 w-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-full shadow-sm border border-white/50 hover:bg-white hover:scale-105 active:scale-95 transition-all duration-200 z-10"
+          disabled={isSavePending}
+          className="absolute top-3 right-3 h-9 w-9 flex items-center justify-center bg-white/90 backdrop-blur-md rounded-full shadow-sm border border-white/50 hover:bg-white hover:scale-105 active:scale-95 transition-all duration-200 z-10 disabled:cursor-not-allowed disabled:opacity-55"
           aria-label={item.isSaved ? "Remove saved listing" : "Save listing"}
         >
           <span className={`material-symbols-outlined text-[20px] transition-colors duration-200 ${item.isSaved ? "text-red-500 fill-current" : "text-gray-600"}`}>
@@ -528,20 +531,6 @@ function MapCanvas({
           data: { type: "FeatureCollection", features: [] },
         });
         map.addLayer({
-          id: "route-line-shadow",
-          type: "line",
-          source: "route",
-          layout: {
-            "line-join": "round",
-            "line-cap": "round",
-          },
-          paint: {
-            "line-color": "#1e3a8a",
-            "line-width": 8,
-            "line-opacity": 0.18,
-          },
-        });
-        map.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
@@ -550,9 +539,9 @@ function MapCanvas({
             "line-cap": "round",
           },
           paint: {
-            "line-color": "#0a44b8",
+            "line-color": "#16a34a",
             "line-width": 5,
-            "line-opacity": 0.85,
+            "line-opacity": 0.82,
           },
         });
       }
@@ -708,18 +697,18 @@ function MapCanvas({
       el.style.borderRadius = "999px";
       el.style.background = color;
       el.style.border = "3px solid #fff";
-      el.style.boxShadow = "0 8px 16px rgba(15,23,42,0.25)";
+      el.style.boxShadow = "0 3px 8px rgba(15,23,42,0.18)";
       el.setAttribute("aria-label", label);
       return el;
     };
 
     const originMarker = new mapboxgl.Marker({
-      element: makeMarkerEl("#16a34a", "Route origin"),
+      element: makeMarkerEl("#2563eb", "Your location"),
     })
       .setLngLat([routeEndpoints.origin.lng, routeEndpoints.origin.lat])
       .addTo(map);
     const destinationMarker = new mapboxgl.Marker({
-      element: makeMarkerEl("#dc2626", "Route destination"),
+      element: makeMarkerEl("#16a34a", "Route destination"),
     })
       .setLngLat([routeEndpoints.destination.lng, routeEndpoints.destination.lat])
       .addTo(map);
@@ -832,6 +821,7 @@ function MapViewContent() {
   const [routingProfile, setRoutingProfile] = useState<"driving" | "walking" | "cycling">("driving");
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
+  const [pendingSaveListingIds, setPendingSaveListingIds] = useState<string[]>([]);
   const [mapError, setMapError] = useState<string | null>(null);
   const [routeMetrics, setRouteMetrics] = useState<RouteMetrics | null>(null);
   const [routeEndpoints, setRouteEndpoints] = useState<RouteEndpoints | null>(null);
@@ -1064,6 +1054,19 @@ function MapViewContent() {
     desktopMapRef.current = map;
     setMapError(null);
   }, []);
+
+  const handleToggleSave = useCallback(
+    async (listingId: string) => {
+      if (pendingSaveListingIds.includes(listingId)) return;
+      setPendingSaveListingIds((prev) => [...prev, listingId]);
+      try {
+        await toggleLikeListing(listingId);
+      } finally {
+        setPendingSaveListingIds((prev) => prev.filter((id) => id !== listingId));
+      }
+    },
+    [pendingSaveListingIds, toggleLikeListing]
+  );
 
   const handleMapStatus = useCallback(() => { }, []);
 
@@ -1554,7 +1557,8 @@ function MapViewContent() {
                 <PropertyCard
                   key={item.id}
                   item={item}
-                  onToggleSave={toggleLikeListing}
+                  onToggleSave={handleToggleSave}
+                  isSavePending={pendingSaveListingIds.includes(item.id)}
                 />
               ))
             )}
@@ -1599,7 +1603,8 @@ function MapViewContent() {
                 <PropertyCard
                   key={item.id}
                   item={item}
-                  onToggleSave={toggleLikeListing}
+                  onToggleSave={handleToggleSave}
+                  isSavePending={pendingSaveListingIds.includes(item.id)}
                 />
               ))
             )}
