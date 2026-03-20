@@ -335,9 +335,10 @@ const runSwipeMutation = async (
       }
       markSwipeMutation(key, "failed", attempts);
       onPermanentFailure();
-      return;
+      throw error instanceof Error ? error : new Error("Swipe mutation failed");
     }
   }
+  throw new Error("Swipe mutation exceeded retry window");
 };
 
 const scheduleMatchesReload = (loadMatches: () => Promise<void>, delayMs = 250) => {
@@ -1618,7 +1619,7 @@ export const useAppStore = create<AppState>()(
         }
 
         if (state.authToken && isMongoId(listingId)) {
-          void enqueueListingMutation(async () => {
+          await enqueueListingMutation(async () => {
             const currentState = get();
             if (!currentState.likedIds.includes(listingId) && !alreadyLiked) return;
             await runSwipeMutation(
@@ -1842,7 +1843,7 @@ export const useAppStore = create<AppState>()(
         });
 
         if (state.authToken && isMongoId(listingId)) {
-          void enqueueListingMutation(async () => {
+          await enqueueListingMutation(async () => {
             await runSwipeMutation(
               `pass:${listingId}`,
               async () => {

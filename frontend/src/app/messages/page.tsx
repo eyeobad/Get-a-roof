@@ -233,7 +233,6 @@ function MessagesContent() {
     fromParam.startsWith("/dashboard") || pathname?.startsWith("/dashboard");
   const storeConversations = useAppStore((state) => state.conversations);
   const threadsById = useAppStore((state) => state.threadsById);
-  const listingsById = useAppStore((state) => state.listingsById);
   const messagesByMatch = useAppStore((state) => state.messagesByMatch);
   const loadConversations = useAppStore((state) => state.loadConversations);
   const loadMessagesForMatch = useAppStore((state) => state.loadMessagesForMatch);
@@ -270,7 +269,6 @@ function MessagesContent() {
     }
     const thread = threadsById[threadParam];
     const listingId = thread?.listingId;
-    const listing = listingId ? listingsById[listingId] : undefined;
     return {
       id: threadParam,
       listingId,
@@ -281,7 +279,7 @@ function MessagesContent() {
       tenantId: isLandlordContext ? undefined : userId ?? undefined,
       landlordId: isLandlordContext ? userId ?? undefined : undefined,
     };
-  }, [threadParam, conversations, threadsById, listingsById, isLandlordContext, userId]);
+  }, [threadParam, conversations, threadsById, isLandlordContext, userId]);
 
   const renderableConversations = useMemo(
     () =>

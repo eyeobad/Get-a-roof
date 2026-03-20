@@ -34,6 +34,7 @@ type DeckAction =
       bufferQueue: Listing[];
     }
   | { type: "SWIPE_COMMITTED"; cardId: string; fallbackQueue?: Listing[] }
+  | { type: "ROLLBACK_SWIPE"; listing: Listing }
   | { type: "ERROR"; message: string };
 
 type TenantPrefs = {
@@ -57,6 +58,7 @@ type ExploreDeckControllerResult = {
   hasRenderedCards: boolean;
   errorMessage: string | null;
   commitSwipe: (cardId: string) => void;
+  rollbackSwipe: (listing: Listing) => void;
 };
 
 type ExploreApiProperty = Parameters<typeof mapPropertyToListing>[0];
@@ -97,6 +99,24 @@ const splitVisibleAndBuffer = (listings: Listing[]) => ({
 
 const buildRenderStack = (visibleQueue: Listing[], bufferQueue: Listing[]) =>
   dedupeListings([...visibleQueue, ...bufferQueue]).slice(0, 3);
+
+const rebuildWithRestoredListing = (state: DeckState, listing: Listing) => {
+  const visibleWithout = state.visibleQueue.filter((item) => item.id !== listing.id);
+  const bufferWithout = state.bufferQueue.filter((item) => item.id !== listing.id);
+  const nextVisibleCombined = [listing, ...visibleWithout];
+  const visibleQueue = nextVisibleCombined.slice(0, INITIAL_VISIBLE_BATCH_SIZE);
+  const overflow = nextVisibleCombined.slice(INITIAL_VISIBLE_BATCH_SIZE);
+  const bufferQueue = dedupeListings([...overflow, ...bufferWithout]);
+  return {
+    ...state,
+    phase: "ready" as const,
+    visibleQueue,
+    bufferQueue,
+    renderStack: buildRenderStack(visibleQueue, bufferQueue),
+    hasRenderedCards: true,
+    errorMessage: null,
+  };
+};
 
 function deckReducer(state: DeckState, action: DeckAction): DeckState {
   switch (action.type) {
@@ -210,6 +230,8 @@ function deckReducer(state: DeckState, action: DeckAction): DeckState {
         phase: "swapping",
       };
     }
+    case "ROLLBACK_SWIPE":
+      return rebuildWithRestoredListing(state, action.listing);
     case "ERROR":
       return {
         ...state,
@@ -374,9 +396,19 @@ export function useExploreDeckController({
       };
     }
 
+    const shouldAllowRecycle =
+      currentState.visibleQueue.length === 0 && currentState.bufferQueue.length === 0;
+    if (!shouldAllowRecycle) {
+      return { bufferQueue: [] };
+    }
+
+    // Start a new swipe session only when the active deck is exhausted.
+    consumedIdsRef.current.clear();
+
     const recycledListings = dedupeListings(
       (await fetchRecycledBatch(authToken)).filter(
-        (listing) => !activeIds.has(listing.id)
+        (listing) =>
+          !activeIds.has(listing.id) && !consumedIdsRef.current.has(listing.id)
       )
     );
 
@@ -397,7 +429,8 @@ export function useExploreDeckController({
       ...latestState.bufferQueue.map((listing) => listing.id),
     ]);
     const replayCandidates = replayListingsRef.current.filter(
-      (listing) => !latestActiveIds.has(listing.id)
+      (listing) =>
+        !latestActiveIds.has(listing.id) && !consumedIdsRef.current.has(listing.id)
     );
     if (replayCandidates.length > 0) {
       const offset = replayCursorRef.current % replayCandidates.length;
@@ -519,20 +552,12 @@ export function useExploreDeckController({
 
   const commitSwipe = (cardId: string) => {
     consumedIdsRef.current.add(cardId);
-    const latestState = stateRef.current;
-    const needsImmediateFallback =
-      latestState.visibleQueue.length === 1 && latestState.bufferQueue.length === 0;
+    dispatch({ type: "SWIPE_COMMITTED", cardId });
+  };
 
-    const fallbackQueue = needsImmediateFallback
-      ? replayListingsRef.current.filter(
-          (listing) =>
-            listing.id !== cardId &&
-            !latestState.visibleQueue.some((activeListing) => activeListing.id === listing.id) &&
-            !latestState.bufferQueue.some((activeListing) => activeListing.id === listing.id)
-        )
-      : undefined;
-
-    dispatch({ type: "SWIPE_COMMITTED", cardId, fallbackQueue });
+  const rollbackSwipe = (listing: Listing) => {
+    consumedIdsRef.current.delete(listing.id);
+    dispatch({ type: "ROLLBACK_SWIPE", listing });
   };
 
   return {
@@ -542,5 +567,6 @@ export function useExploreDeckController({
     hasRenderedCards: state.hasRenderedCards,
     errorMessage: state.errorMessage,
     commitSwipe,
+    rollbackSwipe,
   };
 }

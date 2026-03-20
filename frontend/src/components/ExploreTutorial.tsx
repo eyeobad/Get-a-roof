@@ -19,16 +19,25 @@ export default function ExploreTutorial({ ready }: ExploreTutorialProps) {
         content: "This is where you browse listings that fit your preferences.",
       },
       {
+        target: '[data-tour="explore-rewind"]',
+        title: "Rewind",
+        content: "Bring back your last action if you tapped the wrong decision.",
+        disableBeacon: true,
+        placement: "top",
+      },
+      {
         target: '[data-tour="explore-pass"]',
         title: "Pass",
         content: "Skip a listing with one tap or swipe left.",
         disableBeacon: true,
+        placement: "top",
       },
       {
         target: '[data-tour="explore-like"]',
         title: "Interested",
         content: "Tap Interested or swipe right to keep a listing in your match flow.",
         disableBeacon: true,
+        placement: "top",
       },
       {
         target: '[data-tour="explore-filters"]',

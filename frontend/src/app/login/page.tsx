@@ -16,7 +16,6 @@ function LoginContent() {
   const login = useAppStore((state) => state.login);
   const googleLogin = useAppStore((state) => state.googleLogin);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
-  const clearAuth = useAppStore((state) => state.clearAuth);
   const router = useRouter();
   const searchParams = useSearchParams();
 

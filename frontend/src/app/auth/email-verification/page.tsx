@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/useAppStore";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
+import { launchDiditLandlordVerification } from "@/lib/didit";
 
 const DIGITS = 6;
 const bootstrapOtpKey = (userId: string, verificationToken: string) =>
@@ -115,7 +116,16 @@ function EmailVerificationContent() {
         return;
       }
       if (role === "landlord") {
-        router.push("/verify-identity");
+        const launched = launchDiditLandlordVerification({
+          userId,
+          email,
+          role: "landlord",
+          next: "/dashboard/overview",
+        });
+        if (!launched) {
+          // Fallback until DIDIT launch URL is configured.
+          router.push("/verify-identity");
+        }
         return;
       }
       const query = new URLSearchParams({ userId });

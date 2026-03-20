@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import LandlordProfileTutorial from "@/components/LandlordProfileTutorial";
 import { getApiErrorMessage, showToast } from "@/lib/alerts";
 import { useToastError } from "@/hooks/useToastError";
+import { launchDiditLandlordVerification } from "@/lib/didit";
 
 // --- Components ---
 
@@ -310,7 +311,14 @@ export default function DashboardProfilePage() {
             <p className="text-sm text-slate-500">{user?.phoneNumber}</p>
             <button
               onClick={() => {
-                if (!isVerified) router.push("/verify-identity");
+                if (isVerified) return;
+                const launched = launchDiditLandlordVerification({
+                  userId: userId ?? undefined,
+                  email: user?.email ?? undefined,
+                  role: "landlord",
+                  next: "/dashboard/overview",
+                });
+                if (!launched) router.push("/verify-identity");
               }}
               className={[
                 "mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors",

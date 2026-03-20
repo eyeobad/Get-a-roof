@@ -119,7 +119,7 @@ export default function PreferenceTutorial({
           backgroundColor: "#ffffff",
           overlayColor: "rgba(15, 23, 42, 0.5)",
           arrowColor: "#ffffff",
-          zIndex: 1100,
+          zIndex: 3000,
         },
         tooltip: {
           borderRadius: 20,

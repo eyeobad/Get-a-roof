@@ -152,10 +152,9 @@ function SignUpContent() {
         userId,
         email: payload.email,
         role: "landlord",
-        next:
-          isAgentSignup && redirectParam
-            ? decodeURIComponent(redirectParam)
-            : "/verify-identity",
+        ...(isAgentSignup && redirectParam
+          ? { next: decodeURIComponent(redirectParam) }
+          : {}),
         ...(verificationToken ? { verificationToken } : {}),
       });
       showToast({

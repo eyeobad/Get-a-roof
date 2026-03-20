@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -26,6 +27,7 @@ import type { Listing } from "@/lib/listings";
 import { PROPERTY_TYPE_OPTIONS } from "@/lib/propertyTypes";
 import { getCitiesForState, NIGERIA_STATES } from "@/lib/nigeriaLocations";
 import { useExploreDeckController } from "@/app/explore/useExploreDeckController";
+import { showToast } from "@/lib/alerts";
 
 type FilterModalProps = {
   isOpen: boolean;
@@ -47,9 +49,15 @@ type ExploreFilterState = {
   toggles: Record<string, boolean>;
 };
 
+type LastSwipe = {
+  listing: Listing;
+  direction: "left" | "right";
+};
+
 const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
 const PRELOAD_LOOKAHEAD = 5;
+const MAX_PRELOADED_IMAGES = 180;
 
 const preloadImage = async (src: string) => {
   if (!src || typeof window === "undefined") return;
@@ -137,6 +145,7 @@ export default function ExploreCards() {
   }, [filters, defaultFilters]);
 
   const likeListing = useAppStore((state) => state.likeListing);
+  const unlikeListing = useAppStore((state) => state.unlikeListing);
   const passListing = useAppStore((state) => state.passListing);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
   const captureUserLocation = useAppStore((state) => state.captureUserLocation);
@@ -146,7 +155,9 @@ export default function ExploreCards() {
 
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
   const swipeLockRef = useRef(false);
+  const [lastSwipe, setLastSwipe] = useState<LastSwipe | null>(null);
   const preloadedImageUrlsRef = useRef(new Set<string>());
+  const preloadedImageQueueRef = useRef<string[]>([]);
 
   const controls = useAnimation();
 
@@ -199,6 +210,7 @@ export default function ExploreCards() {
     hasRenderedCards,
     errorMessage,
     commitSwipe,
+    rollbackSwipe,
   } = useExploreDeckController({
     authToken,
     filters: activeExploreFilters,
@@ -228,6 +240,7 @@ export default function ExploreCards() {
     setFilters(next);
     setCardImageIndexes({});
     swipeLockRef.current = false;
+    setLastSwipe(null);
     controls.set({ x: 0, rotate: 0, opacity: 1 });
     setIsSwipeAnimating(false);
     setDeckResetKey((value) => value + 1);
@@ -240,6 +253,7 @@ export default function ExploreCards() {
     };
     setFilters(nextFilters);
     setCardImageIndexes({});
+    setLastSwipe(null);
     setDeckResetKey((value) => value + 1);
     setFiltersOpen(false);
   };
@@ -252,6 +266,7 @@ export default function ExploreCards() {
     setDraftFilters(next);
     setFilters(next);
     setCardImageIndexes({});
+    setLastSwipe(null);
     setDeckResetKey((value) => value + 1);
     setFiltersOpen(false);
   };
@@ -263,11 +278,22 @@ export default function ExploreCards() {
   useEffect(() => {
     const upcomingCards = cardsToRender.slice(1, 1 + PRELOAD_LOOKAHEAD);
 
+    const trackPreloadedImage = (src: string) => {
+      const cache = preloadedImageUrlsRef.current;
+      if (cache.has(src)) return false;
+      cache.add(src);
+      preloadedImageQueueRef.current.push(src);
+      if (cache.size > MAX_PRELOADED_IMAGES) {
+        const oldest = preloadedImageQueueRef.current.shift();
+        if (oldest) cache.delete(oldest);
+      }
+      return true;
+    };
+
     upcomingCards.forEach((card) => {
       const candidates = (card.images?.length ? card.images : [card.image]).filter(Boolean);
       candidates.forEach((src) => {
-        if (!src || preloadedImageUrlsRef.current.has(src)) return;
-        preloadedImageUrlsRef.current.add(src);
+        if (!src || !trackPreloadedImage(src)) return;
         void preloadImage(src);
       });
     });
@@ -294,21 +320,78 @@ export default function ExploreCards() {
         new Promise((resolve) => window.setTimeout(resolve, 180)),
       ]);
 
+      // Optimistic deck advancement; rollback if backend write fails.
+      commitSwipe(topListing.id);
+
       if (direction === "right") {
-        void likeListing(topListing.id);
+        await likeListing(topListing.id);
         setSelectedListingId(topListing.id);
       } else {
-        void passListing(topListing.id);
+        await passListing(topListing.id);
       }
-
-      commitSwipe(topListing.id);
+      setLastSwipe({ listing: topListing, direction });
       controls.set({ x: 0, rotate: 0, opacity: 1 });
       await swipeAnimation.catch(() => undefined);
+    } catch {
+      rollbackSwipe(topListing);
+      showToast({
+        title: "Swipe failed",
+        text: "Could not save your action. Please try again.",
+        variant: "error",
+      });
+      controls.set({ x: 0, rotate: 0, opacity: 1 });
     } finally {
       swipeLockRef.current = false;
       setIsSwipeAnimating(false);
     }
   };
+
+  const handleUndoLastSwipe = useCallback(async () => {
+    if (swipeLockRef.current || isSwipeAnimating) return;
+    if (!lastSwipe) return;
+
+    swipeLockRef.current = true;
+    setIsSwipeAnimating(true);
+
+    try {
+      // For right swipes, best-effort revert persisted saved/match state first.
+      if (lastSwipe.direction === "right") {
+        await unlikeListing(lastSwipe.listing.id);
+      }
+      rollbackSwipe(lastSwipe.listing);
+      setSelectedListingId(lastSwipe.listing.id);
+      setLastSwipe(null);
+    } catch {
+      showToast({
+        title: "Undo failed",
+        text: "Could not undo last swipe. Please try again.",
+        variant: "error",
+      });
+    } finally {
+      controls.set({ x: 0, rotate: 0, opacity: 1 });
+      swipeLockRef.current = false;
+      setIsSwipeAnimating(false);
+    }
+  }, [
+    controls,
+    isSwipeAnimating,
+    lastSwipe,
+    rollbackSwipe,
+    setSelectedListingId,
+    unlikeListing,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isUndoCombo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      if (!isUndoCombo) return;
+      event.preventDefault();
+      void handleUndoLastSwipe();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndoLastSwipe]);
 
   const resolveCardImages = (card: Listing) => {
     const fromCollection = (card.images ?? []).filter(Boolean);
@@ -465,7 +548,7 @@ export default function ExploreCards() {
       <main className="flex-1 min-h-0 flex flex-col justify-center items-center relative w-full max-w-md mx-auto px-4 pb-2">
         <div className="absolute w-[90%] h-[80%] bg-white/50 rounded-[2.5rem] -z-10 translate-y-4 scale-95 shadow-sm border border-slate-200" />
 
-        <div className="relative w-full h-[min(68dvh,680px)] min-h-[500px] md:h-[650px]">
+        <div className="relative w-full h-[min(62dvh,620px)] min-h-[440px] md:h-[590px]">
           <div className="absolute inset-0 flex items-center justify-center">
             {cardsToRender.map((card, index) => (
               <CardItem
@@ -484,7 +567,7 @@ export default function ExploreCards() {
 
         {cardsToRender.length === 0 && deckPhase === "boot_loading" && !hasRenderedCards && (
           <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
-            <div className="relative h-[min(68dvh,680px)] min-h-[500px] w-full max-w-md">
+            <div className="relative h-[min(62dvh,620px)] min-h-[440px] w-full max-w-md">
 
               {/* Background Card 2 (Deepest) */}
               <div className="absolute inset-x-8 top-12 h-full scale-[0.92] rounded-[2.5rem] border border-slate-200/50 bg-white/40 shadow-sm -z-20" />
@@ -567,24 +650,39 @@ export default function ExploreCards() {
       <ExploreTutorial ready={cardsToRender.length > 0 && deckPhase === "ready"} />
 
       {/* Action Buttons */}
-      <div className="flex-none w-full max-w-md mx-auto px-6 pt-5 pb-5 md:pt-4 md:pb-8 grid grid-cols-2 gap-4 md:gap-6 z-30">
+      <div className="flex-none w-full max-w-md mx-auto px-6 pt-3 pb-5 md:pt-6 md:pb-8 grid grid-cols-3 gap-3 md:gap-4 z-30">
+        <button
+          type="button"
+          data-tour="explore-rewind"
+          onClick={() => {
+            void handleUndoLastSwipe();
+          }}
+          disabled={!lastSwipe || isSwipeAnimating || deckPhase === "swapping"}
+          className="flex h-14 md:h-16 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+          aria-label="Rewind last swipe"
+        >
+          <span className="material-symbols-outlined text-[22px] leading-none">undo</span>
+          <span className="mt-1 text-[11px] font-semibold tracking-wide">REWIND</span>
+        </button>
+
         <button
           data-tour="explore-pass"
           onClick={() => handleSwipe("left")}
           disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
-          className="flex items-center justify-center gap-2 h-16 md:h-20 rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors shadow-sm active:scale-95 duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-slate-200"
+          className="flex h-14 md:h-16 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-[#f4f5f7] text-slate-700 shadow-sm transition hover:bg-[#eceff3] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <span className="material-symbols-outlined text-3xl">close</span>
-          <span className="text-lg font-bold tracking-wide">PASS</span>
+          <span className="material-symbols-outlined text-[24px] leading-none">close</span>
+          <span className="mt-1 text-[11px] font-semibold tracking-wide">PASS</span>
         </button>
 
         <button
           data-tour="explore-like"
           onClick={() => handleSwipe("right")}
           disabled={isSwipeAnimating || cardsToRender.length === 0 || deckPhase === "swapping"}
-          className="flex items-center justify-center h-16 md:h-20 bg-[#D87C5A] rounded-full text-white hover:brightness-110 transition-all shadow-md active:scale-95 duration-150 ring-4 ring-terracotta/20 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100"
+          className="flex h-14 md:h-16 flex-col items-center justify-center rounded-2xl border border-[#bd6448] bg-gradient-to-b from-[#df8968] to-[#c76546] text-white shadow-[0_10px_24px_rgba(176,83,54,0.35)] transition hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          <span className="text-[18px] font-bold tracking-wide">INTERESTED</span>
+          <span className="material-symbols-outlined text-[24px] leading-none">thumb_up</span>
+          <span className="mt-1 text-[11px] font-semibold tracking-wide">INTERESTED</span>
         </button>
       </div>
 
@@ -633,9 +731,11 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
 
-  // NEW: premium swipe overlays
+  // Real-estate decision overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
+  const likeScale = useTransform(x, [40, 140], [0.86, 1]);
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
+  const nopeScale = useTransform(x, [-140, -40], [1, 0.86]);
 
   const handleDragEnd = async (_: unknown, info: PanInfo) => {
     if (!isFront) return;
@@ -643,8 +743,9 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
     const velocity = info.velocity.x;
     const directionalSwipe = offset * Math.abs(velocity);
 
-    const distanceThreshold = 120;
-    const powerThreshold = 10_000;
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 390;
+    const distanceThreshold = Math.max(100, Math.round(viewportWidth * 0.22));
+    const powerThreshold = Math.max(9000, viewportWidth * 34);
 
     if (offset > distanceThreshold || directionalSwipe > powerThreshold) {
       await onSwipe("right");
@@ -686,17 +787,17 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
       <div
         className="w-full h-full max-w-md bg-white rounded-[2rem] overflow-hidden shadow-card border border-slate-100 flex flex-col cursor-grab active:cursor-grabbing select-none relative touch-pan-y"
       >
-        {/* NEW: Like / Nope overlays */}
+        {/* Pass / Interested overlays */}
         {isFront && (
           <>
-            <motion.div style={{ opacity: likeOpacity }} className="absolute top-6 left-6 z-20">
-              <div className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-extrabold tracking-widest shadow-lg">
-                LIKE
+            <motion.div style={{ opacity: likeOpacity, scale: likeScale }} className="absolute top-6 left-6 z-20 origin-left">
+              <div className="rounded-xl border border-emerald-200/75 bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2 text-sm font-black tracking-[0.22em] text-white shadow-[0_12px_24px_rgba(5,150,105,0.38)]">
+                INTERESTED
               </div>
             </motion.div>
-            <motion.div style={{ opacity: nopeOpacity }} className="absolute top-6 right-6 z-20">
-              <div className="px-4 py-2 rounded-xl bg-rose-500 text-white font-extrabold tracking-widest shadow-lg">
-                NOPE
+            <motion.div style={{ opacity: nopeOpacity, scale: nopeScale }} className="absolute top-6 right-6 z-20 origin-right">
+              <div className="rounded-xl border border-rose-200/80 bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-black tracking-[0.22em] text-white shadow-[0_12px_24px_rgba(225,29,72,0.35)]">
+                PASS
               </div>
             </motion.div>
           </>
@@ -950,4 +1051,3 @@ function FilterModal({
     </div>
   );
 }
-

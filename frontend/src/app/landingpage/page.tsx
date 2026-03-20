@@ -66,8 +66,8 @@ export default function LandingPage() {
       {/* Screen Reader Only SEO Text */}
       <div className="sr-only" aria-hidden="true">
         <h1>Get a Roof - The Real Estate App</h1>
-        <p>Get a Roof is tinder but for get homes. Since our inception in Aug. 2024, we've facilitated over 7.5 million swipes, helping candidates secure hundreds of interviews daily.</p>
-        <p>Our app currently hosts 1.6 million jobs, and this number is growing rapidly. After you upload your resume, you can swipe right on jobs you want and swipe left on the jobs you don't want.</p>
+        <p>Get a Roof is tinder but for get homes. Since our inception in Aug. 2024, we&apos;ve facilitated over 7.5 million swipes, helping candidates secure hundreds of interviews daily.</p>
+        <p>Our app currently hosts 1.6 million jobs, and this number is growing rapidly. After you upload your resume, you can swipe right on jobs you want and swipe left on the jobs you don&apos;t want.</p>
       </div>
 
       <main className="flex-1 relative">
@@ -90,20 +90,20 @@ export default function LandingPage() {
 
           <div className="absolute top-0 left-0 right-0 z-10">
             <header className="p-4 relative z-50">
-              <div className="flex h-14 items-center justify-between px-2 md:px-4">
-                <div className="flex items-center gap-6 md:gap-8">
+              <div className="flex h-16 md:h-20 items-center justify-between px-4 md:px-8">
+                <div className="flex items-center gap-8 md:gap-10">
                   <div className="md:hidden">
-                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="z-50 relative w-6 h-6 text-white transition-all duration-300 drop-shadow-md">
-                      <span className="material-symbols-outlined">{isMenuOpen ? "close" : "menu"}</span>
+                    <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="z-50 relative w-8 h-8 text-white transition-all duration-300 drop-shadow-md">
+                      <span className="material-symbols-outlined text-3xl">{isMenuOpen ? "close" : "menu"}</span>
                     </button>
                   </div>
-                  <Link href="/" className="relative w-12 h-12 md:w-16 md:h-16 flex items-center justify-center z-50 transition-transform hover:scale-105">
+                  <Link href="/" className="hidden md:flex relative w-20 h-20 md:w-24 md:h-24 mt-2 md:mt-3 items-center justify-center z-50 transition-transform hover:scale-105">
                     <Image
                       src="/logo2.svg"
                       alt="logo"
                       fill
                       priority
-                      className="object-contain scale-[1.8] md:scale-[2.5]"
+                      className="object-contain scale-[2] md:scale-[2.5]"
                     />
                   </Link>
                 </div>
@@ -124,7 +124,15 @@ export default function LandingPage() {
               </div>
 
               {/* Mobile Drawer */}
-              <div className={`fixed inset-0 bg-white z-40 transition-transform duration-500 ease-in-out md:hidden flex flex-col p-8 pt-24 ${isMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+              <div className={`fixed inset-0 bg-white z-[60] transition-transform duration-500 ease-in-out md:hidden flex flex-col p-8 pt-8 ${isMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+                <div className="flex items-center justify-between w-full mb-12">
+                  <Link href="/" className="relative w-10 h-10 transition-transform hover:scale-105 ml-2" onClick={() => setIsMenuOpen(false)}>
+                    <Image src="/logo2.svg" alt="logo" fill priority className="object-contain scale-[2]" />
+                  </Link>
+                  <button onClick={() => setIsMenuOpen(false)} className="text-text-main-light p-2 transition-transform hover:scale-110 active:scale-95">
+                    <span className="material-symbols-outlined text-4xl">close</span>
+                  </button>
+                </div>
                 <nav className="flex flex-col gap-y-6">
                   <Link href="/blog" className="text-3xl font-light text-text-main-light transition-all duration-300 hover:translate-x-2" onClick={() => setIsMenuOpen(false)}>Blog</Link>
                   <Link href="/docs/case-studies" className="text-3xl font-light text-text-main-light transition-all duration-300 hover:translate-x-2" onClick={() => setIsMenuOpen(false)}>Case Studies</Link>
@@ -149,7 +157,7 @@ export default function LandingPage() {
             <div className="mb-16">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold mb-6 text-primary tracking-tight">Where Our Users Land Their Dream Jobs</h2>
               <p className="text-lg md:text-xl text-text-sub-light max-w-4xl mx-auto leading-relaxed">
-                From Fortune 500 companies to innovative startups, our users consistently secure interviews and offers at the world's most desirable workplaces.
+                From Fortune 500 companies to innovative startups, our users consistently secure interviews and offers at the world&apos;s most desirable workplaces.
               </p>
             </div>
 
