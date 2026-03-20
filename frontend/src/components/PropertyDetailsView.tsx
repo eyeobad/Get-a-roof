@@ -67,20 +67,9 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const likeListing = useAppStore((s) => s.likeListing);
   const unlikeListing = useAppStore((s) => s.unlikeListing);
   const loadMatches = useAppStore((s) => s.loadMatches);
-  const matchSummaries = useAppStore((s) => s.matchSummaries);
 
   const likedIds = useAppStore((s) => s.likedIds);
-  const hasActiveMatch = useMemo(
-    () =>
-      matchSummaries.some(
-        (summary) => summary.listingId === listing.id && summary.status !== "Dismissed"
-      ),
-    [listing.id, matchSummaries]
-  );
-  const isSaved = useMemo(
-    () => likedIds.includes(listing.id) || hasActiveMatch,
-    [likedIds, listing.id, hasActiveMatch]
-  );
+  const isSaved = useMemo(() => likedIds.includes(listing.id), [likedIds, listing.id]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -114,6 +103,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shareUrl] = useState(() => (typeof window !== "undefined" ? window.location.href : ""));
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [isSavePending, setIsSavePending] = useState(false);
 
   const shareRef = useRef<HTMLDivElement | null>(null);
 
@@ -141,11 +131,17 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
     setCurrentIndex((prev) => (prev + 1) % gallery.length);
 
   const handleToggleSave = async () => {
+    if (isSavePending) return;
+    setIsSavePending(true);
+    try {
     if (isSaved) {
       await unlikeListing(listing.id);
       return;
     }
     await likeListing(listing.id);
+    } finally {
+      setIsSavePending(false);
+    }
   };
 
   const safeIndex = gallery.length ? currentIndex % gallery.length : 0;
@@ -291,11 +287,12 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
               <div className="flex gap-2">
                 <button
                   onClick={handleToggleSave}
+                  disabled={isSavePending}
                   className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition active:scale-95 ${
                     isSaved
                       ? "bg-primary text-white shadow-lg"
                       : "border border-slate-200 bg-white text-slate-800 hover:border-primary hover:text-primary"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <span className="material-symbols-outlined text-lg">
                     {isSaved ? "check" : "favorite_border"}
