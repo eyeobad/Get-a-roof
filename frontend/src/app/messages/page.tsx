@@ -337,16 +337,26 @@ function MessagesContent() {
   }, [user?.role]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const chatRef = useRef<HTMLDivElement | null>(null);
+  const mobileChatRef = useRef<HTMLDivElement | null>(null);
+  const desktopChatRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledIntentKeyRef = useRef<string>("");
   const isOtherTyping = Boolean(
     activeConversationId && typingByMatch[activeConversationId]
   );
 
+  const getActiveChatContainer = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      return desktopChatRef.current;
+    }
+    return mobileChatRef.current;
+  }, []);
+
   const selectConversation = (id: string, openChat?: boolean) => {
     setActiveId(id);
     setSelectedThreadId(id);
+    setMessageText("");
+    setDidApplyDraft(false);
     if (openChat) {
       setMobileView("chat");
     }
@@ -372,8 +382,9 @@ function MessagesContent() {
     }
 
     requestAnimationFrame(() => {
-      chatRef.current?.scrollTo({
-        top: chatRef.current.scrollHeight,
+      const chatContainer = getActiveChatContainer();
+      chatContainer?.scrollTo({
+        top: chatContainer.scrollHeight,
         behavior: "smooth",
       });
     });
@@ -401,7 +412,14 @@ function MessagesContent() {
     const receiverId =
       activeConversation.landlordId ??
       activeMessages.find((message) => message.from === "them")?.senderId;
-    if (!receiverId || isSending) return false;
+    if (isSending) return false;
+    if (!receiverId) {
+      showToast({
+        title: "Conversation is still loading. Try again in a moment.",
+        variant: "error",
+      });
+      return false;
+    }
     let tenantLocation: RouteRequestPayload["tenantLocation"];
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
@@ -611,6 +629,17 @@ function MessagesContent() {
   }, [didApplyDraft, draftParam, activeConversationId]);
 
   useEffect(() => {
+    const chatContainer = getActiveChatContainer();
+    if (!chatContainer) return;
+    requestAnimationFrame(() => {
+      chatContainer.scrollTo({
+        top: chatContainer.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }, [activeConversationId, activeMessages.length, getActiveChatContainer]);
+
+  useEffect(() => {
     if (isLandlordContext || !activeConversationId) {
       setShowRouteHint(false);
       return;
@@ -760,7 +789,7 @@ function MessagesContent() {
             </header>
 
             <main
-              ref={chatRef}
+              ref={mobileChatRef}
               className="flex-1 overflow-y-auto px-4 py-4 pb-[140px]"
             >
               {isLoadingMessages ? (
@@ -1179,7 +1208,7 @@ function MessagesContent() {
                   </header>
 
                   <main
-                    ref={chatRef}
+                    ref={desktopChatRef}
                     className="flex-1 overflow-y-auto px-8 py-6 no-scrollbar"
                     style={{
                       scrollbarWidth: "none",

@@ -691,7 +691,11 @@ function MapCanvas({
     routeMarkersRef.current = [];
     if (!routeEndpoints) return;
 
-    const makeMarkerEl = (color: string, label: string) => {
+    const makeMarkerEl = (
+      color: string,
+      label: string,
+      toastTitle: string
+    ) => {
       const el = document.createElement("div");
       el.style.width = "18px";
       el.style.height = "18px";
@@ -700,16 +704,23 @@ function MapCanvas({
       el.style.border = "3px solid #fff";
       el.style.boxShadow = "0 3px 8px rgba(15,23,42,0.18)";
       el.setAttribute("aria-label", label);
+      el.style.cursor = "pointer";
+      el.addEventListener("click", () => {
+        showToast({
+          title: toastTitle,
+          variant: "info",
+        });
+      });
       return el;
     };
 
     const originMarker = new mapboxgl.Marker({
-      element: makeMarkerEl("#2563eb", "Your location"),
+      element: makeMarkerEl("#2563eb", "Your location", "You"),
     })
       .setLngLat([routeEndpoints.origin.lng, routeEndpoints.origin.lat])
       .addTo(map);
     const destinationMarker = new mapboxgl.Marker({
-      element: makeMarkerEl("#16a34a", "Route destination"),
+      element: makeMarkerEl("#16a34a", "Route destination", "Your destination"),
     })
       .setLngLat([routeEndpoints.destination.lng, routeEndpoints.destination.lat])
       .addTo(map);
@@ -727,14 +738,24 @@ function MapCanvas({
       return;
     }
     routeSource.setData(routeGeojson);
-    const coords = routeGeojson.geometry.coordinates;
-    if (coords.length) {
+
+    const applyRouteBounds = () => {
+      const canvas = map.getCanvas();
+      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
+      const coords = routeGeojson.geometry.coordinates;
+      if (!coords.length) return;
       const bounds = new mapboxgl.LngLatBounds();
       coords.forEach((coord) => {
         bounds.extend([coord[0], coord[1]]);
       });
       map.fitBounds(bounds, { padding: 80, duration: 600 });
-    }
+    };
+
+    applyRouteBounds();
+    map.on("resize", applyRouteBounds);
+    return () => {
+      map.off("resize", applyRouteBounds);
+    };
   }, [routeGeojson]);
 
   useEffect(() => {
@@ -742,49 +763,59 @@ function MapCanvas({
     if (!map || !points.length) return;
     if (routeGeojson) return;
 
-    if (focusPointId) {
-      const anchor = points.find((point) => point.id === focusPointId);
-      if (anchor) {
-        if (anchor.isExact) {
-          map.flyTo({
-            center: [anchor.displayLng, anchor.displayLat],
-            zoom: Math.max(map.getZoom(), 14),
-            duration: 0,
-          });
+    const applyBounds = () => {
+      const canvas = map.getCanvas();
+      if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
+
+      if (focusPointId) {
+        const anchor = points.find((point) => point.id === focusPointId);
+        if (anchor) {
+          if (anchor.isExact) {
+            map.flyTo({
+              center: [anchor.displayLng, anchor.displayLat],
+              zoom: Math.max(map.getZoom(), 14),
+              duration: 0,
+            });
+            return;
+          }
+
+          const latRad = (anchor.lat * Math.PI) / 180;
+          const metersPerDegLat = 111_320;
+          const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
+          const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
+          const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([anchor.lng - lngOffset, anchor.lat - latOffset]);
+          bounds.extend([anchor.lng + lngOffset, anchor.lat + latOffset]);
+          map.fitBounds(bounds, { padding: 60, duration: 0 });
+          return;
+        }
+      }
+
+      const bounds = new mapboxgl.LngLatBounds();
+      points.forEach((point) => {
+        if (point.isExact) {
+          bounds.extend([point.displayLng, point.displayLat]);
           return;
         }
 
-        const latRad = (anchor.lat * Math.PI) / 180;
+        const latRad = (point.lat * Math.PI) / 180;
         const metersPerDegLat = 111_320;
         const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
         const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
         const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend([anchor.lng - lngOffset, anchor.lat - latOffset]);
-        bounds.extend([anchor.lng + lngOffset, anchor.lat + latOffset]);
-        map.fitBounds(bounds, { padding: 60, duration: 0 });
-        return;
-      }
-    }
 
-    const bounds = new mapboxgl.LngLatBounds();
-    points.forEach((point) => {
-      if (point.isExact) {
-        bounds.extend([point.displayLng, point.displayLat]);
-        return;
-      }
+        bounds.extend([point.lng - lngOffset, point.lat - latOffset]);
+        bounds.extend([point.lng + lngOffset, point.lat + latOffset]);
+      });
+      map.fitBounds(bounds, { padding: 60, duration: 0 });
+    };
 
-      // Include the full hidden-area radius so the whole circle is visible on first fit.
-      const latRad = (point.lat * Math.PI) / 180;
-      const metersPerDegLat = 111_320;
-      const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
-      const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
-      const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
-
-      bounds.extend([point.lng - lngOffset, point.lat - latOffset]);
-      bounds.extend([point.lng + lngOffset, point.lat + latOffset]);
-    });
-    map.fitBounds(bounds, { padding: 60, duration: 0 });
+    applyBounds();
+    map.on("resize", applyBounds);
+    return () => {
+      map.off("resize", applyBounds);
+    };
   }, [points, routeGeojson, focusPointId]);
 
   return (
@@ -1097,30 +1128,6 @@ function MapViewContent() {
     const anchor = mapPoints.find((point) => point.id === requestedPropertyId);
     if (!anchor) return;
     setSelectedIndex(anchor.index);
-
-    const focusMap = (map: mapboxgl.Map | null) => {
-      if (!map) return;
-      if (anchor.isExact) {
-        map.flyTo({
-          center: [anchor.displayLng, anchor.displayLat],
-          zoom: Math.max(map.getZoom(), 14),
-          duration: 0,
-        });
-        return;
-      }
-      const latRad = (anchor.lat * Math.PI) / 180;
-      const metersPerDegLat = 111_320;
-      const metersPerDegLng = Math.max(1, 111_320 * Math.cos(latRad));
-      const latOffset = APPROX_RADIUS_METERS / metersPerDegLat;
-      const lngOffset = APPROX_RADIUS_METERS / metersPerDegLng;
-      const bounds = new mapboxgl.LngLatBounds();
-      bounds.extend([anchor.lng - lngOffset, anchor.lat - latOffset]);
-      bounds.extend([anchor.lng + lngOffset, anchor.lat + latOffset]);
-      map.fitBounds(bounds, { padding: 60, duration: 0 });
-    };
-
-    focusMap(mobileMapRef.current);
-    focusMap(desktopMapRef.current);
   }, [requestedPropertyId, mapPoints, routeGeojson]);
 
   useEffect(() => {
@@ -1294,11 +1301,12 @@ function MapViewContent() {
     if (!routeEndpoints) return;
     const origin = `${routeEndpoints.origin.lat},${routeEndpoints.origin.lng}`;
     const destination = `${routeEndpoints.destination.lat},${routeEndpoints.destination.lng}`;
+    let gmapsMode = "driving";
+    if (routingProfile === "walking") gmapsMode = "walking";
+    if (routingProfile === "cycling") gmapsMode = "bicycling";
     const href = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
       origin
-    )}&destination=${encodeURIComponent(destination)}&travelmode=${encodeURIComponent(
-      routingProfile
-    )}`;
+    )}&destination=${encodeURIComponent(destination)}&travelmode=${gmapsMode}`;
     window.open(href, "_blank", "noopener,noreferrer");
   };
 

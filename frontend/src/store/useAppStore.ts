@@ -279,6 +279,8 @@ type ApiPhotoResponse = { photoUrl?: string };
 
 let listingMutationQueue: Promise<void> = Promise.resolve();
 let matchesReloadTimer: ReturnType<typeof setTimeout> | null = null;
+let isSavingDraftLock = false;
+const pendingListingActions = new Set<string>();
 type SwipeMutationStatus = "pending" | "confirmed" | "failed";
 type SwipeMutationJournalEntry = {
   status: SwipeMutationStatus;
@@ -351,6 +353,20 @@ const scheduleMatchesReload = (loadMatches: () => Promise<void>, delayMs = 250) 
   }, delayMs);
 };
 
+const mergeMatchSummariesSafely = (
+  previous: MatchSummary[],
+  incoming: MatchSummary[],
+  likedIds: string[]
+) => {
+  const backendIds = new Set(incoming.map((summary) => summary.id));
+  const localToKeep = previous.filter(
+    (summary) =>
+      !backendIds.has(summary.id) &&
+      (summary.id.startsWith("optimistic-match:") || likedIds.includes(summary.listingId))
+  );
+  return [...localToKeep, ...incoming];
+};
+
 type Thread = {
   id: string;
   listingId: string;
@@ -374,6 +390,7 @@ export type ExploreFilters = {
 type DuplicateAction = "increment_units" | "create_new_draft";
 
 type AppState = {
+  _hasHydrated: boolean;
   listingsById: Record<string, Listing>;
   exploreQueue: string[];
   likedIds: string[];
@@ -396,6 +413,7 @@ type AppState = {
   landlordProperties: LandlordPropertySummary[];
   landlordPropertiesWithMatches: LandlordPropertySummary[];
   landlordMatchesByProperty: Record<string, LandlordMatch[]>;
+  setHasHydrated: (state: boolean) => void;
   setSelectedListingId: (id: string | null) => void;
   setSelectedThreadId: (id: string | null) => void;
   captureUserLocation: () => Promise<{ lat: number; lng: number } | null>;
@@ -1138,6 +1156,7 @@ const buildSessionReset = (overrides: Partial<AppState> = {}) => ({
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      _hasHydrated: false,
       listingsById: listingMap,
       exploreQueue: initialQueue,
       likedIds: [],
@@ -1160,6 +1179,7 @@ export const useAppStore = create<AppState>()(
       landlordProperties: [],
       landlordPropertiesWithMatches: [],
       landlordMatchesByProperty: {},
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
       setSelectedListingId: (id) => set({ selectedListingId: id }),
       setSelectedThreadId: (id) => {
         set({ selectedThreadId: id });
@@ -1504,34 +1524,19 @@ export const useAppStore = create<AppState>()(
           });
 
           set((prev) => {
-            const relatedConversationIds = prev.conversations
-              .filter(
-                (conv) =>
-                  conv.id === matchId ||
-                  (listingId ? conv.listingId === listingId : false)
-              )
-              .map((conv) => conv.id);
             const nextMatchSummaries = prev.matchSummaries.filter(
-              (summary) =>
-                summary.id !== matchId &&
-                !(listingId && summary.listingId === listingId)
+              (summary) => summary.id !== matchId
             );
             const nextRecycledMatchSummaries = prev.recycledMatchSummaries.filter(
-              (summary) =>
-                summary.id !== matchId &&
-                !(listingId && summary.listingId === listingId)
+              (summary) => summary.id !== matchId
             );
             const nextConversations = prev.conversations.filter(
-              (conv) =>
-                conv.id !== matchId &&
-                !(listingId && conv.listingId === listingId)
+              (conv) => conv.id !== matchId
             );
             const nextMessagesByMatch = { ...prev.messagesByMatch };
             const nextThreadsById = { ...prev.threadsById };
-            relatedConversationIds.forEach((id) => {
-              delete nextMessagesByMatch[id];
-              delete nextThreadsById[id];
-            });
+            delete nextMessagesByMatch[matchId];
+            delete nextThreadsById[matchId];
 
             return {
               likedIds:
@@ -1550,8 +1555,7 @@ export const useAppStore = create<AppState>()(
               messagesByMatch: nextMessagesByMatch,
               threadsById: nextThreadsById,
               selectedThreadId:
-                prev.selectedThreadId &&
-                relatedConversationIds.includes(prev.selectedThreadId)
+                prev.selectedThreadId === matchId
                   ? nextConversations[0]?.id ?? null
                   : prev.selectedThreadId,
             };
@@ -1620,11 +1624,11 @@ export const useAppStore = create<AppState>()(
 
         if (state.authToken && isMongoId(listingId)) {
           await enqueueListingMutation(async () => {
-            const currentState = get();
-            if (!currentState.likedIds.includes(listingId) && !alreadyLiked) return;
+            if (!get().likedIds.includes(listingId)) return;
             await runSwipeMutation(
               `like:${listingId}`,
               async () => {
+                const currentState = get();
                 if (currentState.userId) {
                   try {
                     await apiFetch(`/api/users/${currentState.userId}/saved-properties`, {
@@ -1758,34 +1762,19 @@ export const useAppStore = create<AppState>()(
           });
 
           set((prev) => {
-            const relatedConversationIds = prev.conversations
-              .filter(
-                (conv) =>
-                  conv.id === matchId ||
-                  (listingId ? conv.listingId === listingId : false)
-              )
-              .map((conv) => conv.id);
             const nextMatchSummaries = prev.matchSummaries.filter(
-              (summary) =>
-                summary.id !== matchId &&
-                !(listingId && summary.listingId === listingId)
+              (summary) => summary.id !== matchId
             );
             const nextRecycledMatchSummaries = prev.recycledMatchSummaries.filter(
-              (summary) =>
-                summary.id !== matchId &&
-                !(listingId && summary.listingId === listingId)
+              (summary) => summary.id !== matchId
             );
             const nextConversations = prev.conversations.filter(
-              (conv) =>
-                conv.id !== matchId &&
-                !(listingId && conv.listingId === listingId)
+              (conv) => conv.id !== matchId
             );
             const nextMessagesByMatch = { ...prev.messagesByMatch };
             const nextThreadsById = { ...prev.threadsById };
-            relatedConversationIds.forEach((id) => {
-              delete nextMessagesByMatch[id];
-              delete nextThreadsById[id];
-            });
+            delete nextMessagesByMatch[matchId];
+            delete nextThreadsById[matchId];
 
             return {
               suppressedMatchListingIds:
@@ -1800,8 +1789,7 @@ export const useAppStore = create<AppState>()(
               messagesByMatch: nextMessagesByMatch,
               threadsById: nextThreadsById,
               selectedThreadId:
-                prev.selectedThreadId &&
-                relatedConversationIds.includes(prev.selectedThreadId)
+                prev.selectedThreadId === matchId
                   ? nextConversations[0]?.id ?? null
                   : prev.selectedThreadId,
             };
@@ -1816,16 +1804,27 @@ export const useAppStore = create<AppState>()(
         }
       },
       toggleLikeListing: async (listingId) => {
-        const state = get();
-        if (state.likedIds.includes(listingId)) {
-          await state.unlikeListing(listingId);
-        } else {
-          await state.likeListing(listingId);
+        const lockKey = `toggle:${listingId}`;
+        if (pendingListingActions.has(lockKey)) return;
+        pendingListingActions.add(lockKey);
+
+        try {
+          const state = get();
+          if (state.likedIds.includes(listingId)) {
+            await state.unlikeListing(listingId);
+          } else {
+            await state.likeListing(listingId);
+          }
+        } finally {
+          setTimeout(() => pendingListingActions.delete(lockKey), 300);
         }
       },
       passListing: async (listingId) => {
+        const lockKey = `pass:${listingId}`;
+        if (pendingListingActions.has(lockKey)) return;
         const state = get();
         if (state.passedIds.includes(listingId)) return;
+        pendingListingActions.add(lockKey);
 
         set({
           passedIds: [...state.passedIds, listingId],
@@ -1833,21 +1832,25 @@ export const useAppStore = create<AppState>()(
             state.exploreQueue.find((id) => id !== listingId) ?? state.selectedListingId,
         });
 
-        if (state.authToken && isMongoId(listingId)) {
-          await enqueueListingMutation(async () => {
-            await runSwipeMutation(
-              `pass:${listingId}`,
-              async () => {
-                await get().createMatchForListing(listingId, false, "Soft");
-              },
-              () => {
-                set((current) => ({
-                  passedIds: current.passedIds.filter((id) => id !== listingId),
-                  selectedListingId: listingId,
-                }));
-              }
-            );
-          });
+        try {
+          if (state.authToken && isMongoId(listingId)) {
+            await enqueueListingMutation(async () => {
+              await runSwipeMutation(
+                `pass:${listingId}`,
+                async () => {
+                  await get().createMatchForListing(listingId, false, "Soft");
+                },
+                () => {
+                  set((current) => ({
+                    passedIds: current.passedIds.filter((id) => id !== listingId),
+                    selectedListingId: listingId,
+                  }));
+                }
+              );
+            });
+          }
+        } finally {
+          setTimeout(() => pendingListingActions.delete(lockKey), 300);
         }
       },
       advanceQueue: () =>
@@ -2232,7 +2235,13 @@ export const useAppStore = create<AppState>()(
           } as MatchSummary;
           });
 
-        set({ matchSummaries: summaries });
+        set((prev) => ({
+          matchSummaries: mergeMatchSummariesSafely(
+            prev.matchSummaries,
+            summaries,
+            prev.likedIds
+          ),
+        }));
       },
       loadRecycledMatches: async () => {
         const state = get();
@@ -2265,7 +2274,13 @@ export const useAppStore = create<AppState>()(
           } as MatchSummary;
         });
 
-        set({ recycledMatchSummaries: summaries });
+        set((prev) => ({
+          recycledMatchSummaries: mergeMatchSummariesSafely(
+            prev.recycledMatchSummaries,
+            summaries,
+            prev.likedIds
+          ),
+        }));
       },
       recycleMatch: async (matchId: string) => {
         const state = get();
@@ -2313,7 +2328,6 @@ export const useAppStore = create<AppState>()(
         );
 
         set((prev) => {
-          const incomingIds = new Set(conversations.map((item) => item.id));
           const prevById = new Map(prev.conversations.map((item) => [item.id, item]));
           const merged = conversations.map((next) => {
             const prevItem = prevById.get(next.id);
@@ -2347,20 +2361,14 @@ export const useAppStore = create<AppState>()(
               conversationId
             );
           });
-          const nextMessagesByMatch = Object.fromEntries(
-            Object.entries(prev.messagesByMatch).filter(([id]) => incomingIds.has(id))
-          );
-          Object.keys(nextThreadsById).forEach((id) => {
-            if (!incomingIds.has(id)) {
-              delete nextThreadsById[id];
-            }
-          });
+          const nextMessagesByMatch = { ...prev.messagesByMatch };
           return {
             conversations: merged,
             threadsById: nextThreadsById,
             messagesByMatch: nextMessagesByMatch,
             selectedThreadId:
-              prev.selectedThreadId && incomingIds.has(prev.selectedThreadId)
+              prev.selectedThreadId &&
+              merged.some((conversation) => conversation.id === prev.selectedThreadId)
                 ? prev.selectedThreadId
                 : merged[0]?.id ?? null,
           };
@@ -2606,36 +2614,43 @@ export const useAppStore = create<AppState>()(
         }
       },
       saveLandlordDraft: async (payload, duplicateAction) => {
-        const state = get();
-        if (!state.authToken) return null;
-        const draft: LandlordDraft = {
-          ...state.landlordDraft,
-          ...payload,
-        };
-        const requestPayload = buildLandlordPayload(draft, duplicateAction);
-        if (!Object.keys(requestPayload).length) {
+        if (isSavingDraftLock) return null;
+        isSavingDraftLock = true;
+
+        try {
+          const state = get();
+          if (!state.authToken) return null;
+          const draft: LandlordDraft = {
+            ...state.landlordDraft,
+            ...payload,
+          };
+          const requestPayload = buildLandlordPayload(draft, duplicateAction);
+          if (!Object.keys(requestPayload).length) {
+            return draft;
+          }
+
+          const property = draft.id
+            ? await apiFetch<ApiProperty>(`/api/properties/${draft.id}`, {
+              method: "PATCH",
+              body: JSON.stringify(requestPayload),
+              token: state.authToken,
+            })
+            : await apiFetch<ApiProperty>(`/api/properties`, {
+              method: "POST",
+              body: JSON.stringify(requestPayload),
+              token: state.authToken,
+            });
+
+          if (property) {
+            const nextDraft = mapPropertyToLandlordDraft(property);
+            set({ landlordDraft: nextDraft });
+            return nextDraft;
+          }
+
           return draft;
+        } finally {
+          isSavingDraftLock = false;
         }
-
-        const property = draft.id
-          ? await apiFetch<ApiProperty>(`/api/properties/${draft.id}`, {
-            method: "PATCH",
-            body: JSON.stringify(requestPayload),
-            token: state.authToken,
-          })
-          : await apiFetch<ApiProperty>(`/api/properties`, {
-            method: "POST",
-            body: JSON.stringify(requestPayload),
-            token: state.authToken,
-          });
-
-        if (property) {
-          const nextDraft = mapPropertyToLandlordDraft(property);
-          set({ landlordDraft: nextDraft });
-          return nextDraft;
-        }
-
-        return draft;
       },
       publishLandlordDraft: async (duplicateAction) => {
         const state = get();
@@ -2879,6 +2894,9 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "get-a-roof-store",
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       partialize: (state) => ({
         listingsById: state.listingsById,
         exploreQueue: state.exploreQueue,

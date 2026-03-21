@@ -24,6 +24,7 @@ export default function PropertyDetailsPage() {
   const fetchPropertyById = useAppStore((state) => state.fetchPropertyById);
   const setSelectedListingId = useAppStore((state) => state.setSelectedListingId);
   const authToken = useAppStore((state) => state.authToken);
+  const hasHydrated = useAppStore((state) => state._hasHydrated);
 
   useEffect(() => {
     if (!listingId) return;
@@ -32,9 +33,10 @@ export default function PropertyDetailsPage() {
 
   useEffect(() => {
     if (!listingId || listing) return;
+    if (!hasHydrated) return;
     if (!authToken || !isMongoId(listingId)) return;
     void fetchPropertyById(listingId);
-  }, [listingId, listing, authToken, fetchPropertyById]);
+  }, [listingId, listing, hasHydrated, authToken, fetchPropertyById]);
 
   if (!listingId) {
     return (
@@ -51,6 +53,10 @@ export default function PropertyDetailsPage() {
         </div>
       </div>
     );
+  }
+
+  if (!hasHydrated) {
+    return null;
   }
 
   if (!listing && !authToken) {

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import {
@@ -17,6 +17,7 @@ import {
   useAnimation,
   useMotionValue,
   useTransform,
+  animate,
   type PanInfo,
 } from "framer-motion";
 
@@ -564,7 +565,6 @@ export default function ExploreCards() {
           </div>
         </div>
 
-
         {cardsToRender.length === 0 && deckPhase === "boot_loading" && !hasRenderedCards && (
           <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
             <div className="relative h-[min(62dvh,620px)] min-h-[440px] w-full max-w-md">
@@ -573,44 +573,42 @@ export default function ExploreCards() {
               <div className="absolute inset-x-8 top-12 h-full scale-[0.92] rounded-[2.5rem] border border-slate-200/50 bg-white/40 shadow-sm -z-20" />
 
               {/* Background Card 1 (Middle) */}
-              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10" />
+              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10 animate-pulse" />
 
               {/* Main Front Card Skeleton */}
-              <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl flex flex-col">
+              <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl flex flex-col animate-pulse">
 
                 {/* Image Area Placeholder */}
-                <div className="relative h-[86%] md:h-[72%] w-full bg-slate-200 overflow-hidden">
-                  <div className="skeleton-shimmer absolute inset-0" />
-                  {/* Tag placeholder */}
-                  <div className="absolute top-4 left-4 h-8 w-24 rounded-full bg-white/40 backdrop-blur-md" />
-                  {/* Dots placeholder */}
+                <div className="relative h-[86%] md:h-[72%] w-full bg-slate-200">
+                  <div className="absolute top-4 left-4 h-8 w-24 rounded-full bg-slate-300" />
                   <div className="absolute inset-x-0 top-4 flex justify-center gap-1.5">
-                    <div className="h-1.5 w-6 rounded-full bg-white/60" />
-                    <div className="h-1.5 w-2 rounded-full bg-white/30" />
+                    <div className="h-1.5 w-6 rounded-full bg-slate-300" />
+                    <div className="h-1.5 w-2 rounded-full bg-slate-300/50" />
                   </div>
-                  {/* Bottom gradient fade */}
-                  <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-primary/20 to-transparent" />
                 </div>
 
-                {/* Content Area (Matching bg-primary) */}
-                <div className="flex-1 bg-primary px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-3">
-                  {/* Price & Highlight */}
-                  <div className="space-y-2 border-b border-white/10 pb-3">
-                    <div className="h-8 w-32 rounded-lg bg-white/20" />
-                    <div className="h-3 w-48 rounded-md bg-white/10" />
+                {/* Content Area */}
+                <div className="flex-1 bg-primary px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4">
+                  <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
+                    <div className="flex items-end gap-2">
+                      <div className="h-8 md:h-10 w-32 rounded-lg bg-white/20" />
+                      <div className="h-5 md:h-6 w-16 rounded-md bg-white/10 mb-0.5 md:mb-1.5" />
+                    </div>
+                    <div className="h-3 w-48 max-w-[80%] rounded-md bg-white/10" />
                   </div>
 
-                  {/* Stats Grid Placeholder (3 columns) */}
-                  <div className="grid grid-cols-3 gap-2 md:gap-3">
+                  <div className="grid grid-cols-3 gap-2 md:gap-3 py-1 md:py-2">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-12 md:h-16 rounded-xl bg-white/10 border border-white/5" />
+                      <div key={i} className="flex flex-col items-center justify-center h-16 md:h-20 rounded-xl bg-white/10" />
                     ))}
                   </div>
 
-                  {/* Bottom Button Placeholder */}
-                  <div className="h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center px-4 gap-3">
-                    <div className="h-6 w-6 rounded-full bg-white/10" />
-                    <div className="h-4 w-full rounded-md bg-white/10" />
+                  <div className="h-12 md:h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center px-4 gap-3">
+                    <div className="h-6 w-6 rounded-full bg-white/20 shrink-0" />
+                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                      <div className="h-3 w-3/4 max-w-[200px] rounded-md bg-white/20" />
+                    </div>
+                    <div className="h-4 w-12 rounded-md bg-white/10 shrink-0" />
                   </div>
                 </div>
               </div>
@@ -701,19 +699,6 @@ export default function ExploreCards() {
 
       <style>{`
         ::-webkit-scrollbar { width: 0px; background: transparent; }
-        @keyframes skeletonShimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .skeleton-shimmer {
-          background: linear-gradient(
-            100deg,
-            rgba(255,255,255,0) 20%,
-            rgba(255,255,255,0.42) 50%,
-            rgba(255,255,255,0) 80%
-          );
-          animation: skeletonShimmer 1.3s linear infinite;
-        }
       `}</style>
     </div>
   );
@@ -733,9 +718,7 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
 
   // Real-estate decision overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
-  const likeScale = useTransform(x, [40, 140], [0.86, 1]);
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
-  const nopeScale = useTransform(x, [-140, -40], [1, 0.86]);
 
   const handleDragEnd = async (_: unknown, info: PanInfo) => {
     if (!isFront) return;
@@ -790,13 +773,13 @@ function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps
         {/* Pass / Interested overlays */}
         {isFront && (
           <>
-            <motion.div style={{ opacity: likeOpacity, scale: likeScale }} className="absolute top-6 left-6 z-20 origin-left">
-              <div className="rounded-xl border border-emerald-200/75 bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2 text-sm font-black tracking-[0.22em] text-white shadow-[0_12px_24px_rgba(5,150,105,0.38)]">
+            <motion.div style={{ opacity: likeOpacity }} className="absolute top-6 left-6 z-20">
+              <div className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-extrabold tracking-widest shadow-lg">
                 INTERESTED
               </div>
             </motion.div>
-            <motion.div style={{ opacity: nopeOpacity, scale: nopeScale }} className="absolute top-6 right-6 z-20 origin-right">
-              <div className="rounded-xl border border-rose-200/80 bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2 text-sm font-black tracking-[0.22em] text-white shadow-[0_12px_24px_rgba(225,29,72,0.35)]">
+            <motion.div style={{ opacity: nopeOpacity }} className="absolute top-6 right-6 z-20">
+              <div className="px-4 py-2 rounded-xl bg-rose-500 text-white font-extrabold tracking-widest shadow-lg">
                 PASS
               </div>
             </motion.div>
