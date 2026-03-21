@@ -148,6 +148,13 @@ Backend default URL:
 http://localhost:3001
 ```
 
+If you run the frontend on a non-default port, include that origin in `CORS_ORIGINS` before starting the backend. Example:
+
+```powershell
+$env:CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3003"
+npm run start:dev
+```
+
 ### Start frontend
 
 ```powershell
@@ -167,6 +174,60 @@ Recommended local startup order:
 2. Start the frontend and confirm `NEXT_PUBLIC_API_URL` points at the backend.
 3. Log in with a seeded or existing account.
 4. Exercise core routes: `/explore`, `/matches`, `/messages`, `/dashboard/*`, `/admin/*`.
+
+### Local port notes
+
+- Frontend default: `http://localhost:3000`
+- Backend default: `http://localhost:3001`
+- `frontend/src/lib/api.ts` falls back to `http://localhost:3001` when `NEXT_PUBLIC_API_URL` is empty.
+- If you start the frontend on another port such as `3003`, the backend must allow that exact origin through `CORS_ORIGINS`.
+
+### Common local failures
+
+#### Login shows `Failed to fetch`
+
+This is usually not an auth bug. It means the browser could not complete the request to the backend.
+
+Check these first:
+
+1. Backend is running on `http://localhost:3001`
+2. `NEXT_PUBLIC_API_URL` points to the correct backend
+3. The frontend origin is included in backend `CORS_ORIGINS`
+
+Typical cause:
+
+- frontend is opened on `http://localhost:3003`
+- backend only allows `http://localhost:3000`
+- browser blocks the login request before any JSON response is returned
+
+#### Map View is blank or degraded
+
+If the sidebar loads but the basemap is blank and browser console shows Mapbox `403` tile/style errors, the app is mounting correctly but Mapbox is rejecting the token.
+
+Check these first:
+
+1. `NEXT_PUBLIC_MAPBOX_TOKEN` is present
+2. the token is still valid
+3. the token allows the current local origin and port
+
+Important distinction:
+
+- If overlays or approximate circles render but the basemap does not, that points to Mapbox token restrictions, not route logic.
+
+### Real browser walkthrough baseline
+
+The following runtime path has already been validated locally:
+
+1. `/property-details` resolves to a concrete listing after persisted store hydration
+2. `/property-details/[id]` renders correctly
+3. contacting from property details opens `/messages?thread=...`
+4. route-access requests post into the message thread successfully
+5. `/map-view?propertyId=...` loads sidebar listings and the messages handoff works
+
+Known runtime caveats:
+
+- backend CORS must include the frontend origin in use
+- Mapbox must allow the same origin or the basemap will return `403`
 
 ## Database Seed & Maintenance
 
