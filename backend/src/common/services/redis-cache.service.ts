@@ -98,7 +98,7 @@ export class RedisCacheService implements OnModuleDestroy {
         keys.push(key);
       }
       if (keys.length) {
-        await this.client.del(keys);
+        await this.client.del(...keys);
       }
     } catch (error) {
       this.logger.warn(

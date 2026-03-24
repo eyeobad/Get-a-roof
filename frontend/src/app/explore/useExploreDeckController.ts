@@ -69,6 +69,8 @@ type RecycledMatch = {
 };
 
 const INITIAL_VISIBLE_BATCH_SIZE = 12;
+const VISIBLE_STACK_SIZE = 3;
+const READY_PIPELINE_TARGET = 4;
 const LOW_WATERMARK = 8;
 const initialDeckState: DeckState = {
   phase: "boot_loading",
@@ -98,7 +100,7 @@ const splitVisibleAndBuffer = (listings: Listing[]) => ({
 });
 
 const buildRenderStack = (visibleQueue: Listing[], bufferQueue: Listing[]) =>
-  dedupeListings([...visibleQueue, ...bufferQueue]).slice(0, 3);
+  dedupeListings([...visibleQueue, ...bufferQueue]).slice(0, VISIBLE_STACK_SIZE);
 
 const rebuildWithRestoredListing = (state: DeckState, listing: Listing) => {
   const visibleWithout = state.visibleQueue.filter((item) => item.id !== listing.id);
@@ -396,8 +398,8 @@ export function useExploreDeckController({
       };
     }
 
-    const shouldAllowRecycle =
-      currentState.visibleQueue.length === 0 && currentState.bufferQueue.length === 0;
+    const totalReady = currentState.visibleQueue.length + currentState.bufferQueue.length;
+    const shouldAllowRecycle = totalReady < READY_PIPELINE_TARGET;
     if (!shouldAllowRecycle) {
       return { bufferQueue: [] };
     }
@@ -512,11 +514,12 @@ export function useExploreDeckController({
   }, [authToken, filters, resetKey, tenantPrefs, userLocation]);
 
   useEffect(() => {
+    const totalReady = state.visibleQueue.length + state.bufferQueue.length;
     const shouldPrefetch =
       state.phase !== "boot_loading" &&
       state.phase !== "terminal_empty" &&
       state.phase !== "error" &&
-      state.bufferQueue.length <= 2 &&
+      totalReady <= READY_PIPELINE_TARGET &&
       state.visibleQueue.length <= LOW_WATERMARK;
 
     if (!shouldPrefetch || prefetchInFlightRef.current) {

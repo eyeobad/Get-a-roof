@@ -568,8 +568,7 @@ export default function ExploreCards() {
 
         <div className="relative w-full h-[min(62dvh,620px)] min-h-[440px] md:h-[590px]">
           <div className="absolute inset-0 flex items-center justify-center">
-            {cardsToRender.length > 0 &&
-              Array.from({ length: missingStackCards }).map((_, placeholderIndex) => {
+            {Array.from({ length: missingStackCards }).map((_, placeholderIndex) => {
                 const stackIndex = cardsToRender.length + placeholderIndex;
                 return (
                   <div
