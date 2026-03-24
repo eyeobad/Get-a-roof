@@ -31,6 +31,7 @@ import { Express } from "express";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { Message, MessageDocument } from "../chat/schemas/message.schema";
 import { WorkspaceService } from "../common/services/workspace.service";
+import { RedisCacheService } from "../common/services/redis-cache.service";
 import { computePropertyFingerprint } from "./utils/fingerprint.utils";
 import { QueryCache, stableStringify } from "./utils/query-cache";
 
@@ -51,6 +52,7 @@ const propertyProofMimeTypes = new Set([
 
 type PropertyScope = "mine" | "all";
 const exploreQueryCache = new QueryCache<unknown[]>(500, 30_000);
+const EXPLORE_CACHE_TTL_SECONDS = 45;
 const exploreProjection = {
   _id: 1,
   landlordId: 1,
@@ -86,8 +88,17 @@ export class PropertiesService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly usersService: UsersService,
     private readonly appwriteStorage: AppwriteStorageService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly redisCache: RedisCacheService
   ) { }
+
+  private async clearExploreCaches() {
+    exploreQueryCache.clear();
+    await Promise.all([
+      this.redisCache.deleteByPrefix("explore:"),
+      this.redisCache.deleteByPrefix("map:"),
+    ]);
+  }
 
   async createProperty(dto: CreatePropertyDto) {
     if (!dto.landlordId || !Types.ObjectId.isValid(dto.landlordId)) {
@@ -169,7 +180,7 @@ export class PropertiesService {
           if (!updated) {
             throw new NotFoundException("Property not found");
           }
-          exploreQueryCache.clear();
+          await this.clearExploreCaches();
           return updated;
         }
       }
@@ -214,7 +225,7 @@ export class PropertiesService {
       ...(orgId ? { orgId } : {}),
     });
     const saved = await created.save();
-    exploreQueryCache.clear();
+    await this.clearExploreCaches();
     if (duplicateFromAnotherOwner) {
       throw new ConflictException({
         errorCode: "DUPLICATE_LISTING",
@@ -285,7 +296,7 @@ export class PropertiesService {
     if (!updated) {
       throw new NotFoundException("Property not found");
     }
-    exploreQueryCache.clear();
+    await this.clearExploreCaches();
     return updated;
   }
 
@@ -351,6 +362,11 @@ export class PropertiesService {
     if (cached) {
       return cached as unknown[];
     }
+    const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
+    if (redisCached) {
+      exploreQueryCache.set(cacheKey, redisCached);
+      return redisCached;
+    }
 
     const properties = await this.propertyModel
       .find(queryFilters, exploreProjection)
@@ -362,6 +378,7 @@ export class PropertiesService {
       (property) => this.toPublicExploreProperty(property)
     );
     exploreQueryCache.set(cacheKey, result);
+    await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
     return result;
   }
 
@@ -400,6 +417,11 @@ export class PropertiesService {
     if (cached) {
       return cached as unknown[];
     }
+    const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
+    if (redisCached) {
+      exploreQueryCache.set(cacheKey, redisCached);
+      return redisCached;
+    }
 
     const properties = await this.propertyModel
       .find(withCoords, exploreProjection)
@@ -419,6 +441,7 @@ export class PropertiesService {
       }),
     }));
     exploreQueryCache.set(cacheKey, mapped);
+    await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
     return mapped;
   }
 
@@ -524,7 +547,7 @@ export class PropertiesService {
     }
 
     await this.propertyModel.deleteOne({ _id: property._id });
-    exploreQueryCache.clear();
+    await this.clearExploreCaches();
     return { deleted: true };
   }
 

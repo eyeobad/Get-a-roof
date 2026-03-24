@@ -28,6 +28,7 @@ const appwrite_service_1 = require("../appwrite/appwrite.service");
 const user_schema_1 = require("../users/schemas/user.schema");
 const message_schema_1 = require("../chat/schemas/message.schema");
 const workspace_service_1 = require("../common/services/workspace.service");
+const redis_cache_service_1 = require("../common/services/redis-cache.service");
 const fingerprint_utils_1 = require("./utils/fingerprint.utils");
 const query_cache_1 = require("./utils/query-cache");
 const propertyImageMimeTypes = new Set([
@@ -44,6 +45,7 @@ const propertyProofMimeTypes = new Set([
     "application/pdf",
 ]);
 const exploreQueryCache = new query_cache_1.QueryCache(500, 30_000);
+const EXPLORE_CACHE_TTL_SECONDS = 45;
 const exploreProjection = {
     _id: 1,
     landlordId: 1,
@@ -65,7 +67,7 @@ const exploreProjection = {
 const buildPublicLocationLabel = (property) => [property.neighborhood, property.address?.city].filter(Boolean).join(", ") ||
     [property.address?.city, property.address?.state].filter(Boolean).join(", ");
 let PropertiesService = class PropertiesService {
-    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage, workspaceService) {
+    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage, workspaceService, redisCache) {
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.userModel = userModel;
@@ -73,6 +75,14 @@ let PropertiesService = class PropertiesService {
         this.usersService = usersService;
         this.appwriteStorage = appwriteStorage;
         this.workspaceService = workspaceService;
+        this.redisCache = redisCache;
+    }
+    async clearExploreCaches() {
+        exploreQueryCache.clear();
+        await Promise.all([
+            this.redisCache.deleteByPrefix("explore:"),
+            this.redisCache.deleteByPrefix("map:"),
+        ]);
     }
     async createProperty(dto) {
         if (!dto.landlordId || !mongoose_2.Types.ObjectId.isValid(dto.landlordId)) {
@@ -138,7 +148,7 @@ let PropertiesService = class PropertiesService {
                     if (!updated) {
                         throw new common_1.NotFoundException("Property not found");
                     }
-                    exploreQueryCache.clear();
+                    await this.clearExploreCaches();
                     return updated;
                 }
             }
@@ -171,7 +181,7 @@ let PropertiesService = class PropertiesService {
             ...(orgId ? { orgId } : {}),
         });
         const saved = await created.save();
-        exploreQueryCache.clear();
+        await this.clearExploreCaches();
         if (duplicateFromAnotherOwner) {
             throw new common_1.ConflictException({
                 errorCode: "DUPLICATE_LISTING",
@@ -229,7 +239,7 @@ let PropertiesService = class PropertiesService {
         if (!updated) {
             throw new common_1.NotFoundException("Property not found");
         }
-        exploreQueryCache.clear();
+        await this.clearExploreCaches();
         return updated;
     }
     async getProperty(id) {
@@ -280,6 +290,11 @@ let PropertiesService = class PropertiesService {
         if (cached) {
             return cached;
         }
+        const redisCached = await this.redisCache.getJson(cacheKey);
+        if (redisCached) {
+            exploreQueryCache.set(cacheKey, redisCached);
+            return redisCached;
+        }
         const properties = await this.propertyModel
             .find(queryFilters, exploreProjection)
             .limit(limit)
@@ -288,6 +303,7 @@ let PropertiesService = class PropertiesService {
         const validProperties = await this.excludeOrphanedProperties(properties);
         const result = (await this.applyScoringAndFilters(validProperties, options)).map((property) => this.toPublicExploreProperty(property));
         exploreQueryCache.set(cacheKey, result);
+        await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
         return result;
     }
     async getMapMatches(filters, options) {
@@ -316,6 +332,11 @@ let PropertiesService = class PropertiesService {
         if (cached) {
             return cached;
         }
+        const redisCached = await this.redisCache.getJson(cacheKey);
+        if (redisCached) {
+            exploreQueryCache.set(cacheKey, redisCached);
+            return redisCached;
+        }
         const properties = await this.propertyModel
             .find(withCoords, exploreProjection)
             .limit(limit)
@@ -331,6 +352,7 @@ let PropertiesService = class PropertiesService {
             }),
         }));
         exploreQueryCache.set(cacheKey, mapped);
+        await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
         return mapped;
     }
     async uploadImage(file) {
@@ -407,7 +429,7 @@ let PropertiesService = class PropertiesService {
             await this.matchModel.deleteMany({ _id: { $in: matchIds } });
         }
         await this.propertyModel.deleteOne({ _id: property._id });
-        exploreQueryCache.clear();
+        await this.clearExploreCaches();
         return { deleted: true };
     }
     normalizePropertyPayload(dto) {
@@ -660,5 +682,6 @@ exports.PropertiesService = PropertiesService = __decorate([
         mongoose_2.Model,
         users_service_1.UsersService,
         appwrite_service_1.AppwriteStorageService,
-        workspace_service_1.WorkspaceService])
+        workspace_service_1.WorkspaceService,
+        redis_cache_service_1.RedisCacheService])
 ], PropertiesService);

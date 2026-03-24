@@ -14,6 +14,7 @@ import { LandlordModule } from "./landlord/landlord.module";
 import { MailModule } from "./mail/mail.module";
 import { AppwriteModule } from "./appwrite/appwrite.module";
 import { AdminModule } from "./admin/admin.module";
+import { RedisCacheModule } from "./common/services/redis-cache.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AdminModule } from "./admin/admin.module";
         uri: configService.get<string>("MONGODB_URI") || "mongodb://127.0.0.1:27017/get-a-roof",
       }),
     }),
+    RedisCacheModule,
     AuthModule,
     UsersModule,
     PropertiesModule,

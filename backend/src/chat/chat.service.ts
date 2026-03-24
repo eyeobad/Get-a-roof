@@ -13,6 +13,7 @@ import { Property, PropertyDocument } from "../properties/schemas/property.schem
 import { MatchStatus, RouteAccessStatus } from "../common/enums";
 import { User, UserDocument } from "../users/schemas/user.schema";
 import { WorkspaceService } from "../common/services/workspace.service";
+import { RedisCacheService } from "../common/services/redis-cache.service";
 import {
   computeMatchScore,
   type PropertyMatchInput,
@@ -43,8 +44,16 @@ export class ChatService {
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly redisCache: RedisCacheService
   ) { }
+
+  private async clearTenantMatchCaches(tenantId: string) {
+    await Promise.all([
+      this.redisCache.deleteByPrefix(`tenant-matches:active:${tenantId}:`),
+      this.redisCache.deleteByPrefix(`tenant-matches:recycled:${tenantId}:`),
+    ]);
+  }
 
   private async applyMatchScore(
     match: MatchDocument,
@@ -268,6 +277,7 @@ export class ChatService {
         ? { landlordUnreadCount: 1 }
         : { tenantUnreadCount: 1 },
     });
+    await this.clearTenantMatchCaches(tenantId);
     return saved;
   }
 
@@ -428,6 +438,7 @@ export class ChatService {
     await this.matchModel.findByIdAndUpdate(matchId, {
       $set: isTenant ? { tenantUnreadCount: 0 } : { landlordUnreadCount: 0 },
     });
+    await this.clearTenantMatchCaches(match.tenantId.toString());
 
     return { updatedCount: result.modifiedCount };
   }
@@ -531,6 +542,7 @@ export class ChatService {
     }
     await this.applyMatchScore(match, property, tenantId);
     await match.save();
+    await this.clearTenantMatchCaches(tenantId);
 
     let createdMessage;
     if (message) {
@@ -595,6 +607,7 @@ export class ChatService {
     }
     if (shouldSave) {
       await match.save();
+      await this.clearTenantMatchCaches(match.tenantId.toString());
     }
 
     let createdMessage;

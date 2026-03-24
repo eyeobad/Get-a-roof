@@ -26,6 +26,7 @@ const message_schema_1 = require("../chat/schemas/message.schema");
 const enums_1 = require("../common/enums");
 const crypto_1 = require("crypto");
 const mail_service_1 = require("../mail/mail.service");
+const redis_cache_service_1 = require("../common/services/redis-cache.service");
 const profileMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -33,13 +34,14 @@ const profileMimeTypes = new Set([
     "image/gif",
 ]);
 let UsersService = UsersService_1 = class UsersService {
-    constructor(userModel, propertyModel, matchModel, messageModel, appwriteStorage, mailService) {
+    constructor(userModel, propertyModel, matchModel, messageModel, appwriteStorage, mailService, redisCache) {
         this.userModel = userModel;
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.messageModel = messageModel;
         this.appwriteStorage = appwriteStorage;
         this.mailService = mailService;
+        this.redisCache = redisCache;
         this.logger = new common_1.Logger(UsersService_1.name);
         this.signupVerificationTtlMs = 15 * 60 * 1000;
         this.agentInviteTtlMs = 72 * 60 * 60 * 1000;
@@ -241,6 +243,10 @@ let UsersService = UsersService_1 = class UsersService {
                 await this.matchModel.deleteMany({ _id: { $in: matchIds } });
             }
         }
+        await Promise.all([
+            this.redisCache.deleteByPrefix(`tenant-matches:active:${id}:`),
+            this.redisCache.deleteByPrefix(`tenant-matches:recycled:${id}:`),
+        ]);
         return updated;
     }
     async deleteUser(id) {
@@ -277,6 +283,10 @@ let UsersService = UsersService_1 = class UsersService {
             });
         }
         await this.matchModel.deleteMany(matchFilter);
+        await Promise.all([
+            this.redisCache.deleteByPrefix(`tenant-matches:active:${id}:`),
+            this.redisCache.deleteByPrefix(`tenant-matches:recycled:${id}:`),
+        ]);
         const deleted = await this.userModel.findByIdAndDelete(id).exec();
         return deleted;
     }
@@ -556,5 +566,6 @@ exports.UsersService = UsersService = UsersService_1 = __decorate([
         mongoose_2.Model,
         mongoose_2.Model,
         appwrite_service_1.AppwriteStorageService,
-        mail_service_1.MailService])
+        mail_service_1.MailService,
+        redis_cache_service_1.RedisCacheService])
 ], UsersService);

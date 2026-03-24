@@ -23,6 +23,7 @@ const landlord_module_1 = require("./landlord/landlord.module");
 const mail_module_1 = require("./mail/mail.module");
 const appwrite_module_1 = require("./appwrite/appwrite.module");
 const admin_module_1 = require("./admin/admin.module");
+const redis_cache_module_1 = require("./common/services/redis-cache.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -47,6 +48,7 @@ exports.AppModule = AppModule = __decorate([
                     uri: configService.get("MONGODB_URI") || "mongodb://127.0.0.1:27017/get-a-roof",
                 }),
             }),
+            redis_cache_module_1.RedisCacheModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             properties_module_1.PropertiesModule,

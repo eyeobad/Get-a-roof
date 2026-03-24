@@ -24,6 +24,7 @@ import { Message, MessageDocument } from "../chat/schemas/message.schema";
 import { UserRole } from "../common/enums";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { MailService } from "../mail/mail.service";
+import { RedisCacheService } from "../common/services/redis-cache.service";
 
 const profileMimeTypes = new Set([
   "image/jpeg",
@@ -49,7 +50,8 @@ export class UsersService {
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     private readonly appwriteStorage: AppwriteStorageService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly redisCache: RedisCacheService
   ) { }
 
   async createUser(dto: CreateUserDto) {
@@ -299,6 +301,11 @@ export class UsersService {
       }
     }
 
+    await Promise.all([
+      this.redisCache.deleteByPrefix(`tenant-matches:active:${id}:`),
+      this.redisCache.deleteByPrefix(`tenant-matches:recycled:${id}:`),
+    ]);
+
     return updated;
   }
 
@@ -340,6 +347,10 @@ export class UsersService {
       });
     }
     await this.matchModel.deleteMany(matchFilter);
+    await Promise.all([
+      this.redisCache.deleteByPrefix(`tenant-matches:active:${id}:`),
+      this.redisCache.deleteByPrefix(`tenant-matches:recycled:${id}:`),
+    ]);
 
     const deleted = await this.userModel.findByIdAndDelete(id).exec();
     return deleted;

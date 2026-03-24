@@ -22,6 +22,7 @@ const property_schema_1 = require("../properties/schemas/property.schema");
 const enums_1 = require("../common/enums");
 const user_schema_1 = require("../users/schemas/user.schema");
 const workspace_service_1 = require("../common/services/workspace.service");
+const redis_cache_service_1 = require("../common/services/redis-cache.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const ROUTE_REQUEST_PREFIX = "__route_request__:";
 const CHAT_VISIBLE_STATUSES = [enums_1.MatchStatus.ChatInitiated, enums_1.MatchStatus.Active];
@@ -32,12 +33,19 @@ function isMongoDuplicateKeyError(error) {
     return code === 11000;
 }
 let ChatService = class ChatService {
-    constructor(messageModel, matchModel, propertyModel, userModel, workspaceService) {
+    constructor(messageModel, matchModel, propertyModel, userModel, workspaceService, redisCache) {
         this.messageModel = messageModel;
         this.matchModel = matchModel;
         this.propertyModel = propertyModel;
         this.userModel = userModel;
         this.workspaceService = workspaceService;
+        this.redisCache = redisCache;
+    }
+    async clearTenantMatchCaches(tenantId) {
+        await Promise.all([
+            this.redisCache.deleteByPrefix(`tenant-matches:active:${tenantId}:`),
+            this.redisCache.deleteByPrefix(`tenant-matches:recycled:${tenantId}:`),
+        ]);
     }
     async applyMatchScore(match, property, tenantId) {
         const tenant = await this.userModel.findById(tenantId).lean().exec();
@@ -224,6 +232,7 @@ let ChatService = class ChatService {
                 ? { landlordUnreadCount: 1 }
                 : { tenantUnreadCount: 1 },
         });
+        await this.clearTenantMatchCaches(tenantId);
         return saved;
     }
     async getConversations(userId, options) {
@@ -363,6 +372,7 @@ let ChatService = class ChatService {
         await this.matchModel.findByIdAndUpdate(matchId, {
             $set: isTenant ? { tenantUnreadCount: 0 } : { landlordUnreadCount: 0 },
         });
+        await this.clearTenantMatchCaches(match.tenantId.toString());
         return { updatedCount: result.modifiedCount };
     }
     async startThread(tenantId, propertyId, message) {
@@ -454,6 +464,7 @@ let ChatService = class ChatService {
         }
         await this.applyMatchScore(match, property, tenantId);
         await match.save();
+        await this.clearTenantMatchCaches(tenantId);
         let createdMessage;
         if (message) {
             createdMessage = await this.createMessage({
@@ -509,6 +520,7 @@ let ChatService = class ChatService {
         }
         if (shouldSave) {
             await match.save();
+            await this.clearTenantMatchCaches(match.tenantId.toString());
         }
         let createdMessage;
         if (message) {
@@ -598,5 +610,6 @@ exports.ChatService = ChatService = __decorate([
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        workspace_service_1.WorkspaceService])
+        workspace_service_1.WorkspaceService,
+        redis_cache_service_1.RedisCacheService])
 ], ChatService);

@@ -23,8 +23,11 @@ const properties_service_1 = require("../properties/properties.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const message_schema_1 = require("../chat/schemas/message.schema");
 const workspace_service_1 = require("../common/services/workspace.service");
+const redis_cache_service_1 = require("../common/services/redis-cache.service");
+const query_cache_1 = require("../properties/utils/query-cache");
 const DEFAULT_PAGE_LIMIT = 20;
 const RECYCLE_COOLDOWN_DAYS = 14;
+const TENANT_MATCH_CACHE_TTL_SECONDS = 30;
 const VALID_TRANSITIONS = {
     [enums_1.MatchStatus.TenantLiked]: [
         enums_1.MatchStatus.LandlordQualified,
@@ -89,12 +92,22 @@ function isMongoDuplicateKeyError(error) {
     return code === 11000;
 }
 let MatchesService = class MatchesService {
-    constructor(matchModel, messageModel, usersService, propertiesService, workspaceService) {
+    constructor(matchModel, messageModel, usersService, propertiesService, workspaceService, redisCache) {
         this.matchModel = matchModel;
         this.messageModel = messageModel;
         this.usersService = usersService;
         this.propertiesService = propertiesService;
         this.workspaceService = workspaceService;
+        this.redisCache = redisCache;
+    }
+    tenantMatchCacheKey(kind, tenantId, options) {
+        return `tenant-matches:${kind}:${tenantId}:${(0, query_cache_1.stableStringify)(options ?? {})}`;
+    }
+    async clearTenantMatchCaches(tenantId) {
+        await Promise.all([
+            this.redisCache.deleteByPrefix(`tenant-matches:active:${tenantId}:`),
+            this.redisCache.deleteByPrefix(`tenant-matches:recycled:${tenantId}:`),
+        ]);
     }
     async createMatch(dto) {
         if (!dto.tenantId) {
@@ -180,7 +193,9 @@ let MatchesService = class MatchesService {
                 doc.dismissedAt = undefined;
                 doc.dismissReason = undefined;
             }
-            return doc.save();
+            const saved = await doc.save();
+            await this.clearTenantMatchCaches(dto.tenantId);
+            return saved;
         };
         if (existing) {
             return saveExisting(existing);
@@ -204,7 +219,9 @@ let MatchesService = class MatchesService {
                 : undefined,
         });
         try {
-            return await created.save();
+            const saved = await created.save();
+            await this.clearTenantMatchCaches(dto.tenantId);
+            return saved;
         }
         catch (error) {
             if (!isMongoDuplicateKeyError(error)) {
@@ -269,6 +286,7 @@ let MatchesService = class MatchesService {
             this.messageModel.deleteMany({ matchId: { $in: matchIds } }),
             this.matchModel.deleteMany({ _id: { $in: matchIds } }),
         ]);
+        await this.clearTenantMatchCaches(tenantId);
         return {
             success: true,
             deletedMatches: deletedMatchesResult.deletedCount ?? 0,
@@ -286,7 +304,9 @@ let MatchesService = class MatchesService {
         match.status = enums_1.MatchStatus.Dismissed;
         match.dismissReason = enums_1.DismissReason.Hard;
         match.dismissedAt = new Date();
-        return match.save();
+        const saved = await match.save();
+        await this.clearTenantMatchCaches(tenantId);
+        return saved;
     }
     async archiveMatch(matchId, tenantId) {
         const match = await this.matchModel.findById(matchId).exec();
@@ -303,9 +323,15 @@ let MatchesService = class MatchesService {
         match.tenantUnreadCount = 0;
         match.landlordUnreadCount = 0;
         await match.save();
+        await this.clearTenantMatchCaches(tenantId);
         return { success: true, status: match.status };
     }
     async getRecyclableMatches(tenantId, options) {
+        const cacheKey = this.tenantMatchCacheKey("recycled", tenantId, options);
+        const cached = await this.redisCache.getJson(cacheKey);
+        if (cached) {
+            return cached;
+        }
         const cooldownDays = options?.cooldownDays ?? RECYCLE_COOLDOWN_DAYS;
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - cooldownDays);
@@ -374,7 +400,9 @@ let MatchesService = class MatchesService {
                 },
             },
         ];
-        return this.matchModel.aggregate(pipeline).exec();
+        const results = await this.matchModel.aggregate(pipeline).exec();
+        await this.redisCache.setJson(cacheKey, results, TENANT_MATCH_CACHE_TTL_SECONDS);
+        return results;
     }
     async recycleDismissedMatch(matchId, tenantId) {
         const match = await this.matchModel.findById(matchId).exec();
@@ -391,6 +419,7 @@ let MatchesService = class MatchesService {
             throw new common_1.BadRequestException("This match is permanently blocked");
         }
         await match.deleteOne();
+        await this.clearTenantMatchCaches(tenantId);
         return { success: true };
     }
     async recycleDismissedMatchesBulk(matchIds, tenantId) {
@@ -407,6 +436,7 @@ let MatchesService = class MatchesService {
             status: enums_1.MatchStatus.Dismissed,
             dismissReason: { $ne: enums_1.DismissReason.Hard },
         });
+        await this.clearTenantMatchCaches(tenantId);
         return { success: true, count: result.deletedCount };
     }
     async findByProperty(propertyId) {
@@ -612,6 +642,11 @@ let MatchesService = class MatchesService {
         if (!mongoose_2.Types.ObjectId.isValid(tenantId)) {
             throw new common_1.BadRequestException("Invalid tenantId");
         }
+        const cacheKey = this.tenantMatchCacheKey("active", tenantId, options);
+        const cached = await this.redisCache.getJson(cacheKey);
+        if (cached) {
+            return cached;
+        }
         const tenantOid = toObjectId(tenantId);
         const pipeline = [
             {
@@ -639,7 +674,9 @@ let MatchesService = class MatchesService {
             { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
             ...paginationStages(options?.page, options?.limit),
         ];
-        return this.matchModel.aggregate(pipeline).exec();
+        const results = await this.matchModel.aggregate(pipeline).exec();
+        await this.redisCache.setJson(cacheKey, results, TENANT_MATCH_CACHE_TTL_SECONDS);
+        return results;
     }
     validateTransition(current, incoming) {
         if (current === incoming)
@@ -660,5 +697,6 @@ exports.MatchesService = MatchesService = __decorate([
         mongoose_2.Model,
         users_service_1.UsersService,
         properties_service_1.PropertiesService,
-        workspace_service_1.WorkspaceService])
+        workspace_service_1.WorkspaceService,
+        redis_cache_service_1.RedisCacheService])
 ], MatchesService);
