@@ -333,7 +333,6 @@ export class MatchesService {
       this.messageModel.deleteMany({ matchId: { $in: matchIds } }),
       this.matchModel.deleteMany({ _id: { $in: matchIds } }),
     ]);
-
     return {
       success: true,
       deletedMatches: deletedMatchesResult.deletedCount ?? 0,
@@ -794,4 +793,5 @@ export class MatchesService {
     }
     return incoming;
   }
+
 }

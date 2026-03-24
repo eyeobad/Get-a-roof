@@ -222,6 +222,25 @@ let UsersService = UsersService_1 = class UsersService {
         if (!updated) {
             throw new common_1.NotFoundException("User not found");
         }
+        if (mongoose_2.Types.ObjectId.isValid(id) && mongoose_2.Types.ObjectId.isValid(propertyId)) {
+            const tenantId = new mongoose_2.Types.ObjectId(id);
+            const listingId = new mongoose_2.Types.ObjectId(propertyId);
+            const duplicateMatches = await this.matchModel
+                .find({
+                $or: [
+                    { tenantId, propertyId: listingId },
+                    { tenantId: id, propertyId },
+                ],
+            })
+                .select("_id")
+                .lean()
+                .exec();
+            const matchIds = duplicateMatches.map((match) => match._id);
+            if (matchIds.length > 0) {
+                await this.messageModel.deleteMany({ matchId: { $in: matchIds } });
+                await this.matchModel.deleteMany({ _id: { $in: matchIds } });
+            }
+        }
         return updated;
     }
     async deleteUser(id) {

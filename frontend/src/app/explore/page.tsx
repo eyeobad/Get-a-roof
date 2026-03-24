@@ -17,7 +17,6 @@ import {
   useAnimation,
   useMotionValue,
   useTransform,
-  animate,
   type PanInfo,
 } from "framer-motion";
 
@@ -159,8 +158,14 @@ export default function ExploreCards() {
   const [lastSwipe, setLastSwipe] = useState<LastSwipe | null>(null);
   const preloadedImageUrlsRef = useRef(new Set<string>());
   const preloadedImageQueueRef = useRef<string[]>([]);
+  const hasMountedRef = useRef(false);
+  const frontCardControlsAttachedRef = useRef(false);
 
   const controls = useAnimation();
+  const resetControls = useCallback(() => {
+    if (!hasMountedRef.current || !frontCardControlsAttachedRef.current) return;
+    controls.set({ x: 0, rotate: 0, opacity: 1 });
+  }, [controls]);
 
   const activeExploreFilters = useMemo(
     () => ({
@@ -219,12 +224,24 @@ export default function ExploreCards() {
     tenantPrefs: normalizedTenantPrefs,
     userLocation,
   });
+  const missingStackCards = Math.max(0, 3 - cardsToRender.length);
+  const showDeckSkeleton =
+    cardsToRender.length === 0 &&
+    ((deckPhase === "boot_loading" && !hasRenderedCards) || deckPhase === "swapping");
 
   useEffect(() => {
-    controls.set({ x: 0, rotate: 0, opacity: 1 });
+    hasMountedRef.current = true;
+    return () => {
+      hasMountedRef.current = false;
+      frontCardControlsAttachedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    resetControls();
     swipeLockRef.current = false;
     setIsSwipeAnimating(false);
-  }, [topCardId, controls]);
+  }, [topCardId, resetControls]);
 
   useEffect(() => {
     if (useAppStore.getState().selectedListingId !== topCardId) {
@@ -242,7 +259,7 @@ export default function ExploreCards() {
     setCardImageIndexes({});
     swipeLockRef.current = false;
     setLastSwipe(null);
-    controls.set({ x: 0, rotate: 0, opacity: 1 });
+    resetControls();
     setIsSwipeAnimating(false);
     setDeckResetKey((value) => value + 1);
   };
@@ -331,7 +348,7 @@ export default function ExploreCards() {
         await passListing(topListing.id);
       }
       setLastSwipe({ listing: topListing, direction });
-      controls.set({ x: 0, rotate: 0, opacity: 1 });
+      resetControls();
       await swipeAnimation.catch(() => undefined);
     } catch {
       rollbackSwipe(topListing);
@@ -340,7 +357,7 @@ export default function ExploreCards() {
         text: "Could not save your action. Please try again.",
         variant: "error",
       });
-      controls.set({ x: 0, rotate: 0, opacity: 1 });
+      resetControls();
     } finally {
       swipeLockRef.current = false;
       setIsSwipeAnimating(false);
@@ -369,14 +386,14 @@ export default function ExploreCards() {
         variant: "error",
       });
     } finally {
-      controls.set({ x: 0, rotate: 0, opacity: 1 });
+      resetControls();
       swipeLockRef.current = false;
       setIsSwipeAnimating(false);
     }
   }, [
-    controls,
     isSwipeAnimating,
     lastSwipe,
+    resetControls,
     rollbackSwipe,
     setSelectedListingId,
     unlikeListing,
@@ -551,12 +568,31 @@ export default function ExploreCards() {
 
         <div className="relative w-full h-[min(62dvh,620px)] min-h-[440px] md:h-[590px]">
           <div className="absolute inset-0 flex items-center justify-center">
+            {cardsToRender.length > 0 &&
+              Array.from({ length: missingStackCards }).map((_, placeholderIndex) => {
+                const stackIndex = cardsToRender.length + placeholderIndex;
+                return (
+                  <div
+                    key={`deck-placeholder-${stackIndex}`}
+                    className="absolute inset-0 flex items-center justify-center px-2"
+                    style={{
+                      zIndex: 20 - stackIndex,
+                      transform: `translateY(${stackIndex * 24}px) scale(${1 - stackIndex * 0.04})`,
+                    }}
+                  >
+                    <div className="h-full w-full max-w-md rounded-[2rem] border border-slate-200/80 bg-white/70 shadow-md" />
+                  </div>
+                );
+              })}
             {cardsToRender.map((card, index) => (
               <CardItem
                 key={`${card.id}-${index}`}
                 index={index}
                 isFront={index === 0}
                 controls={controls}
+                onFrontControlsMountChange={(mounted) => {
+                  frontCardControlsAttachedRef.current = mounted;
+                }}
                 onSwipe={handleSwipe}
               >
                 {cardBody(card, index === 0)}
@@ -565,50 +601,36 @@ export default function ExploreCards() {
           </div>
         </div>
 
-        {cardsToRender.length === 0 && deckPhase === "boot_loading" && !hasRenderedCards && (
+        {showDeckSkeleton && (
           <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
             <div className="relative h-[min(62dvh,620px)] min-h-[440px] w-full max-w-md">
-
-              {/* Background Card 2 (Deepest) */}
               <div className="absolute inset-x-8 top-12 h-full scale-[0.92] rounded-[2.5rem] border border-slate-200/50 bg-white/40 shadow-sm -z-20" />
-
-              {/* Background Card 1 (Middle) */}
-              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10 animate-pulse" />
-
-              {/* Main Front Card Skeleton */}
-              <div className="relative h-full w-full overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl flex flex-col animate-pulse">
-
-                {/* Image Area Placeholder */}
-                <div className="relative h-[86%] md:h-[72%] w-full bg-slate-200">
-                  <div className="absolute top-4 left-4 h-8 w-24 rounded-full bg-slate-300" />
-                  <div className="absolute inset-x-0 top-4 flex justify-center gap-1.5">
-                    <div className="h-1.5 w-6 rounded-full bg-slate-300" />
-                    <div className="h-1.5 w-2 rounded-full bg-slate-300/50" />
+              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10" />
+              <div className="w-full max-w-md animate-pulse overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-card">
+                <div className="relative h-[58%] min-h-[320px] bg-slate-200">
+                  <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-slate-300" />
+                  <div className="absolute inset-x-0 top-4 flex justify-center gap-2">
+                    <div className="h-1.5 w-6 rounded-full bg-white/80" />
+                    <div className="h-1.5 w-2 rounded-full bg-white/60" />
+                    <div className="h-1.5 w-2 rounded-full bg-white/60" />
                   </div>
                 </div>
-
-                {/* Content Area */}
-                <div className="flex-1 bg-primary px-4 py-3 md:px-6 md:py-5 flex flex-col justify-between gap-2.5 md:gap-4">
-                  <div className="flex flex-col gap-1 md:gap-2 border-b border-white/10 pb-2 md:pb-3">
-                    <div className="flex items-end gap-2">
-                      <div className="h-8 md:h-10 w-32 rounded-lg bg-white/20" />
-                      <div className="h-5 md:h-6 w-16 rounded-md bg-white/10 mb-0.5 md:mb-1.5" />
-                    </div>
-                    <div className="h-3 w-48 max-w-[80%] rounded-md bg-white/10" />
+                <div className="space-y-4 bg-primary px-4 py-5 md:px-6">
+                  <div className="space-y-2 border-b border-white/10 pb-4">
+                    <div className="h-8 w-40 rounded-full bg-white/20" />
+                    <div className="h-3 w-24 rounded-full bg-white/15" />
                   </div>
-
-                  <div className="grid grid-cols-3 gap-2 md:gap-3 py-1 md:py-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex flex-col items-center justify-center h-16 md:h-20 rounded-xl bg-white/10" />
-                    ))}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="h-14 rounded-xl bg-white/10" />
+                    <div className="h-14 rounded-xl bg-white/10" />
+                    <div className="h-14 rounded-xl bg-white/10" />
                   </div>
-
-                  <div className="h-12 md:h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center px-4 gap-3">
-                    <div className="h-6 w-6 rounded-full bg-white/20 shrink-0" />
-                    <div className="flex-1 flex flex-col gap-2 min-w-0">
-                      <div className="h-3 w-3/4 max-w-[200px] rounded-md bg-white/20" />
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
+                    <div className="space-y-2">
+                      <div className="h-4 w-40 rounded-full bg-white/15" />
+                      <div className="h-8 w-28 rounded-xl bg-white/10" />
                     </div>
-                    <div className="h-4 w-12 rounded-md bg-white/10 shrink-0" />
                   </div>
                 </div>
               </div>
@@ -708,17 +730,31 @@ type CardItemProps = {
   index: number;
   isFront: boolean;
   controls: ReturnType<typeof useAnimation>;
+  onFrontControlsMountChange?: (mounted: boolean) => void;
   onSwipe: (direction: "left" | "right") => Promise<void>;
   children: ReactNode;
 };
 
-function CardItem({ index, isFront, controls, onSwipe, children }: CardItemProps) {
+function CardItem({
+  index,
+  isFront,
+  controls,
+  onFrontControlsMountChange,
+  onSwipe,
+  children,
+}: CardItemProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
 
   // Real-estate decision overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
+
+  useEffect(() => {
+    if (!isFront) return;
+    onFrontControlsMountChange?.(true);
+    return () => onFrontControlsMountChange?.(false);
+  }, [isFront, onFrontControlsMountChange]);
 
   const handleDragEnd = async (_: unknown, info: PanInfo) => {
     if (!isFront) return;

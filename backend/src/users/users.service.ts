@@ -277,6 +277,28 @@ export class UsersService {
     if (!updated) {
       throw new NotFoundException("User not found");
     }
+
+    if (Types.ObjectId.isValid(id) && Types.ObjectId.isValid(propertyId)) {
+      const tenantId = new Types.ObjectId(id);
+      const listingId = new Types.ObjectId(propertyId);
+      const duplicateMatches = await this.matchModel
+        .find({
+          $or: [
+            { tenantId, propertyId: listingId },
+            { tenantId: id, propertyId },
+          ],
+        })
+        .select("_id")
+        .lean()
+        .exec();
+
+      const matchIds = duplicateMatches.map((match) => match._id);
+      if (matchIds.length > 0) {
+        await this.messageModel.deleteMany({ matchId: { $in: matchIds } });
+        await this.matchModel.deleteMany({ _id: { $in: matchIds } });
+      }
+    }
+
     return updated;
   }
 

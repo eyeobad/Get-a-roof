@@ -104,6 +104,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const [shareUrl] = useState(() => (typeof window !== "undefined" ? window.location.href : ""));
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [isSavePending, setIsSavePending] = useState(false);
+  const [saveAction, setSaveAction] = useState<"save" | "unsave" | null>(null);
 
   const shareRef = useRef<HTMLDivElement | null>(null);
 
@@ -132,15 +133,26 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
   const handleToggleSave = async () => {
     if (isSavePending) return;
-    setIsSavePending(true);
-    try {
     if (isSaved) {
-      await unlikeListing(listing.id);
-      return;
+      const confirmed =
+        typeof window !== "undefined"
+          ? window.confirm(
+              "Are you sure? This will remove the saved property, match, and related chat history."
+            )
+          : false;
+      if (!confirmed) return;
     }
-    await likeListing(listing.id);
+    setIsSavePending(true);
+    setSaveAction(isSaved ? "unsave" : "save");
+    try {
+      if (isSaved) {
+        await unlikeListing(listing.id);
+      } else {
+        await likeListing(listing.id);
+      }
     } finally {
       setIsSavePending(false);
+      setSaveAction(null);
     }
   };
 
@@ -288,16 +300,26 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
                 <button
                   onClick={handleToggleSave}
                   disabled={isSavePending}
-                  className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition active:scale-95 ${
+                  className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-2 min-w-[110px] text-sm font-bold transition active:scale-95 ${
                     isSaved
-                      ? "bg-primary text-white shadow-lg"
+                      ? "bg-primary text-white shadow-lg border border-primary"
                       : "border border-slate-200 bg-white text-slate-800 hover:border-primary hover:text-primary"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  <span className="material-symbols-outlined text-lg">
-                    {isSaved ? "check" : "favorite_border"}
+                  <span
+                    className={`material-symbols-outlined text-lg ${
+                      isSavePending ? "animate-spin" : ""
+                    }`}
+                  >
+                    {isSavePending ? "progress_activity" : isSaved ? "check" : "favorite_border"}
                   </span>
-                  {isSaved ? "Saved" : "Save"}
+                  {isSavePending
+                    ? saveAction === "unsave"
+                      ? "Unsaving..."
+                      : "Saving..."
+                    : isSaved
+                      ? "Saved"
+                      : "Save"}
                 </button>
 
                 <button

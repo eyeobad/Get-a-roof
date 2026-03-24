@@ -402,7 +402,6 @@ export function useExploreDeckController({
       return { bufferQueue: [] };
     }
 
-    // Start a new swipe session only when the active deck is exhausted.
     consumedIdsRef.current.clear();
 
     const recycledListings = dedupeListings(
