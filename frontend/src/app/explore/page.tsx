@@ -17,6 +17,7 @@ import {
   useAnimation,
   useMotionValue,
   useTransform,
+  type MotionValue,
   type PanInfo,
 } from "framer-motion";
 
@@ -56,8 +57,8 @@ type LastSwipe = {
 
 const BASE_BUDGET = 100000;
 const BASE_DISTANCE = 15;
-const PRELOAD_LOOKAHEAD = 5;
-const MAX_PRELOADED_IMAGES = 180;
+const PRELOAD_LOOKAHEAD = 8;
+const MAX_PRELOADED_IMAGES = 260;
 
 const preloadImage = async (src: string) => {
   if (!src || typeof window === "undefined") return;
@@ -162,6 +163,7 @@ export default function ExploreCards() {
   const frontCardControlsAttachedRef = useRef(false);
 
   const controls = useAnimation();
+  const frontCardX = useMotionValue(0);
   const resetControls = useCallback(() => {
     if (!hasMountedRef.current || !frontCardControlsAttachedRef.current) return;
     controls.set({ x: 0, rotate: 0, opacity: 1 });
@@ -589,6 +591,7 @@ export default function ExploreCards() {
                 index={index}
                 isFront={index === 0}
                 controls={controls}
+                sharedFrontX={frontCardX}
                 onFrontControlsMountChange={(mounted) => {
                   frontCardControlsAttachedRef.current = mounted;
                 }}
@@ -603,34 +606,30 @@ export default function ExploreCards() {
         {showDeckSkeleton && (
           <div className="absolute inset-0 flex items-center justify-center px-4 pb-6">
             <div className="relative h-[min(62dvh,620px)] min-h-[440px] w-full max-w-md">
-              <div className="absolute inset-x-8 top-12 h-full scale-[0.92] rounded-[2.5rem] border border-slate-200/50 bg-white/40 shadow-sm -z-20" />
-              <div className="absolute inset-x-4 top-6 h-full scale-[0.96] rounded-[2.5rem] border border-slate-200/80 bg-white/60 shadow-md -z-10" />
+              <div className="absolute inset-0 flex items-center justify-center px-2">
+                <div className="h-full w-full max-w-md rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.12)]" />
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center px-2" style={{ transform: "translateY(24px) scale(0.96)", zIndex: -1 }}>
+                <div className="h-full w-full max-w-md rounded-[2rem] border border-slate-200 bg-white shadow-md" />
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center px-2" style={{ transform: "translateY(48px) scale(0.92)", zIndex: -2 }}>
+                <div className="h-full w-full max-w-md rounded-[2rem] border border-slate-200 bg-white shadow-sm" />
+              </div>
               <div className="w-full max-w-md animate-pulse overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-card">
-                <div className="relative h-[58%] min-h-[320px] bg-slate-200">
+                <div className="relative h-[86%] md:h-[72%] w-full bg-slate-200">
                   <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-slate-300" />
-                  <div className="absolute inset-x-0 top-4 flex justify-center gap-2">
-                    <div className="h-1.5 w-6 rounded-full bg-white/80" />
-                    <div className="h-1.5 w-2 rounded-full bg-white/60" />
-                    <div className="h-1.5 w-2 rounded-full bg-white/60" />
-                  </div>
                 </div>
-                <div className="space-y-4 bg-primary px-4 py-5 md:px-6">
-                  <div className="space-y-2 border-b border-white/10 pb-4">
+                <div className="flex-1 space-y-4 bg-primary px-4 py-3 md:px-6 md:py-5">
+                  <div className="space-y-2 border-b border-white/10 pb-3">
                     <div className="h-8 w-40 rounded-full bg-white/20" />
                     <div className="h-3 w-24 rounded-full bg-white/15" />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-2 md:gap-3">
                     <div className="h-14 rounded-xl bg-white/10" />
                     <div className="h-14 rounded-xl bg-white/10" />
                     <div className="h-14 rounded-xl bg-white/10" />
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="mt-1 h-6 w-6 rounded-full bg-white/15" />
-                    <div className="space-y-2">
-                      <div className="h-4 w-40 rounded-full bg-white/15" />
-                      <div className="h-8 w-28 rounded-xl bg-white/10" />
-                    </div>
-                  </div>
+                  <div className="h-14 rounded-2xl border border-white/10 bg-white/10" />
                 </div>
               </div>
             </div>
@@ -729,6 +728,7 @@ type CardItemProps = {
   index: number;
   isFront: boolean;
   controls: ReturnType<typeof useAnimation>;
+  sharedFrontX: MotionValue<number>;
   onFrontControlsMountChange?: (mounted: boolean) => void;
   onSwipe: (direction: "left" | "right") => Promise<void>;
   children: ReactNode;
@@ -738,16 +738,21 @@ function CardItem({
   index,
   isFront,
   controls,
+  sharedFrontX,
   onFrontControlsMountChange,
   onSwipe,
   children,
 }: CardItemProps) {
-  const x = useMotionValue(0);
+  const localX = useMotionValue(0);
+  const x = isFront ? sharedFrontX : localX;
   const rotate = useTransform(x, [-220, 220], [-18, 18]);
 
   // Real-estate decision overlays
   const likeOpacity = useTransform(x, [40, 140], [0, 1]);
   const nopeOpacity = useTransform(x, [-140, -40], [1, 0]);
+  const swipeDepth = useTransform(sharedFrontX, (value) => Math.min(Math.abs(value), 180));
+  const promotedScale = useTransform(swipeDepth, [0, 180], [1 - index * 0.04, Math.max(0.92, 1 - Math.max(0, index - 1) * 0.04)]);
+  const promotedY = useTransform(swipeDepth, [0, 180], [index * 24, Math.max(0, index - 1) * 24]);
 
   useEffect(() => {
     if (!isFront) return;
@@ -788,8 +793,8 @@ function CardItem({
         zIndex: isFront ? 50 : 40 - index,
         x,
         rotate,
-        scale: isFront ? 1 : 1 - index * 0.04,
-        y: isFront ? 0 : index * 24,
+        scale: isFront ? 1 : promotedScale,
+        y: isFront ? 0 : promotedY,
         willChange: isFront ? "transform" : "auto",
       }}
       animate={isFront ? controls : undefined}

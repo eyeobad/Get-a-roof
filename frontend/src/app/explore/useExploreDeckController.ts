@@ -70,7 +70,7 @@ type RecycledMatch = {
 
 const INITIAL_VISIBLE_BATCH_SIZE = 12;
 const VISIBLE_STACK_SIZE = 3;
-const READY_PIPELINE_TARGET = 4;
+const READY_PIPELINE_TARGET = 5;
 const LOW_WATERMARK = 8;
 const initialDeckState: DeckState = {
   phase: "boot_loading",
