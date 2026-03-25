@@ -15,7 +15,7 @@ type Match = {
   title: string;
   locationLabel: string;
   searchLocation: string;
-  landlordName?: string;
+  landlordName: string | undefined;
   price: string;
   priceValue: number;
   image: string;
