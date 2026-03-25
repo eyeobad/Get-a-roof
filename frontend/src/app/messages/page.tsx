@@ -928,7 +928,7 @@ function MessagesContent() {
                     aria-label="Request route access"
                     onClick={() => void sendRouteRequest()}
                     disabled={isSending || isLandlordContext}
-                    className="mb-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    className={`mb-1 flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-primary hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all ${!isLandlordContext ? "animate-[route-pop_1.8s_ease-in-out_infinite]" : ""}`}
                     title="Request route access"
                   >
                     <span className="material-symbols-outlined text-[20px]">map</span>
@@ -1004,6 +1004,11 @@ function MessagesContent() {
               >
                 <style>{`
                   .no-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
+                  @keyframes route-pop {
+                    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(10, 68, 184, 0.18); }
+                    40% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(10, 68, 184, 0); }
+                    60% { transform: scale(1.03); box-shadow: 0 0 0 4px rgba(10, 68, 184, 0.08); }
+                  }
                 `}</style>
 
                 <div className="no-scrollbar">
@@ -1270,7 +1275,7 @@ function MessagesContent() {
                         aria-label="Request route access"
                         onClick={() => void sendRouteRequest()}
                         disabled={isSending || isLandlordContext}
-                        className="mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className={`mb-1 flex h-11 w-11 items-center justify-center rounded-full border border-blue-200 bg-white text-primary hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all ${!isLandlordContext ? "animate-[route-pop_1.8s_ease-in-out_infinite]" : ""}`}
                         title="Request route access"
                       >
                         <span className="material-symbols-outlined text-[20px]">map</span>

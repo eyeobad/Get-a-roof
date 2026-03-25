@@ -322,11 +322,6 @@ export default function MatchesPage() {
                         <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
                           {m.title}
                         </h3>
-                        {m.landlordName && (
-                          <p className="mb-1 text-sm font-semibold text-slate-500 truncate">
-                            {m.landlordName}
-                          </p>
-                        )}
                         <div className="flex items-center gap-1 text-gray-500">
                           <span className="material-symbols-outlined text-[20px]">
                             location_on
@@ -336,6 +331,11 @@ export default function MatchesPage() {
                           </span>
                         </div>
                       </div>
+                      {m.landlordName && (
+                        <p className="text-sm font-medium text-slate-500 truncate">
+                          <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
+                        </p>
+                      )}
                       <div className="mt-1 flex flex-wrap gap-2">
                         {m.tags.length ? (
                           m.tags.slice(0, 2).map((tag) => (
@@ -486,11 +486,6 @@ export default function MatchesPage() {
                         <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
                           {m.title}
                         </h3>
-                        {m.landlordName && (
-                          <p className="mb-1 text-sm font-semibold text-slate-500 truncate">
-                            {m.landlordName}
-                          </p>
-                        )}
                         <div className="flex items-center gap-1 text-gray-500">
                           <span className="material-symbols-outlined text-[20px]">
                             location_on
@@ -500,6 +495,11 @@ export default function MatchesPage() {
                           </span>
                         </div>
                       </div>
+                      {m.landlordName && (
+                        <p className="text-sm font-medium text-slate-500 truncate">
+                          <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
+                        </p>
+                      )}
                       <div className="mt-1 flex flex-wrap gap-2">
                         {m.tags.length ? (
                           m.tags.slice(0, 2).map((tag) => (
