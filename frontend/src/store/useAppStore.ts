@@ -33,6 +33,7 @@ export type ConversationSummary = {
   id: string;
   listingId?: string;
   title: string;
+  about?: string;
   preview?: string;
   time?: string;
   image?: string;
@@ -905,6 +906,9 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
       ? landlordName || "Landlord"
       : landlordName || tenantName || "Unknown user";
 
+  const listingLabel = listing
+    ? `About: ${listing.bedrooms} Bed ${listing.highlight || "Apartment"}${listing.publicLocationLabel ? ` ? ${listing.publicLocationLabel}` : listing.neighborhood ? ` ? ${listing.neighborhood}` : ""}`
+    : undefined;
   const otherPhoto = isLandlord
     ? item.tenant?.photoUrl
     : item.landlord?.photoUrl || item.tenant?.photoUrl;
@@ -912,6 +916,7 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
     id: matchId,
     listingId: listing?.id,
     title,
+    about: listingLabel,
     preview: formatMessagePreview(item.lastMessage?.content),
     time: formatTime(item.lastMessage?.timestamp),
     image: otherPhoto || "/avatar-placeholder.svg",

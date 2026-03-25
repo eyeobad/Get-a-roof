@@ -52,6 +52,7 @@ type Conversation = {
   id: string;
   listingId?: string;
   name: string;
+  about?: string;
   preview: string;
   time: string;
   image: string;
@@ -247,6 +248,7 @@ function MessagesContent() {
         id: conversation.id,
         listingId: conversation.listingId,
         name: conversation.title,
+        about: conversation.about,
         preview: conversation.preview ?? "Start a conversation",
         time: conversation.time ?? "",
         image: conversation.image ?? "/avatar-placeholder.svg",
@@ -268,6 +270,7 @@ function MessagesContent() {
       id: threadParam,
       listingId,
       name: isLandlordContext ? "Tenant" : "Landlord",
+      about: undefined,
       preview: "Start a conversation",
       time: "",
       image: "/avatar-placeholder.svg",
