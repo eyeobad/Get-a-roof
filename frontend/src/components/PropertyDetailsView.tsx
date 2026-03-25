@@ -346,7 +346,7 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
                     if (!hasApprovedRouteAccess) {
                       showToast({
-                        title: "To see the full address and navigation direction, send a message first, then request route access.",
+                        title: "Request route access in chat to unlock the full address and directions.",
                         variant: "info",
                       });
                     }
