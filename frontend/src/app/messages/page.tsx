@@ -721,6 +721,11 @@ function MessagesContent() {
                             {conversation.time}
                           </p>
                         </div>
+                        {conversation.about && (
+                          <p className="truncate text-sm font-semibold leading-normal text-slate-500">
+                            {conversation.about}
+                          </p>
+                        )}
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-lg font-semibold leading-normal text-slate-600">
                             {conversation.preview}
@@ -1044,6 +1049,11 @@ function MessagesContent() {
                                   {conversation.time}
                                 </p>
                               </div>
+                              {conversation.about && (
+                                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                                  {conversation.about}
+                                </p>
+                              )}
                               <div className="mt-1 flex items-center justify-between gap-3">
                                 <p className="truncate text-sm font-medium text-slate-600">
                                   {conversation.preview}
@@ -1115,6 +1125,11 @@ function MessagesContent() {
                         <p className="truncate font-bold text-slate-900">
                           {activeConversation?.name ?? "Conversation"}
                         </p>
+                        {activeConversation?.about && (
+                          <p className="truncate text-xs font-semibold text-slate-500">
+                            {activeConversation.about}
+                          </p>
+                        )}
                         <p className="text-xs text-slate-500">
                           {isOtherTyping ? "Typing..." : "Online"}
                         </p>

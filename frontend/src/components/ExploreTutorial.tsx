@@ -35,7 +35,7 @@ export default function ExploreTutorial({ ready }: ExploreTutorialProps) {
       {
         target: '[data-tour="explore-like"]',
         title: "Interested",
-        content: "Tap Interested or swipe right to keep a listing in your match flow.",
+        content: "Tap Interested or swipe right to save the listing and move it into your matches flow.",
         disableBeacon: true,
         placement: "top",
       },
@@ -43,6 +43,14 @@ export default function ExploreTutorial({ ready }: ExploreTutorialProps) {
         target: '[data-tour="explore-filters"]',
         title: "Refine results",
         content: "Update budget, distance, and listing type here whenever you want.",
+        disableBeacon: true,
+      },
+      {
+        target: "body",
+        placement: "center",
+        title: "Address and route access",
+        content:
+          "Exact addresses and directions unlock only after you message the landlord and request route access in chat.",
         disableBeacon: true,
       },
     ],

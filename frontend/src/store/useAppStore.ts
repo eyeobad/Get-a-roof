@@ -907,8 +907,9 @@ const buildConversationSummary = (item: ApiConversation, currentUserId?: string)
       ? landlordName || "Landlord"
       : landlordName || tenantName || "Unknown user";
 
+  const listingLocation = listing?.publicLocationLabel || listing?.neighborhood;
   const listingLabel = listing
-    ? `About: ${listing.bedrooms} Bed ${listing.highlight || "Apartment"}${listing.publicLocationLabel ? ` ? ${listing.publicLocationLabel}` : listing.neighborhood ? ` ? ${listing.neighborhood}` : ""}`
+    ? `About: ${listing.bedrooms} Bed ${listing.highlight || "Apartment"}${listingLocation ? ` • ${listingLocation}` : ""}`
     : undefined;
   const otherPhoto = isLandlord
     ? item.tenant?.photoUrl

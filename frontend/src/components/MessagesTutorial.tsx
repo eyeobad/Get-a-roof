@@ -27,15 +27,17 @@ export default function MessagesTutorial({
       {
         target: '[data-tour="messages-list"]',
         title: "Conversation list",
-        content: "Pick any thread here to open the current conversation.",
+        content: isLandlord
+          ? "Pick any tenant thread here. Each conversation is labeled with the associated property."
+          : "Pick any landlord thread here. Each conversation is labeled with the property it is about.",
         disableBeacon: true,
       },
       {
         target: '[data-tour="messages-composer"]',
-        title: "Send updates",
+        title: isLandlord ? "Reply and manage access" : "Message and request access",
         content: isLandlord
-          ? "Reply here to keep the tenant moving through your funnel."
-          : "Message the landlord here and keep the property conversation active.",
+          ? "Reply here and approve or deny route access requests when tenants ask for exact directions."
+          : "Message the landlord here, then use the route button to request access to the full address and directions.",
         disableBeacon: true,
       },
     ],

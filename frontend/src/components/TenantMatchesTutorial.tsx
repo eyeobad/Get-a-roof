@@ -23,7 +23,16 @@ export default function TenantMatchesTutorial({ ready }: { ready: boolean }) {
       {
         target: '[data-tour="matches-list"]',
         title: "Open a match",
-        content: "Tap any match card to open the full property details and take the next action.",
+        content:
+          "Tap any match card to review the property, see the safe location label, and continue to contact or route access.",
+        disableBeacon: true,
+      },
+      {
+        target: "body",
+        placement: "center",
+        title: "What unlocks next",
+        content:
+          "After you contact the landlord, request route access in chat to unlock the full address and directions.",
         disableBeacon: true,
       },
     ],
