@@ -70,8 +70,27 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
   const loadMatches = useAppStore((s) => s.loadMatches);
 
   const likedIds = useAppStore((s) => s.likedIds);
+  const matchSummaries = useAppStore((s) => s.matchSummaries);
+  const recycledMatchSummaries = useAppStore((s) => s.recycledMatchSummaries);
   const isSaved = useMemo(() => likedIds.includes(listing.id), [likedIds, listing.id]);
-  const hasApprovedRouteAccess = listing.routeAccessStatus === "Approved";
+
+  const effectiveRouteAccessStatus = useMemo(() => {
+    const summaryRouteStatus =
+      matchSummaries.find((item) => item.listingId === listing.id)?.routeAccessStatus ??
+      recycledMatchSummaries.find((item) => item.listingId === listing.id)?.routeAccessStatus;
+    if (listing.routeAccessStatus === "Approved" || summaryRouteStatus === "Approved") {
+      return "Approved";
+    }
+    if (listing.routeAccessStatus === "Pending" || summaryRouteStatus === "Pending") {
+      return "Pending";
+    }
+    if (listing.routeAccessStatus === "Denied" || summaryRouteStatus === "Denied") {
+      return "Denied";
+    }
+    return listing.routeAccessStatus ?? summaryRouteStatus ?? "None";
+  }, [listing.id, listing.routeAccessStatus, matchSummaries, recycledMatchSummaries]);
+
+  const hasApprovedRouteAccess = effectiveRouteAccessStatus === "Approved";
 
   const visibleAddress = useMemo(() => {
     if (hasApprovedRouteAccess) return listing.address;
