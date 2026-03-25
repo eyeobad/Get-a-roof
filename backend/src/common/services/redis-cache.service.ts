@@ -93,13 +93,20 @@ export class RedisCacheService implements OnModuleDestroy {
   async deleteByPrefix(prefix: string) {
     if (!(await this.ensureReady()) || !this.client) return;
     try {
-      const keys: string[] = [];
-      for await (const key of this.client.scanIterator({ MATCH: `${prefix}*`, COUNT: 100 })) {
-        keys.push(key);
-      }
-      if (keys.length) {
-        await this.client.del(...keys);
-      }
+      let cursor = "0";
+      do {
+        const result = await this.client.scan(cursor, {
+          MATCH: `${prefix}*`,
+          COUNT: 100,
+        });
+        cursor = result.cursor;
+        const keys = result.keys.filter(
+          (key): key is string => typeof key === "string" && key.length > 0
+        );
+        if (keys.length > 0) {
+          await this.client.del(keys);
+        }
+      } while (cursor !== "0");
     } catch (error) {
       this.logger.warn(
         `Redis prefix delete failed for ${prefix}: ${(error as Error).message}`
