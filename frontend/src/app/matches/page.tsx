@@ -88,6 +88,7 @@ export default function MatchesPage() {
   const [draftSortBy, setDraftSortBy] =
     useState<"latest" | "score" | "priceLow" | "priceHigh">("latest");
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [hasResolvedInitialMatchesLoad, setHasResolvedInitialMatchesLoad] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -96,7 +97,10 @@ export default function MatchesPage() {
     }, SKELETON_DELAY_MS);
     void loadMatches().finally(() => {
       window.clearTimeout(timer);
-      if (active) setIsLoadingMatches(false);
+      if (active) {
+        setIsLoadingMatches(false);
+        setHasResolvedInitialMatchesLoad(true);
+      }
     });
     return () => {
       active = false;
@@ -275,7 +279,7 @@ export default function MatchesPage() {
           </header>
 
           <main className="relative z-0 flex-1 px-5 pt-6 space-y-5">
-            {isLoadingMatches ? (
+            {!hasResolvedInitialMatchesLoad || isLoadingMatches ? (
               <MatchesSkeleton />
             ) : filteredMatches.length === 0 ? (
               <div className="rounded-3xl border border-black/5 bg-white p-8 text-center shadow-sm">
@@ -443,7 +447,7 @@ export default function MatchesPage() {
           </header>
 
           <main className="flex-1 overflow-y-auto px-8 py-6">
-            {isLoadingMatches ? (
+            {!hasResolvedInitialMatchesLoad || isLoadingMatches ? (
               <MatchesSkeleton />
             ) : filteredMatches.length === 0 ? (
               <div className="rounded-3xl border border-black/5 bg-white p-10 text-center shadow-sm">
