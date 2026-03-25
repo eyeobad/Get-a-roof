@@ -606,7 +606,7 @@ export default function ExploreCards() {
 
         {showDeckSkeleton && (
           <div className="absolute inset-0 flex items-start justify-center px-4 pt-1">
-            <div className="relative h-[min(61dvh,600px)] min-h-[430px] w-full max-w-md">
+            <div className="relative h-[min(62dvh,620px)] min-h-[440px] md:h-[590px] w-full max-w-md">
               <div className="w-full max-w-md animate-pulse overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-card">
                 <div className="relative h-[56%] min-h-[212px] bg-slate-200">
                   <div className="absolute left-4 top-4 h-9 w-24 rounded-full bg-slate-300" />
