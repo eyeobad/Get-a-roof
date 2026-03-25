@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Listing } from "@/lib/listings";
 import { useAppStore } from "@/store/useAppStore";
+import { showToast } from "@/lib/alerts";
 
 const fallbackGallery = ["/p2.png", "/p3.png", "/propertydetails.png"];
 
@@ -70,6 +71,12 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
 
   const likedIds = useAppStore((s) => s.likedIds);
   const isSaved = useMemo(() => likedIds.includes(listing.id), [likedIds, listing.id]);
+  const hasApprovedRouteAccess = listing.routeAccessStatus === "Approved";
+
+  const visibleAddress = useMemo(() => {
+    if (hasApprovedRouteAccess) return listing.address;
+    return listing.publicLocationLabel || listing.neighborhood || "Location available after route approval";
+  }, [hasApprovedRouteAccess, listing.address, listing.neighborhood, listing.publicLocationLabel]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -329,6 +336,21 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
                       return;
                     }
 
+                    if (!isSaved) {
+                      showToast({
+                        title: "Save this property first to contact the landlord.",
+                        variant: "info",
+                      });
+                      return;
+                    }
+
+                    if (!hasApprovedRouteAccess) {
+                      showToast({
+                        title: "To see the full address and navigation direction, send a message first, then request route access.",
+                        variant: "info",
+                      });
+                    }
+
                     try {
                       const threadId = await ensureThreadForListing(listing.id);
                       if (threadId) {
@@ -349,8 +371,13 @@ export default function PropertyDetailsView({ listing, onBack }: PropertyDetails
             </div>
 
             <div>
-              <h2 className="text-slate-900 text-[1.6rem] font-bold leading-tight">{listing.address}</h2>
+              <h2 className="text-slate-900 text-[1.6rem] font-bold leading-tight">{visibleAddress}</h2>
               <p className="text-slate-700 text-lg mt-1 font-medium">{listing.neighborhood}</p>
+              {!hasApprovedRouteAccess && isSaved && (
+                <p className="mt-2 text-sm font-medium text-primary/80">
+                  To see the full address and navigation direction, send a message first, then request route access.
+                </p>
+              )}
             </div>
           </div>
 

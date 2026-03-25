@@ -48,9 +48,6 @@ const parseRouteRequest = (value: string): RouteRequestPayload | null => {
   }
   return null;
 };
-const isMongoObjectId = (value?: string | null) =>
-  Boolean(value && /^[a-f\d]{24}$/i.test(value));
-
 type Conversation = {
   id: string;
   listingId?: string;
@@ -239,8 +236,6 @@ function MessagesContent() {
   const markMatchRead = useAppStore((state) => state.markMatchRead);
   const sendMessageToApi = useAppStore((state) => state.sendMessage);
   const setSelectedThreadId = useAppStore((state) => state.setSelectedThreadId);
-  const saveConversation = useAppStore((state) => state.saveConversation);
-  const unmatchListing = useAppStore((state) => state.unmatchListing);
   const userId = useAppStore((state) => state.userId);
   const user = useAppStore((state) => state.user);
   const authToken = useAppStore((state) => state.authToken);
@@ -295,7 +290,6 @@ function MessagesContent() {
   const [didApplyDraft, setDidApplyDraft] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showRouteHint, setShowRouteHint] = useState(false);
-  const [isMatchActionPending, setIsMatchActionPending] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [routeAccessDurationByRequestId, setRouteAccessDurationByRequestId] =
@@ -1119,92 +1113,7 @@ function MessagesContent() {
                       </div>
                     </div>
 
-                    {!isLandlordContext ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={async () => {
-                            if (!activeConversation || isMatchActionPending) return;
-                            if (!isMongoObjectId(activeConversation.id)) {
-                              showToast({
-                                title: "Conversation is not ready yet.",
-                                variant: "error",
-                              });
-                              return;
-                            }
-                            setIsMatchActionPending(true);
-                            try {
-                              const success = await unmatchListing(activeConversation.id);
-                              if (success) {
-                                showToast({
-                                  title: "Unmatched successfully",
-                                  variant: "success",
-                                });
-                              } else {
-                                showToast({
-                                  title: "Could not unmatch. Please try again.",
-                                  variant: "error",
-                                });
-                              }
-                            } finally {
-                              setIsMatchActionPending(false);
-                            }
-                          }}
-                          disabled={!activeConversation || isMatchActionPending}
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-rose-500 transition-colors"
-                          title="Unmatch"
-                        >
-                          <Icon name="delete" />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!activeConversation || isMatchActionPending) return;
-                            if (!isMongoObjectId(activeConversation.id)) {
-                              showToast({
-                                title: "Conversation is not ready yet.",
-                                variant: "error",
-                              });
-                              return;
-                            }
-                            showToast({
-                              title:
-                                "Are you sure? You're no longer interested. Chat will be removed.",
-                              variant: "info",
-                            });
-                            const confirmed =
-                              typeof window === "undefined"
-                                ? false
-                                : window.confirm(
-                                    "Are you sure? You're no longer interested. This chat will be removed."
-                                  );
-                            if (!confirmed) return;
-                            setIsMatchActionPending(true);
-                            try {
-                              const success = await saveConversation(activeConversation.id);
-                              if (success) {
-                                showToast({
-                                  title: "Conversation saved",
-                                  variant: "success",
-                                });
-                              } else {
-                                showToast({
-                                  title: "Could not save conversation.",
-                                  variant: "error",
-                                });
-                              }
-                            } finally {
-                              setIsMatchActionPending(false);
-                            }
-                          }}
-                          disabled={!activeConversation || isMatchActionPending}
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-blue-500 transition-colors"
-                          title="Save Conversation"
-                        >
-                          <Icon name="bookmark" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="h-9 w-9" />
-                    )}
+                    <div className="h-9 w-9" />
                   </header>
 
                   <main

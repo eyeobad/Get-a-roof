@@ -464,6 +464,34 @@ export class MatchesService {
       { $sort: { recyclePriority: 1, matchScore: -1 } },
       ...paginationStages(options?.page, options?.limit),
       {
+        $lookup: {
+          from: "users",
+          let: { landlordId: "$property.landlordId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: [
+                    { $toString: "$_id" },
+                    { $toString: "$$landlordId" },
+                  ],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                firstName: 1,
+                lastName: 1,
+                photoUrl: 1,
+              },
+            },
+          ],
+          as: "landlord",
+        },
+      },
+      { $unwind: { path: "$landlord", preserveNullAndEmptyArrays: true } },
+      {
         $project: {
           _id: 1,
           propertyId: 1,
@@ -485,6 +513,12 @@ export class MatchesService {
             amenities: "$property.amenities",
             neighborhood: "$property.neighborhood",
             updatedAt: "$property.updatedAt",
+          },
+          landlord: {
+            _id: "$landlord._id",
+            firstName: "$landlord.firstName",
+            lastName: "$landlord.lastName",
+            photoUrl: "$landlord.photoUrl",
           },
         },
       },
@@ -806,6 +840,34 @@ export class MatchesService {
         },
       },
       { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "users",
+          let: { landlordId: "$property.landlordId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: [
+                    { $toString: "$_id" },
+                    { $toString: "$$landlordId" },
+                  ],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                firstName: 1,
+                lastName: 1,
+                photoUrl: 1,
+              },
+            },
+          ],
+          as: "landlord",
+        },
+      },
+      { $unwind: { path: "$landlord", preserveNullAndEmptyArrays: true } },
       {
         $addFields: {
           lastMessage: "$lastMessage",

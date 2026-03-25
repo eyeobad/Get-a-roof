@@ -13,7 +13,9 @@ type Match = {
   id: string;
   listingId: string;
   title: string;
-  location: string;
+  locationLabel: string;
+  searchLocation: string;
+  landlordName?: string;
   price: string;
   priceValue: number;
   image: string;
@@ -28,6 +30,19 @@ type TagFacet = {
 };
 
 const SKELETON_DELAY_MS = 150;
+
+const toSafeLocationLabel = (listing: { publicLocationLabel?: string; neighborhood?: string; address: string }) => {
+  const publicLabel = listing.publicLocationLabel?.trim();
+  if (publicLabel) return publicLabel;
+  const neighborhood = listing.neighborhood?.trim();
+  if (neighborhood) return neighborhood;
+  const parts = listing.address
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) return parts.slice(1).join(", ");
+  return parts[0] || "Location available on request";
+};
 
 function MatchesSkeleton() {
   return (
@@ -112,7 +127,9 @@ export default function MatchesPage() {
           id: summary.id,
           listingId: summary.listingId,
           title: `${listing.bedrooms} Bed ${listing.highlight || "Home"}`,
-          location: listing.address,
+          locationLabel: toSafeLocationLabel(listing),
+          searchLocation: listing.address,
+          landlordName: summary.landlordName,
           price: listing.price,
           priceValue: Number(listing.price.replace(/[^\d]/g, "")) || 0,
           image: listing.image,
@@ -148,7 +165,8 @@ export default function MatchesPage() {
       const textHit =
         !query ||
         m.title.toLowerCase().includes(query) ||
-        m.location.toLowerCase().includes(query) ||
+        m.searchLocation.toLowerCase().includes(query) ||
+        m.locationLabel.toLowerCase().includes(query) ||
         m.tags.some((tag) => tag.toLowerCase().includes(query));
       const tagHit = tagFilter === "All" || m.tags.includes(tagFilter);
       return textHit && tagHit;
@@ -304,12 +322,17 @@ export default function MatchesPage() {
                         <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
                           {m.title}
                         </h3>
+                        {m.landlordName && (
+                          <p className="mb-1 text-sm font-semibold text-slate-500 truncate">
+                            {m.landlordName}
+                          </p>
+                        )}
                         <div className="flex items-center gap-1 text-gray-500">
                           <span className="material-symbols-outlined text-[20px]">
                             location_on
                           </span>
                           <span className="text-lg font-medium truncate">
-                            {m.location}
+                            {m.locationLabel}
                           </span>
                         </div>
                       </div>
@@ -463,12 +486,17 @@ export default function MatchesPage() {
                         <h3 className="text-[#1A1A1A] font-bold text-xl leading-tight mb-1">
                           {m.title}
                         </h3>
+                        {m.landlordName && (
+                          <p className="mb-1 text-sm font-semibold text-slate-500 truncate">
+                            {m.landlordName}
+                          </p>
+                        )}
                         <div className="flex items-center gap-1 text-gray-500">
                           <span className="material-symbols-outlined text-[20px]">
                             location_on
                           </span>
                           <span className="text-lg font-medium truncate">
-                            {m.location}
+                            {m.locationLabel}
                           </span>
                         </div>
                       </div>

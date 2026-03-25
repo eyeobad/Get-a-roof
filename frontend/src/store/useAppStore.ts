@@ -25,6 +25,7 @@ export type MatchSummary = {
   lastMessageAt?: string;
   unreadCount?: number;
   landlordReplied?: boolean;
+  landlordName?: string;
   routeAccessStatus?: RouteAccessStatus;
 };
 
@@ -250,6 +251,7 @@ type ApiMatch = {
   unreadCount?: number;
   landlordReplied?: number | boolean;
   tenant?: ApiUser;
+  landlord?: ApiUser;
   isNewForLandlord?: boolean;
   routeAccessStatus?: RouteAccessStatus;
 };
@@ -2252,6 +2254,9 @@ export const useAppStore = create<AppState>()(
           if (listingId && !state.listingsById[listingId]) {
             void get().fetchPropertyById(listingId);
           }
+          const landlordName = [match.landlord?.firstName, match.landlord?.lastName]
+            .filter(Boolean)
+            .join(" ");
           return {
             id: toIdString(match._id ?? match.id),
             listingId,
@@ -2261,6 +2266,7 @@ export const useAppStore = create<AppState>()(
             lastMessageAt: match.lastMessage?.timestamp,
             unreadCount: match.unreadCount ?? 0,
             landlordReplied: Boolean(match.landlordReplied),
+            landlordName: landlordName || undefined,
             routeAccessStatus: match.routeAccessStatus ?? "None",
           } as MatchSummary;
           })
@@ -2297,6 +2303,9 @@ export const useAppStore = create<AppState>()(
           if (listingId && !state.listingsById[listingId]) {
             void get().fetchPropertyById(listingId);
           }
+          const landlordName = [match.landlord?.firstName, match.landlord?.lastName]
+            .filter(Boolean)
+            .join(" ");
           return {
             id: toIdString(match._id ?? match.id),
             listingId,
@@ -2306,6 +2315,7 @@ export const useAppStore = create<AppState>()(
             lastMessageAt: match.lastMessage?.timestamp,
             unreadCount: match.unreadCount ?? 0,
             landlordReplied: Boolean(match.landlordReplied),
+            landlordName: landlordName || undefined,
             routeAccessStatus: match.routeAccessStatus ?? "None",
           } as MatchSummary;
         }).filter(

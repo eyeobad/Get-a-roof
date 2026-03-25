@@ -32,6 +32,7 @@ GET A ROOF supports:
 - landlord listing creation, property management, match review, messaging, and profile management
 - admin moderation, listing review, user actions, and operational oversight
 - Google sign-in via Firebase, email/password auth, OTP verification, JWT session cookies, and role-based access control
+- route-access approval that unlocks exact map navigation and full property address visibility only after landlord approval
 
 The frontend talks to the backend over REST APIs. MongoDB stores users, properties, matches, messages, and moderation state. Firebase is used for Google identity verification. Resend is used for email delivery. reCAPTCHA is used for signup bot protection.
 
@@ -109,6 +110,7 @@ THROTTLE_TTL=60
 THROTTLE_LIMIT=100
 CORS_ORIGINS=http://localhost:3000,https://your-frontend-domain.example
 MAIL_FROM=no-reply@get-a-roof.com
+REDIS_URL=redis://127.0.0.1:6379
 ```
 
 Optional platform/service variables already used in this codebase include Appwrite storage, Termii, and mail fallbacks depending on environment.
@@ -213,6 +215,29 @@ Check these first:
 Important distinction:
 
 - If overlays or approximate circles render but the basemap does not, that points to Mapbox token restrictions, not route logic.
+
+### Route Access And Address Privacy
+
+The current tenant flow uses one privacy gate for both exact navigation and full address visibility:
+
+- before route approval, property details should show only a safe location label such as neighborhood or public location
+- before route approval, map view should avoid exact destination reveal
+- tenants must save the property, contact the landlord, then request route access in chat
+- after landlord approval, the same route-access state unlocks both full property address visibility and exact map navigation
+
+Current UI behavior tied to that rule:
+
+- unsaved properties cannot open the contact flow from property details
+- saved but not route-approved properties show a contact guidance message telling the tenant to message first and then request route access
+- matches cards hide full street addresses and show a safer short location label instead
+
+### Redis-backed caching
+
+The backend now supports optional Redis caching for tenant match queries and related hot reads.
+
+- set `REDIS_URL` in the backend environment to enable Redis caching
+- if `REDIS_URL` is not provided, the app still runs without Redis
+- Redis cache invalidation is wired into tenant match mutation paths so match state refreshes correctly after user actions
 
 ### Real browser walkthrough baseline
 
