@@ -118,7 +118,19 @@ export default function DashboardProfilePage() {
 
   // --- Derived Dynamic Data ---
   const fullName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "Loading...";
-  const isVerified = user?.isVerified ?? false;
+  const verificationStatus = user?.verificationStatus ?? "None";
+  const isVerified = (user?.isVerified ?? false) || verificationStatus === "Approved";
+  const isVerificationPending = verificationStatus === "Pending" && !isVerified;
+  const verificationIcon = isVerified
+    ? "verified"
+    : isVerificationPending
+      ? "pending_actions"
+      : "verified_user";
+  const verificationLabel = isVerified
+    ? "Identity Verified"
+    : isVerificationPending
+      ? "Verification Pending"
+      : "Verify Identity";
   const roleValue = Array.isArray(user?.role) ? user?.role[0] : user?.role;
   const roleLabel = roleValue
     ? `${String(roleValue).charAt(0).toUpperCase()}${String(roleValue).slice(1).toLowerCase()}`
@@ -311,7 +323,7 @@ export default function DashboardProfilePage() {
             <p className="text-sm text-slate-500">{user?.phoneNumber}</p>
             <button
               onClick={() => {
-                if (isVerified) return;
+                if (isVerified || isVerificationPending) return;
                 const launched = launchDiditLandlordVerification({
                   userId: userId ?? undefined,
                   email: user?.email ?? undefined,
@@ -324,14 +336,16 @@ export default function DashboardProfilePage() {
                 "mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors",
                 isVerified
                   ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-blue-200 bg-blue-50 text-primary hover:bg-blue-100",
+                  : isVerificationPending
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-blue-200 bg-blue-50 text-primary hover:bg-blue-100",
               ].join(" ")}
-              disabled={isVerified}
+              disabled={isVerified || isVerificationPending}
             >
               <span className="material-symbols-outlined text-[18px]">
-                {isVerified ? "verified" : "verified_user"}
+                {verificationIcon}
               </span>
-              {isVerified ? "Identity Verified" : "Verify Identity"}
+              {verificationLabel}
             </button>
           </div>
         </section>

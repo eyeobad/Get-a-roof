@@ -143,6 +143,7 @@ type ApiUser = {
   phoneNumber?: string;
   photoUrl?: string;
   isVerified?: boolean;
+  verificationStatus?: "None" | "Pending" | "Approved" | "Failed";
   agentOrgId?: string;
   orgProfile?: {
     orgName?: string;
