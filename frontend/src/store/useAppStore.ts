@@ -2365,6 +2365,13 @@ export const useAppStore = create<AppState>()(
           token: state.authToken,
         });
 
+        const userRoles = Array.isArray(state.user?.role)
+          ? state.user.role
+          : state.user?.role
+            ? [state.user.role]
+            : [];
+        const isTenantUser = userRoles.includes("Tenant");
+
         const conversations = (data ?? [])
           .map((item) => {
             const { summary, listing } = buildConversationSummary(
@@ -2378,14 +2385,14 @@ export const useAppStore = create<AppState>()(
             }
             return summary;
           })
-          .filter(
-            (conversation) =>
-              Boolean(conversation.listingId) &&
-              state.likedIds.includes(conversation.listingId as string) &&
-              !state.suppressedMatchListingIds.includes(
-                conversation.listingId as string
-              )
-          );
+          .filter((conversation) => {
+            if (!conversation.listingId) return false;
+            if (!isTenantUser) return true;
+            return (
+              state.likedIds.includes(conversation.listingId) &&
+              !state.suppressedMatchListingIds.includes(conversation.listingId)
+            );
+          });
         const conversationListingById = new Map(
           conversations
             .filter((conversation) => Boolean(conversation.id && conversation.listingId))

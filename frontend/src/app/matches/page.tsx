@@ -331,11 +331,15 @@ export default function MatchesPage() {
                           </span>
                         </div>
                       </div>
-                      {m.landlordName && (
-                        <p className="text-sm font-medium text-slate-500 truncate">
-                          <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
-                        </p>
-                      )}
+                      <div className="min-h-[20px]">
+                        {m.landlordName ? (
+                          <p className="text-sm font-medium text-slate-500 truncate">
+                            <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
+                          </p>
+                        ) : (
+                          <div className="mt-0.5 h-4 w-36 animate-pulse rounded-full bg-slate-100" />
+                        )}
+                      </div>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {m.tags.length ? (
                           m.tags.slice(0, 2).map((tag) => (
@@ -495,11 +499,15 @@ export default function MatchesPage() {
                           </span>
                         </div>
                       </div>
-                      {m.landlordName && (
-                        <p className="text-sm font-medium text-slate-500 truncate">
-                          <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
-                        </p>
-                      )}
+                      <div className="min-h-[20px]">
+                        {m.landlordName ? (
+                          <p className="text-sm font-medium text-slate-500 truncate">
+                            <span className="font-semibold text-slate-600">Lister:</span> {m.landlordName}
+                          </p>
+                        ) : (
+                          <div className="mt-0.5 h-4 w-36 animate-pulse rounded-full bg-slate-100" />
+                        )}
+                      </div>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {m.tags.length ? (
                           m.tags.slice(0, 2).map((tag) => (
