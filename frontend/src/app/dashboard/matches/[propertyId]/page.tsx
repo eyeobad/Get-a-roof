@@ -222,6 +222,11 @@ export default function LandlordMatchesPage() {
     () => landlordMatches.filter((match) => match.isNewForLandlord).length,
     [landlordMatches]
   );
+  const reviewCount = useMemo(
+    () => (newCount > 0 ? newCount : matches.length),
+    [matches.length, newCount]
+  );
+  const reviewLabel = reviewCount === 1 ? "match" : "matches";
 
   useEffect(() => {
     if (!authToken || !propertyId) return;
@@ -250,7 +255,9 @@ export default function LandlordMatchesPage() {
             <h1 className="text-2xl font-bold">Matches</h1>
           </div>
           <p className="text-sm opacity-80 mt-1">
-            {newCount} new match{newCount === 1 ? "" : "es"} waiting for review
+            {newCount > 0
+              ? `${reviewCount} new ${reviewLabel} waiting for review`
+              : `${reviewCount} ${reviewLabel} waiting for review`}
           </p>
         </div>
       </header>
