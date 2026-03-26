@@ -19,23 +19,32 @@ type PropertyCard = {
   tone?: "primary" | "warning";
 };
 
-function PropertyListCard({ card }: { card: PropertyCard }) {
+function PropertyListCard({
+  card,
+  filterMode,
+}: {
+  card: PropertyCard;
+  filterMode: "all" | "new" | "top";
+}) {
   const isEmpty = card.newCount === 0;
   const badgeClass = isEmpty
     ? "bg-stone-200 text-stone-400"
     : card.tone === "warning"
       ? "bg-orange-500 text-white"
       : "bg-[#0a44b8] text-white";
+  const badgeValue = filterMode === "top" ? card.matchCount : card.newCount;
+  const badgeLabel = filterMode === "top" ? "Total" : "New";
+  const shouldDim = filterMode !== "top" && isEmpty;
 
   return (
     <Link
       href={`/dashboard/matches/${card.id}`}
       className={[
         "group block rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.08)] border border-stone-100 overflow-hidden active:scale-[0.98] transition-transform",
-        isEmpty ? "bg-stone-50" : "bg-white",
+        shouldDim ? "bg-stone-50" : "bg-white",
       ].join(" ")}
     >
-      <div className={["p-4 flex items-center gap-4", isEmpty ? "opacity-70 grayscale-[0.5]" : ""].join(" ")}>
+      <div className={["p-4 flex items-center gap-4", shouldDim ? "opacity-70 grayscale-[0.5]" : ""].join(" ")}>
         <div
           aria-label={`Thumbnail of ${card.title}`}
           className="h-20 w-20 shrink-0 rounded-lg bg-stone-200 bg-center bg-cover border border-stone-100 shadow-sm"
@@ -57,12 +66,12 @@ function PropertyListCard({ card }: { card: PropertyCard }) {
           <div
             className={[
               "flex flex-col items-center justify-center h-[60px] w-[60px] rounded-xl shadow-md",
-              isEmpty ? "shadow-none" : "shadow-blue-900/20",
+              shouldDim ? "shadow-none" : "shadow-blue-900/20",
               badgeClass,
             ].join(" ")}
           >
-            <span className="text-2xl font-bold leading-none mt-1">{card.newCount}</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider">New</span>
+            <span className="text-2xl font-bold leading-none mt-1">{badgeValue}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{badgeLabel}</span>
           </div>
         </div>
       </div>
@@ -110,6 +119,10 @@ export default function LandlordMatchesPropertyListPage() {
     () => mappedProperties.reduce((sum, item) => sum + (item.newCount ?? 0), 0),
     [mappedProperties]
   );
+  const totalMatches = useMemo(
+    () => mappedProperties.reduce((sum, item) => sum + (item.matchCount ?? 0), 0),
+    [mappedProperties]
+  );
 
   const filteredProperties = useMemo(() => {
     if (filterMode === "new") {
@@ -122,6 +135,16 @@ export default function LandlordMatchesPropertyListPage() {
     }
     return [...mappedProperties].sort((a, b) => (b.newCount ?? 0) - (a.newCount ?? 0));
   }, [filterMode, mappedProperties]);
+
+  const headerSummary = useMemo(() => {
+    if (filterMode === "new") {
+      return `Showing ${filteredProperties.length} propert${filteredProperties.length === 1 ? "y" : "ies"} with ${totalNew} new candidate${totalNew === 1 ? "" : "s"}`;
+    }
+    if (filterMode === "top") {
+      return `Showing top properties across ${totalMatches} total match${totalMatches === 1 ? "" : "es"}`;
+    }
+    return `Select a property to view ${totalNew} new candidate${totalNew === 1 ? "" : "s"}`;
+  }, [filterMode, filteredProperties.length, totalMatches, totalNew]);
 
   useEffect(() => {
     if (!authToken) return;
@@ -137,10 +160,7 @@ export default function LandlordMatchesPropertyListPage() {
           <h1 className="text-2xl font-bold tracking-tight">Matches</h1>
           <div />
         </div>
-        <p className="text-white/80 text-sm mt-1">
-          Select a property to view {totalNew} new candidate
-          {totalNew === 1 ? "" : "s"}
-        </p>
+        <p className="text-white/80 text-sm mt-1">{headerSummary}</p>
         <div
           data-tour="landlord-matches-filters"
           className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar"
@@ -177,7 +197,9 @@ export default function LandlordMatchesPropertyListPage() {
 
       <main data-tour="landlord-matches-list" className="flex-1 px-4 py-6 flex flex-col gap-4">
         {filteredProperties.length ? (
-          filteredProperties.map((card) => <PropertyListCard key={card.id} card={card} />)
+          filteredProperties.map((card) => (
+            <PropertyListCard key={card.id} card={card} filterMode={filterMode} />
+          ))
         ) : authToken ? (
           <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-6 text-center text-stone-500">
             No matches yet. Keep your listings active to attract tenants.

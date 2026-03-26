@@ -15,8 +15,8 @@ export default function ExploreTutorial({ ready }: ExploreTutorialProps) {
         target: "body",
         placement: "center",
         disableBeacon: true,
-        title: "Welcome to Explore",
-        content: "This is where you browse listings that fit your preferences.",
+        title: "Welcome to Getaroof",
+        content: "This is explore page where you browse listings that fit your preferences.",
       },
       {
         target: '[data-tour="explore-rewind"]',
