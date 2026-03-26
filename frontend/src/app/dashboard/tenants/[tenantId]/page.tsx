@@ -100,15 +100,13 @@ export default function TenantProfilePage() {
 
         <header className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
-            {tenant?.photoUrl ? (
-              <Image
-                src={tenant.photoUrl}
-                alt={name}
-                width={64}
-                height={64}
-                className="w-full h-full object-cover"
-              />
-            ) : null}
+            <Image
+              src={tenant?.photoUrl || "/avatar-placeholder.svg"}
+              alt={name}
+              width={64}
+              height={64}
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
