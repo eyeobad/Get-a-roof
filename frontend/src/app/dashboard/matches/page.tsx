@@ -138,13 +138,13 @@ export default function LandlordMatchesPropertyListPage() {
 
   const headerSummary = useMemo(() => {
     if (filterMode === "new") {
-      return `Showing ${filteredProperties.length} propert${filteredProperties.length === 1 ? "y" : "ies"} with ${totalNew} new candidate${totalNew === 1 ? "" : "s"}`;
+      return `You got ${totalNew} new candidate${totalNew === 1 ? "" : "s"} across ${filteredProperties.length} listed propert${filteredProperties.length === 1 ? "y" : "ies"}.`;
     }
     if (filterMode === "top") {
       return `Showing top properties across ${totalMatches} total match${totalMatches === 1 ? "" : "es"}`;
     }
-    return `Select a property to view ${totalNew} new candidate${totalNew === 1 ? "" : "s"}`;
-  }, [filterMode, filteredProperties.length, totalMatches, totalNew]);
+    return `You got ${totalNew} new candidate${totalNew === 1 ? "" : "s"} across your listed propert${mappedProperties.length === 1 ? "y" : "ies"}.`;
+  }, [filterMode, filteredProperties.length, mappedProperties.length, totalMatches, totalNew]);
 
   useEffect(() => {
     if (!authToken) return;

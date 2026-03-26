@@ -27,6 +27,7 @@ type Property = {
   matches?: number;
   newCount?: number;
   coverUrl: string;
+  listingIntent: "Rent" | "Shortlet";
 };
 
 function Money({ value }: { value: number }) {
@@ -55,6 +56,21 @@ function StatusPill({ status }: { status: PropertyStatus }) {
   return (
     <span className="inline-flex items-center rounded-full bg-gray-200 px-2.5 py-0.5 text-[11px] font-bold text-gray-700">
       Draft
+    </span>
+  );
+}
+
+function ListingIntentPill({ intent }: { intent: "Rent" | "Shortlet" }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+        intent === "Shortlet"
+          ? "bg-amber-100 text-amber-800"
+          : "bg-blue-100 text-[#0a44b8]",
+      ].join(" ")}
+    >
+      {intent}
     </span>
   );
 }
@@ -113,7 +129,10 @@ function PropertyCard({
 
         <div className="flex flex-1 flex-col justify-center gap-1.5">
           <div className="flex items-center justify-between gap-3">
-            <StatusPill status={property.status} />
+            <div className="flex items-center gap-2">
+              <StatusPill status={property.status} />
+              <ListingIntentPill intent={property.listingIntent} />
+            </div>
             <button
               type="button"
               onClick={() => onDelete(property.id)}
@@ -289,6 +308,7 @@ function LandlordDashboardContent() {
   const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState("all");
   const [propertyScope, setPropertyScope] = useState<"mine" | "all">("mine");
+  const [intentFilter, setIntentFilter] = useState<"all" | "Rent" | "Shortlet">("all");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   useToastError(error);
@@ -343,6 +363,7 @@ function LandlordDashboardContent() {
         matches: property.matches ?? property.matchCount ?? 0,
         newCount: property.newCount ?? 0,
         coverUrl: property.coverUrl ?? "/hero.png",
+        listingIntent: property.listingIntent ?? "Rent",
       })),
     [landlordProperties]
   );
@@ -465,8 +486,13 @@ function LandlordDashboardContent() {
 
     if (search) {
       result = result.filter((property) =>
-        property.title.toLowerCase().includes(search)
+        [property.title, property.area ?? "", property.listingIntent]
+          .some((value) => value.toLowerCase().includes(search))
       );
+    }
+
+    if (intentFilter !== "all") {
+      result = result.filter((property) => property.listingIntent === intentFilter);
     }
 
     if (isOrgContext && propertyScope === "all" && agentFilter !== "all") {
@@ -478,7 +504,7 @@ function LandlordDashboardContent() {
     }
 
     return result;
-  }, [agentFilter, isOrgContext, mappedProperties, propertyScope, q, userId]);
+  }, [agentFilter, intentFilter, isOrgContext, mappedProperties, propertyScope, q, userId]);
 
   const openDraft = async (id: string) => {
     if (authToken) {
@@ -617,6 +643,24 @@ function LandlordDashboardContent() {
             placeholder="Search properties..."
             type="text"
           />
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {(["all", "Rent", "Shortlet"] as const).map((intent) => (
+            <button
+              key={intent}
+              type="button"
+              onClick={() => setIntentFilter(intent)}
+              className={[
+                "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold transition-colors",
+                intentFilter === intent
+                  ? "bg-[#0a44b8] text-white shadow"
+                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100",
+              ].join(" ")}
+            >
+              {intent === "all" ? "All" : intent}
+            </button>
+          ))}
         </div>
 
         {isOrgContext ? (

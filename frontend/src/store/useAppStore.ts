@@ -102,6 +102,7 @@ type LandlordPropertySummary = {
   area?: string;
   type?: string;
   matchCount?: number;
+  listingIntent?: "Rent" | "Shortlet";
 };
 
 type LandlordMatch = {
@@ -1043,6 +1044,7 @@ const mapLandlordPropertySummary = (property: ApiProperty): LandlordPropertySumm
     area: property?.area ?? property?.neighborhood ?? property?.address?.city,
     type: property?.type ?? property?.propertyType,
     matchCount: property?.matchCount ?? property?.matches ?? 0,
+    listingIntent: property?.listingIntent,
   };
 };
 
