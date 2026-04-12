@@ -65,7 +65,7 @@ function PhoneVerificationContent() {
       setIsSubmitting(true);
       await verifyPhoneOtp(userId, otp);
       const nextUrl = buildNextUrl(nextParam);
-      router.push(nextUrl || "/tenant-onboarding");
+      router.push(nextUrl || "/explore");
     } catch (err) {
       showToast({
         title: err instanceof Error ? err.message : "Verification failed",

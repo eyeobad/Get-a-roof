@@ -3,6 +3,8 @@ import { jwtVerify } from "jose";
 
 const PUBLIC_FILE = /\.(.*)$/;
 const PUBLIC_ROUTES = [
+  "/",
+  "/landingpage",
   "/login",
   "/admin/login",
   "/tenant-signup",

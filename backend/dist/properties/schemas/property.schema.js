@@ -255,10 +255,18 @@ exports.PropertySchema.index({ dedupeBucketId: 1, createdAt: -1 });
 exports.PropertySchema.index({
     status: 1,
     "address.state": 1,
+    "address.city": 1,
     propertyType: 1,
     listingIntent: 1,
     monthlyPrice: 1,
     bedCount: 1,
+    createdAt: -1,
+});
+exports.PropertySchema.index({
+    status: 1,
+    listingIntent: 1,
+    propertyType: 1,
+    monthlyPrice: 1,
     createdAt: -1,
 });
 exports.PropertySchema.index({ "address.lat": 1, "address.lng": 1 });
@@ -266,3 +274,4 @@ exports.PropertySchema.index({ "landlordRequirements.selfCompound": 1 });
 exports.PropertySchema.index({ "landlordRequirements.shortlet": 1 });
 exports.PropertySchema.index({ "landlordRequirements.sharedCompound": 1 });
 exports.PropertySchema.index({ "landlordRequirements.nonOwnerOccupied": 1 });
+exports.PropertySchema.index({ "landlordRequirements.sharedApartment": 1 });

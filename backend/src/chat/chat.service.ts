@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -19,6 +20,7 @@ import {
   type PropertyMatchInput,
   type TenantPreferences,
 } from "../common/utils/match.utils";
+import { measureAsync } from "../common/utils/perf.utils";
 
 type RouteRequestPayload = {
   id: string;
@@ -39,6 +41,8 @@ function isMongoDuplicateKeyError(error: unknown): boolean {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
@@ -188,224 +192,202 @@ export class ChatService {
   }
 
   async createMessage(dto: CreateChatDto) {
-    if (!dto.senderId) {
-      throw new BadRequestException("senderId is required");
-    }
-    const { match, property } = await this.assertChatParticipant(
-      dto.matchId,
-      dto.senderId,
-      dto.receiverId
-    );
-    const routePayload = this.parseRouteRequestPayload(dto.content);
-    const tenantId = match.tenantId.toString();
-    const landlordId = property.landlordId.toString();
-    const matchPatch: Record<string, unknown> = {};
-
-    if (routePayload) {
-      if (routePayload.status === "pending") {
-        if (dto.senderId !== tenantId) {
-          throw new ForbiddenException("Only tenant can request route access");
-        }
-        if (!routePayload.tenantLocation) {
-          throw new BadRequestException("Tenant location is required for route request");
-        }
-        matchPatch.routeAccessStatus = RouteAccessStatus.Pending;
-        matchPatch.routeAccessRequestedAt = new Date();
-        matchPatch.routeAccessRespondedAt = null;
-        matchPatch.routeAccessExpiresAt = null;
-        matchPatch.routeOriginLat = routePayload.tenantLocation.lat;
-        matchPatch.routeOriginLng = routePayload.tenantLocation.lng;
+    return measureAsync(this.logger, "createMessage", async () => {
+      if (!dto.senderId) {
+        throw new BadRequestException("senderId is required");
       }
+      const { match, property } = await this.assertChatParticipant(
+        dto.matchId,
+        dto.senderId,
+        dto.receiverId
+      );
+      const routePayload = this.parseRouteRequestPayload(dto.content);
+      const tenantId = match.tenantId.toString();
+      const landlordId = property.landlordId.toString();
+      const matchPatch: Record<string, unknown> = {};
 
-      if (routePayload.status === "approved" || routePayload.status === "denied") {
-        const canManage = await this.workspaceService.canActorManageProperty(
-          dto.senderId,
-          property
-        );
-        if (!canManage) {
-          throw new ForbiddenException("Only landlord can approve or deny route access");
-        }
-        matchPatch.routeAccessStatus =
-          routePayload.status === "approved"
-            ? RouteAccessStatus.Approved
-            : RouteAccessStatus.Denied;
-        matchPatch.routeAccessRespondedAt = new Date();
-        if (routePayload.status === "approved") {
-          const ttl = routePayload.ttlMinutes ?? 30;
-          if (![5, 30, 1440].includes(ttl)) {
-            throw new BadRequestException("Invalid route access duration");
+      if (routePayload) {
+        if (routePayload.status === "pending") {
+          if (dto.senderId !== tenantId) {
+            throw new ForbiddenException("Only tenant can request route access");
           }
-          matchPatch.routeAccessExpiresAt = new Date(Date.now() + ttl * 60 * 1000);
-        } else {
+          if (!routePayload.tenantLocation) {
+            throw new BadRequestException("Tenant location is required for route request");
+          }
+          matchPatch.routeAccessStatus = RouteAccessStatus.Pending;
+          matchPatch.routeAccessRequestedAt = new Date();
+          matchPatch.routeAccessRespondedAt = null;
           matchPatch.routeAccessExpiresAt = null;
+          matchPatch.routeOriginLat = routePayload.tenantLocation.lat;
+          matchPatch.routeOriginLng = routePayload.tenantLocation.lng;
+        }
+
+        if (routePayload.status === "approved" || routePayload.status === "denied") {
+          const canManage = await this.workspaceService.canActorManageProperty(
+            dto.senderId,
+            property
+          );
+          if (!canManage) {
+            throw new ForbiddenException("Only landlord can approve or deny route access");
+          }
+          matchPatch.routeAccessStatus =
+            routePayload.status === "approved"
+              ? RouteAccessStatus.Approved
+              : RouteAccessStatus.Denied;
+          matchPatch.routeAccessRespondedAt = new Date();
+          if (routePayload.status === "approved") {
+            const ttl = routePayload.ttlMinutes ?? 30;
+            if (![5, 30, 1440].includes(ttl)) {
+              throw new BadRequestException("Invalid route access duration");
+            }
+            matchPatch.routeAccessExpiresAt = new Date(Date.now() + ttl * 60 * 1000);
+          } else {
+            matchPatch.routeAccessExpiresAt = null;
+          }
         }
       }
-    }
 
-    const created = new this.messageModel({
-      matchId: dto.matchId,
-      senderId: dto.senderId,
-      receiverId: dto.receiverId,
-      content: dto.content,
-      timestamp: new Date(),
-      isRead: false,
-    });
+      const created = new this.messageModel({
+        matchId: dto.matchId,
+        senderId: dto.senderId,
+        receiverId: dto.receiverId,
+        content: dto.content,
+        timestamp: new Date(),
+        isRead: false,
+      });
 
-    const saved = await created.save();
-    const senderIsTenant = dto.senderId === tenantId;
-    const nextStatus =
-      match.status === MatchStatus.Closed
-        ? MatchStatus.Closed
-        : MatchStatus.Active;
-    await this.matchModel.findByIdAndUpdate(dto.matchId, {
-      $set: {
-        status: nextStatus,
-        updatedAt: new Date(),
-        landlordId: property.landlordId,
-        ...(senderIsTenant ? {} : { landlordReplied: true }),
-        lastMessage: {
-          content: saved.content,
-          senderId: saved.senderId,
-          timestamp: saved.timestamp,
+      const saved = await created.save();
+      const senderIsTenant = dto.senderId === tenantId;
+      const nextStatus =
+        match.status === MatchStatus.Closed
+          ? MatchStatus.Closed
+          : MatchStatus.Active;
+      await this.matchModel.findByIdAndUpdate(dto.matchId, {
+        $set: {
+          status: nextStatus,
+          updatedAt: new Date(),
+          landlordId: property.landlordId,
+          ...(senderIsTenant ? {} : { landlordReplied: true }),
+          lastMessage: {
+            content: saved.content,
+            senderId: saved.senderId,
+            timestamp: saved.timestamp,
+          },
+          ...(senderIsTenant
+            ? { tenantUnreadCount: 0 }
+            : { landlordUnreadCount: 0 }),
+          ...matchPatch,
         },
-        ...(senderIsTenant
-          ? { tenantUnreadCount: 0 }
-          : { landlordUnreadCount: 0 }),
-        ...matchPatch,
-      },
-      $inc: senderIsTenant
-        ? { landlordUnreadCount: 1 }
-        : { tenantUnreadCount: 1 },
+        $inc: senderIsTenant
+          ? { landlordUnreadCount: 1 }
+          : { tenantUnreadCount: 1 },
+      });
+      await this.clearTenantMatchCaches(tenantId);
+      return saved;
     });
-    await this.clearTenantMatchCaches(tenantId);
-    return saved;
   }
 
   async getConversations(
     userId: string,
     options?: { limit?: number; offset?: number }
   ) {
-    if (!Types.ObjectId.isValid(userId)) {
-      throw new BadRequestException("Invalid userId");
-    }
-    const userObjectId = new Types.ObjectId(userId);
-    const limit = options?.limit ?? 20;
-    const offset = options?.offset ?? 0;
-    const context = await this.workspaceService.getWorkspaceActorContext(userId);
-    const landlordVisibilityIds = (
-      context.scope === "owner" ? context.orgMemberIds : [userId]
-    )
-      .filter((id) => Types.ObjectId.isValid(id))
-      .map((id) => new Types.ObjectId(id));
+    return measureAsync(this.logger, "getConversations", async () => {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException("Invalid userId");
+      }
+      const userObjectId = new Types.ObjectId(userId);
+      const limit = options?.limit ?? 20;
+      const offset = options?.offset ?? 0;
+      const context = await this.workspaceService.getWorkspaceActorContext(userId);
+      const landlordVisibilityIds = (
+        context.scope === "owner" ? context.orgMemberIds : [userId]
+      )
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
 
-    const pipeline: PipelineStage[] = [
-      {
-        $lookup: {
-          from: "properties",
-          let: { propId: "$propertyId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [{ $toString: "$_id" }, { $toString: "$$propId" }],
-                },
-              },
-            },
-          ],
-          as: "property",
-        },
-      },
-      { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
-      {
-        $match: {
-          status: { $in: CHAT_VISIBLE_STATUSES },
-          $or: [
-            { tenantId: { $in: [userObjectId, userId] } },
-            { "property.landlordId": { $in: landlordVisibilityIds } },
-          ],
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          let: { tenantId: "$tenantId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [{ $toString: "$_id" }, { $toString: "$$tenantId" }],
-                },
-              },
-            },
-            { $project: { firstName: 1, lastName: 1, photoUrl: 1 } },
-          ],
-          as: "tenant",
-        },
-      },
-      { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "users",
-          let: { landlordId: "$property.landlordId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [{ $toString: "$_id" }, { $toString: "$$landlordId" }],
-                },
-              },
-            },
-            { $project: { firstName: 1, lastName: 1, photoUrl: 1 } },
-          ],
-          as: "landlord",
-        },
-      },
-      { $unwind: { path: "$landlord", preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          lastMessage: "$lastMessage",
-          unreadCount: {
-            $cond: [
-              { $eq: [{ $toString: "$tenantId" }, userId] },
-              { $ifNull: ["$tenantUnreadCount", 0] },
-              { $ifNull: ["$landlordUnreadCount", 0] },
+      const pipeline: PipelineStage[] = [
+        {
+          $match: {
+            status: { $in: CHAT_VISIBLE_STATUSES },
+            $or: [
+              { tenantId: userObjectId },
+              { landlordId: { $in: landlordVisibilityIds } },
             ],
           },
         },
-      },
-      {
-        $project: {
-          matchId: "$_id",
-          property: 1,
-          tenantId: 1,
-          tenant: {
-            _id: "$tenant._id",
-            firstName: "$tenant.firstName",
-            lastName: "$tenant.lastName",
-            photoUrl: "$tenant.photoUrl",
+        {
+          $lookup: {
+            from: "properties",
+            localField: "propertyId",
+            foreignField: "_id",
+            as: "property",
           },
-          landlord: {
-            _id: "$landlord._id",
-            firstName: "$landlord.firstName",
-            lastName: "$landlord.lastName",
-            photoUrl: "$landlord.photoUrl",
-          },
-          lastMessage: 1,
-          unreadCount: 1,
-          updatedAt: 1,
         },
-      },
-      { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
-    ];
+        { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "tenantId",
+            foreignField: "_id",
+            as: "tenant",
+          },
+        },
+        { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "landlordId",
+            foreignField: "_id",
+            as: "landlord",
+          },
+        },
+        { $unwind: { path: "$landlord", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            lastMessage: "$lastMessage",
+            unreadCount: {
+              $cond: [
+                { $eq: [{ $toString: "$tenantId" }, userId] },
+                { $ifNull: ["$tenantUnreadCount", 0] },
+                { $ifNull: ["$landlordUnreadCount", 0] },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            matchId: "$_id",
+            property: 1,
+            tenantId: 1,
+            tenant: {
+              _id: "$tenant._id",
+              firstName: "$tenant.firstName",
+              lastName: "$tenant.lastName",
+              photoUrl: "$tenant.photoUrl",
+            },
+            landlord: {
+              _id: "$landlord._id",
+              firstName: "$landlord.firstName",
+              lastName: "$landlord.lastName",
+              photoUrl: "$landlord.photoUrl",
+            },
+            lastMessage: 1,
+            unreadCount: 1,
+            updatedAt: 1,
+          },
+        },
+        { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
+      ];
 
-    if (offset > 0) {
-      pipeline.push({ $skip: offset });
-    }
-    if (limit > 0) {
-      pipeline.push({ $limit: limit });
-    }
+      if (offset > 0) {
+        pipeline.push({ $skip: offset });
+      }
+      if (limit > 0) {
+        pipeline.push({ $limit: limit });
+      }
 
-    return this.matchModel.aggregate(pipeline).exec();
+      return this.matchModel.aggregate(pipeline).exec();
+    });
   }
 
   async getMessagesForMatch(
@@ -427,65 +409,74 @@ export class ChatService {
   }
 
   async markMatchRead(matchId: string, userId: string) {
-    const { match } = await this.assertMatchMembership(matchId, userId);
+    return measureAsync(this.logger, "markMatchRead", async () => {
+      const { match } = await this.assertMatchMembership(matchId, userId);
 
-    const result = await this.messageModel.updateMany(
-      { matchId, receiverId: userId, isRead: false },
-      { $set: { isRead: true, readAt: new Date() } }
-    );
+      const result = await this.messageModel.updateMany(
+        { matchId, receiverId: userId, isRead: false },
+        { $set: { isRead: true, readAt: new Date() } }
+      );
 
-    const isTenant = match.tenantId.toString() === userId;
-    await this.matchModel.findByIdAndUpdate(matchId, {
-      $set: isTenant ? { tenantUnreadCount: 0 } : { landlordUnreadCount: 0 },
+      const isTenant = match.tenantId.toString() === userId;
+      await this.matchModel.findByIdAndUpdate(matchId, {
+        $set: isTenant ? { tenantUnreadCount: 0 } : { landlordUnreadCount: 0 },
+      });
+      await this.clearTenantMatchCaches(match.tenantId.toString());
+
+      return { updatedCount: result.modifiedCount };
     });
-    await this.clearTenantMatchCaches(match.tenantId.toString());
-
-    return { updatedCount: result.modifiedCount };
   }
 
   async startThread(tenantId: string, propertyId: string, message?: string) {
-    if (!Types.ObjectId.isValid(tenantId) || !Types.ObjectId.isValid(propertyId)) {
-      throw new BadRequestException("Invalid tenantId or propertyId");
-    }
-    const tenantOid = new Types.ObjectId(tenantId);
-    const propertyOid = new Types.ObjectId(propertyId);
-    const property = await this.propertyModel.findById(propertyId).exec();
-    if (!property) {
-      throw new NotFoundException("Property not found");
-    }
-    const landlordId = property.landlordId?.toString?.();
-    if (!landlordId) {
-      throw new NotFoundException("Property not found");
-    }
-    const [tenantUser, landlordUser] = await Promise.all([
-      this.userModel.findById(tenantId).exec(),
-      this.userModel.findById(landlordId).exec(),
-    ]);
-    if (!landlordUser) {
-      throw new NotFoundException("Property not found");
-    }
-    if (landlordId === tenantId) {
-      throw new ForbiddenException("Cannot message your own property");
-    }
+    return measureAsync(this.logger, "startThread", async () => {
+      if (!Types.ObjectId.isValid(tenantId) || !Types.ObjectId.isValid(propertyId)) {
+        throw new BadRequestException("Invalid tenantId or propertyId");
+      }
+      const tenantOid = new Types.ObjectId(tenantId);
+      const propertyOid = new Types.ObjectId(propertyId);
+      const property = await this.propertyModel.findById(propertyId).exec();
+      if (!property) {
+        throw new NotFoundException("Property not found");
+      }
+      const landlordId = property.landlordId?.toString?.();
+      if (!landlordId) {
+        throw new NotFoundException("Property not found");
+      }
+      const [tenantUser, landlordUser] = await Promise.all([
+        this.userModel.findById(tenantId).exec(),
+        this.userModel.findById(landlordId).exec(),
+      ]);
+      if (!landlordUser) {
+        throw new NotFoundException("Property not found");
+      }
+      if (landlordId === tenantId) {
+        throw new ForbiddenException("Cannot message your own property");
+      }
 
-    let match: MatchDocument | null = null;
-    try {
-      match = await this.matchModel
+      const scoreSeed = await this.matchModel
+        .findOne({ tenantId: tenantOid, propertyId: propertyOid })
+        .select(
+          "matchScore preferencesMatchPercentage apartmentPreferenceMatchPercentage locationScore amenityScore affordabilityScore lastMessage tenantUnreadCount landlordUnreadCount landlordReplied routeAccessStatus routeAccessRequestedAt routeAccessRespondedAt routeOriginLat routeOriginLng routeAccessExpiresAt"
+        )
+        .lean()
+        .exec();
+
+      const baseMatch = {
+        tenantId: tenantOid,
+        propertyId: propertyOid,
+        timestamp: new Date(),
+        ...(scoreSeed ?? {}),
+      };
+
+      let match = await this.matchModel
         .findOneAndUpdate(
+          { tenantId: tenantOid, propertyId: propertyOid },
           {
-            $or: [
-              { tenantId: tenantOid, propertyId: propertyOid },
-              { tenantId, propertyId },
-            ],
-          },
-          {
-            $setOnInsert: {
-              tenantId: tenantOid,
-              propertyId: propertyOid,
+            $setOnInsert: baseMatch,
+            $set: {
               landlordId: property.landlordId,
-              status: MatchStatus.TenantLiked,
               tenantLiked: true,
-              timestamp: new Date(),
+              status: MatchStatus.ChatInitiated,
             },
           },
           {
@@ -493,137 +484,139 @@ export class ChatService {
             new: true,
           }
         )
-        .exec();
-    } catch (error) {
-      if (!isMongoDuplicateKeyError(error)) {
-        throw error;
+        .exec()
+        .catch(async (error) => {
+          if (!isMongoDuplicateKeyError(error)) {
+            throw error;
+          }
+          return this.matchModel
+            .findOne({ tenantId: tenantOid, propertyId: propertyOid })
+            .exec();
+        });
+
+      if (!match) {
+        throw new NotFoundException("Match not found");
       }
-      match = await this.matchModel
-        .findOne({
-          $or: [
-            { tenantId: tenantOid, propertyId: propertyOid },
-            { tenantId, propertyId },
-          ],
-        })
-        .exec();
-    }
 
-    if (!match) {
-      throw new NotFoundException("Match not found");
-    }
+      let shouldSave = false;
+      if (!match.landlordId) {
+        match.landlordId = property.landlordId;
+        shouldSave = true;
+      }
+      if (
+        match.status !== MatchStatus.ChatInitiated &&
+        match.status !== MatchStatus.Active
+      ) {
+        match.status = MatchStatus.ChatInitiated;
+        shouldSave = true;
+      }
+      if (match.tenantLiked !== true) {
+        match.tenantLiked = true;
+        shouldSave = true;
+      }
+      if (await this.applyMatchScore(match, property, tenantId)) {
+        shouldSave = true;
+      }
+      if (shouldSave) {
+        await match.save();
+      }
+      await this.clearTenantMatchCaches(tenantId);
 
-    // Normalize legacy string IDs to ObjectId so all APIs see the same match.
-    let shouldNormalize = false;
-    const currentTenantId = match.tenantId?.toString?.() ?? String(match.tenantId);
-    const currentPropertyId = match.propertyId?.toString?.() ?? String(match.propertyId);
-    if (currentTenantId === tenantId && !(match.tenantId instanceof Types.ObjectId)) {
-      (match as unknown as { tenantId: Types.ObjectId }).tenantId = tenantOid;
-      shouldNormalize = true;
-    }
-    if (currentPropertyId === propertyId && !(match.propertyId instanceof Types.ObjectId)) {
-      (match as unknown as { propertyId: Types.ObjectId }).propertyId = propertyOid;
-      shouldNormalize = true;
-    }
-    if (shouldNormalize) {
-      await match.save();
-    }
-    if (!match.landlordId) {
-      match.landlordId = property.landlordId;
-    }
+      let createdMessage;
+      if (message) {
+        createdMessage = await this.createMessage({
+          matchId: match.id,
+          senderId: tenantId,
+          receiverId: property.landlordId.toString(),
+          content: message,
+        });
+      }
 
-    if (
-      match.status !== MatchStatus.ChatInitiated &&
-      match.status !== MatchStatus.Active
-    ) {
-      match.status = MatchStatus.ChatInitiated;
-    }
-    if (match.tenantLiked !== true) {
-      match.tenantLiked = true;
-    }
-    await this.applyMatchScore(match, property, tenantId);
-    await match.save();
-    await this.clearTenantMatchCaches(tenantId);
-
-    let createdMessage;
-    if (message) {
-      createdMessage = await this.createMessage({
-        matchId: match.id,
-        senderId: tenantId,
-        receiverId: property.landlordId.toString(),
-        content: message,
-      });
-    }
-
-    return this.buildConversationResponse(match, property, createdMessage, {
-      tenant: tenantUser,
-      landlord: landlordUser,
-    }, tenantId);
+      return this.buildConversationResponse(
+        match,
+        property,
+        createdMessage,
+        {
+          tenant: tenantUser,
+          landlord: landlordUser,
+        },
+        tenantId
+      );
+    });
   }
 
   async startLandlordThread(matchId: string, landlordId: string, message?: string) {
-    const match = await this.matchModel.findById(matchId).exec();
-    if (!match) {
-      throw new NotFoundException("Match not found");
-    }
-    const property = await this.propertyModel
-      .findById(match.propertyId)
-      .exec();
-    if (!property) {
-      throw new NotFoundException("Property not found");
-    }
-    const resolvedLandlordId = property.landlordId?.toString?.();
-    if (!resolvedLandlordId) {
-      throw new NotFoundException("Property not found");
-    }
-    const [tenantUser, landlordUser] = await Promise.all([
-      this.userModel.findById(match.tenantId).exec(),
-      this.userModel.findById(resolvedLandlordId).exec(),
-    ]);
-    if (!landlordUser) {
-      throw new NotFoundException("Property not found");
-    }
-    const canManage = await this.workspaceService.canActorManageProperty(
-      landlordId,
-      property
-    );
-    if (!canManage) {
-      throw new ForbiddenException("Access denied");
-    }
+    return measureAsync(this.logger, "startLandlordThread", async () => {
+      const match = await this.matchModel.findById(matchId).exec();
+      if (!match) {
+        throw new NotFoundException("Match not found");
+      }
+      const property = await this.propertyModel
+        .findById(match.propertyId)
+        .exec();
+      if (!property) {
+        throw new NotFoundException("Property not found");
+      }
+      const resolvedLandlordId = property.landlordId?.toString?.();
+      if (!resolvedLandlordId) {
+        throw new NotFoundException("Property not found");
+      }
+      const [tenantUser, landlordUser] = await Promise.all([
+        this.userModel.findById(match.tenantId).exec(),
+        this.userModel.findById(resolvedLandlordId).exec(),
+      ]);
+      if (!landlordUser) {
+        throw new NotFoundException("Property not found");
+      }
+      const canManage = await this.workspaceService.canActorManageProperty(
+        landlordId,
+        property
+      );
+      if (!canManage) {
+        throw new ForbiddenException("Access denied");
+      }
 
-    let shouldSave = false;
-    if (!match.landlordId) {
-      match.landlordId = property.landlordId;
-      shouldSave = true;
-    }
-    if (
-      match.status !== MatchStatus.ChatInitiated &&
-      match.status !== MatchStatus.Active
-    ) {
-      match.status = MatchStatus.ChatInitiated;
-      shouldSave = true;
-    }
-    if (await this.applyMatchScore(match, property, match.tenantId.toString())) {
-      shouldSave = true;
-    }
-    if (shouldSave) {
-      await match.save();
-      await this.clearTenantMatchCaches(match.tenantId.toString());
-    }
+      let shouldSave = false;
+      if (!match.landlordId) {
+        match.landlordId = property.landlordId;
+        shouldSave = true;
+      }
+      if (
+        match.status !== MatchStatus.ChatInitiated &&
+        match.status !== MatchStatus.Active
+      ) {
+        match.status = MatchStatus.ChatInitiated;
+        shouldSave = true;
+      }
+      if (await this.applyMatchScore(match, property, match.tenantId.toString())) {
+        shouldSave = true;
+      }
+      if (shouldSave) {
+        await match.save();
+        await this.clearTenantMatchCaches(match.tenantId.toString());
+      }
 
-    let createdMessage;
-    if (message) {
-      createdMessage = await this.createMessage({
-        matchId: match.id,
-        senderId: landlordId,
-        receiverId: match.tenantId.toString(),
-        content: message,
-      });
-    }
+      let createdMessage;
+      if (message) {
+        createdMessage = await this.createMessage({
+          matchId: match.id,
+          senderId: landlordId,
+          receiverId: match.tenantId.toString(),
+          content: message,
+        });
+      }
 
-    return this.buildConversationResponse(match, property, createdMessage, {
-      tenant: tenantUser,
-      landlord: landlordUser,
-    }, landlordId);
+      return this.buildConversationResponse(
+        match,
+        property,
+        createdMessage,
+        {
+          tenant: tenantUser,
+          landlord: landlordUser,
+        },
+        landlordId
+      );
+    });
   }
 
   private async assertMatchMembership(matchId: string, userId: string) {

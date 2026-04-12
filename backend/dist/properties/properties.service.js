@@ -11,13 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var PropertiesService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PropertiesService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const property_schema_1 = require("./schemas/property.schema");
-const users_service_1 = require("../users/users.service");
 const match_utils_1 = require("../common/utils/match.utils");
 const geo_utils_1 = require("../common/utils/geo.utils");
 const match_helpers_1 = require("../common/utils/match.helpers");
@@ -31,6 +31,7 @@ const workspace_service_1 = require("../common/services/workspace.service");
 const redis_cache_service_1 = require("../common/services/redis-cache.service");
 const fingerprint_utils_1 = require("./utils/fingerprint.utils");
 const query_cache_1 = require("./utils/query-cache");
+const perf_utils_1 = require("../common/utils/perf.utils");
 const propertyImageMimeTypes = new Set([
     "image/jpeg",
     "image/png",
@@ -66,16 +67,16 @@ const exploreProjection = {
 };
 const buildPublicLocationLabel = (property) => [property.neighborhood, property.address?.city].filter(Boolean).join(", ") ||
     [property.address?.city, property.address?.state].filter(Boolean).join(", ");
-let PropertiesService = class PropertiesService {
-    constructor(propertyModel, matchModel, userModel, messageModel, usersService, appwriteStorage, workspaceService, redisCache) {
+let PropertiesService = PropertiesService_1 = class PropertiesService {
+    constructor(propertyModel, matchModel, userModel, messageModel, appwriteStorage, workspaceService, redisCache) {
         this.propertyModel = propertyModel;
         this.matchModel = matchModel;
         this.userModel = userModel;
         this.messageModel = messageModel;
-        this.usersService = usersService;
         this.appwriteStorage = appwriteStorage;
         this.workspaceService = workspaceService;
         this.redisCache = redisCache;
+        this.logger = new common_1.Logger(PropertiesService_1.name);
     }
     async clearExploreCaches() {
         exploreQueryCache.clear();
@@ -268,92 +269,98 @@ let PropertiesService = class PropertiesService {
         };
     }
     async exploreProperties(filters, options) {
-        const limit = options?.limit ?? 50;
-        const queryFilters = { ...filters };
-        if (options?.userId) {
-            const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
-            if (excludedIds.length) {
-                if (queryFilters._id && typeof queryFilters._id === "object") {
-                    queryFilters._id.$nin = excludedIds;
-                }
-                else {
-                    queryFilters._id = { $nin: excludedIds };
+        return (0, perf_utils_1.measureAsync)(this.logger, "exploreProperties", async () => {
+            const limit = options?.limit ?? 50;
+            const queryFilters = { ...filters };
+            if (options?.userId) {
+                const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
+                if (excludedIds.length) {
+                    if (queryFilters._id && typeof queryFilters._id === "object") {
+                        queryFilters._id.$nin = excludedIds;
+                    }
+                    else {
+                        queryFilters._id = { $nin: excludedIds };
+                    }
                 }
             }
-        }
-        const cacheKey = `explore:${(0, query_cache_1.stableStringify)({
-            queryFilters,
-            options,
-            limit,
-        })}`;
-        const cached = exploreQueryCache.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
-        const redisCached = await this.redisCache.getJson(cacheKey);
-        if (redisCached) {
-            exploreQueryCache.set(cacheKey, redisCached);
-            return redisCached;
-        }
-        const properties = await this.propertyModel
-            .find(queryFilters, exploreProjection)
-            .limit(limit)
-            .lean()
-            .exec();
-        const validProperties = await this.excludeOrphanedProperties(properties);
-        const result = (await this.applyScoringAndFilters(validProperties, options)).map((property) => this.toPublicExploreProperty(property));
-        exploreQueryCache.set(cacheKey, result);
-        await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
-        return result;
+            const cacheKey = `explore:${(0, query_cache_1.stableStringify)({
+                queryFilters,
+                options,
+                limit,
+            })}`;
+            const cached = exploreQueryCache.get(cacheKey);
+            if (cached) {
+                return cached;
+            }
+            const redisCached = await this.redisCache.getJson(cacheKey);
+            if (redisCached) {
+                exploreQueryCache.set(cacheKey, redisCached);
+                return redisCached;
+            }
+            const properties = await this.propertyModel
+                .find(queryFilters, exploreProjection)
+                .sort({ createdAt: -1, _id: -1 })
+                .limit(limit)
+                .lean()
+                .exec();
+            const validProperties = await this.excludeOrphanedProperties(properties);
+            const result = (await this.applyScoringAndFilters(validProperties, options)).map((property) => this.toPublicExploreProperty(property));
+            exploreQueryCache.set(cacheKey, result);
+            await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
+            return result;
+        });
     }
     async getMapMatches(filters, options) {
-        const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
-        if (!matchIds.length) {
-            return [];
-        }
-        const withCoords = {
-            ...filters,
-            "address.lat": { $ne: null },
-            "address.lng": { $ne: null },
-        };
-        if (withCoords._id && typeof withCoords._id === "object") {
-            withCoords._id.$in = matchIds;
-        }
-        else {
-            withCoords._id = { $in: matchIds };
-        }
-        const limit = options?.limit ?? 50;
-        const cacheKey = `map:${(0, query_cache_1.stableStringify)({
-            withCoords,
-            options,
-            limit,
-        })}`;
-        const cached = exploreQueryCache.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
-        const redisCached = await this.redisCache.getJson(cacheKey);
-        if (redisCached) {
-            exploreQueryCache.set(cacheKey, redisCached);
-            return redisCached;
-        }
-        const properties = await this.propertyModel
-            .find(withCoords, exploreProjection)
-            .limit(limit)
-            .lean()
-            .exec();
-        const validProperties = await this.excludeOrphanedProperties(properties);
-        const results = await this.applyScoringAndFilters(validProperties, options);
-        const routeAccessMap = await this.getTenantRouteAccessMap(options?.userId, results.map((property) => property._id));
-        const mapped = results.map((property) => ({
-            ...this.toPublicExploreProperty(property),
-            ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
-                routeAccessStatus: enums_1.RouteAccessStatus.None,
-            }),
-        }));
-        exploreQueryCache.set(cacheKey, mapped);
-        await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
-        return mapped;
+        return (0, perf_utils_1.measureAsync)(this.logger, "getMapMatches", async () => {
+            const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
+            if (!matchIds.length) {
+                return [];
+            }
+            const withCoords = {
+                ...filters,
+                "address.lat": { $ne: null },
+                "address.lng": { $ne: null },
+            };
+            if (withCoords._id && typeof withCoords._id === "object") {
+                withCoords._id.$in = matchIds;
+            }
+            else {
+                withCoords._id = { $in: matchIds };
+            }
+            const limit = options?.limit ?? 50;
+            const cacheKey = `map:${(0, query_cache_1.stableStringify)({
+                withCoords,
+                options,
+                limit,
+            })}`;
+            const cached = exploreQueryCache.get(cacheKey);
+            if (cached) {
+                return cached;
+            }
+            const redisCached = await this.redisCache.getJson(cacheKey);
+            if (redisCached) {
+                exploreQueryCache.set(cacheKey, redisCached);
+                return redisCached;
+            }
+            const properties = await this.propertyModel
+                .find(withCoords, exploreProjection)
+                .sort({ createdAt: -1, _id: -1 })
+                .limit(limit)
+                .lean()
+                .exec();
+            const validProperties = await this.excludeOrphanedProperties(properties);
+            const results = await this.applyScoringAndFilters(validProperties, options);
+            const routeAccessMap = await this.getTenantRouteAccessMap(options?.userId, results.map((property) => property._id));
+            const mapped = results.map((property) => ({
+                ...this.toPublicExploreProperty(property),
+                ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
+                    routeAccessStatus: enums_1.RouteAccessStatus.None,
+                }),
+            }));
+            exploreQueryCache.set(cacheKey, mapped);
+            await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
+            return mapped;
+        });
     }
     async uploadImage(file) {
         return this.uploadToAppwrite(file, propertyImageMimeTypes);
@@ -460,8 +467,19 @@ let PropertiesService = class PropertiesService {
     async applyScoringAndFilters(properties, options) {
         let tenantPreferences;
         if (options?.userId) {
-            const user = await this.usersService.findById(options.userId);
-            tenantPreferences = user.preferences?.tenant;
+            const user = await this.userModel
+                .findById(options.userId)
+                .select("preferences.tenant address.lat address.lng")
+                .lean()
+                .exec();
+            tenantPreferences = user?.preferences?.tenant;
+            if (tenantPreferences && user?.address) {
+                tenantPreferences = {
+                    ...tenantPreferences,
+                    lat: user.address.lat,
+                    lng: user.address.lng,
+                };
+            }
         }
         const baseCoords = options?.lat !== undefined && options?.lng !== undefined
             ? { lat: options.lat, lng: options.lng }
@@ -557,7 +575,7 @@ let PropertiesService = class PropertiesService {
                 $nin: [enums_1.MatchStatus.Dismissed, enums_1.MatchStatus.Archived, enums_1.MatchStatus.Closed],
             };
         }
-        return this.matchModel.find(filter).distinct("propertyId").exec();
+        return this.matchModel.distinct("propertyId", filter).exec();
     }
     async getTenantRouteAccessMap(tenantId, propertyIds) {
         const map = new Map();
@@ -571,11 +589,10 @@ let PropertiesService = class PropertiesService {
             .filter(Boolean);
         if (!oids.length)
             return map;
-        const propertyIdVariants = [...oids, ...oids.map((id) => id.toString())];
         const matches = await this.matchModel
             .find({
-            tenantId: { $in: [new mongoose_2.Types.ObjectId(tenantId), tenantId] },
-            propertyId: { $in: propertyIdVariants },
+            tenantId: new mongoose_2.Types.ObjectId(tenantId),
+            propertyId: { $in: oids },
             status: {
                 $nin: [enums_1.MatchStatus.Dismissed, enums_1.MatchStatus.Archived, enums_1.MatchStatus.Closed],
             },
@@ -670,7 +687,7 @@ let PropertiesService = class PropertiesService {
     }
 };
 exports.PropertiesService = PropertiesService;
-exports.PropertiesService = PropertiesService = __decorate([
+exports.PropertiesService = PropertiesService = PropertiesService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(property_schema_1.Property.name)),
     __param(1, (0, mongoose_1.InjectModel)(match_schema_1.Match.name)),
@@ -680,7 +697,6 @@ exports.PropertiesService = PropertiesService = __decorate([
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        users_service_1.UsersService,
         appwrite_service_1.AppwriteStorageService,
         workspace_service_1.WorkspaceService,
         redis_cache_service_1.RedisCacheService])

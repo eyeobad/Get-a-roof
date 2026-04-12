@@ -8,6 +8,7 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "node --max-old-space-size=3072 ./node_modules/typescript/bin/tsc -p tsconfig.build.json --noCheck",
     "seed": "ts-node src/seed.ts",
+    "loadtest:prepare-tenants": "ts-node src/maintenance/generate-load-test-tenants.ts",
     "cleanup:orphans": "ts-node src/maintenance/cleanup-orphan-properties.ts",
     "backfill:match-scores": "ts-node src/maintenance/backfill-match-scores.ts",
     "backfill:chat-metadata": "node --max-old-space-size=4096 -r ts-node/register/transpile-only src/maintenance/backfill-chat-metadata.ts",

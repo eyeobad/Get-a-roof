@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -10,7 +11,6 @@ import { Model, Types } from "mongoose";
 import { Property, PropertyDocument } from "./schemas/property.schema";
 import { CreatePropertyDto } from "./dto/create-property.dto";
 import { UpdatePropertyDto } from "./dto/update-property.dto";
-import { UsersService } from "../users/users.service";
 import {
   computeMatchScore,
   PropertyMatchInput,
@@ -34,6 +34,7 @@ import { WorkspaceService } from "../common/services/workspace.service";
 import { RedisCacheService } from "../common/services/redis-cache.service";
 import { computePropertyFingerprint } from "./utils/fingerprint.utils";
 import { QueryCache, stableStringify } from "./utils/query-cache";
+import { measureAsync } from "../common/utils/perf.utils";
 
 const propertyImageMimeTypes = new Set([
   "image/jpeg",
@@ -81,12 +82,13 @@ const buildPublicLocationLabel = (property: {
 
 @Injectable()
 export class PropertiesService {
+  private readonly logger = new Logger(PropertiesService.name);
+
   constructor(
     @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
-    private readonly usersService: UsersService,
     private readonly appwriteStorage: AppwriteStorageService,
     private readonly workspaceService: WorkspaceService,
     private readonly redisCache: RedisCacheService
@@ -340,46 +342,49 @@ export class PropertiesService {
       limit?: number;
     }
   ) {
-    const limit = options?.limit ?? 50;
-    const queryFilters = { ...filters };
-    if (options?.userId) {
-      const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
-      if (excludedIds.length) {
-        if (queryFilters._id && typeof queryFilters._id === "object") {
-          (queryFilters._id as any).$nin = excludedIds;
-        } else {
-          queryFilters._id = { $nin: excludedIds };
+    return measureAsync(this.logger, "exploreProperties", async () => {
+      const limit = options?.limit ?? 50;
+      const queryFilters = { ...filters };
+      if (options?.userId) {
+        const excludedIds = await this.getTenantMatchPropertyIds(options.userId, true);
+        if (excludedIds.length) {
+          if (queryFilters._id && typeof queryFilters._id === "object") {
+            (queryFilters._id as any).$nin = excludedIds;
+          } else {
+            queryFilters._id = { $nin: excludedIds };
+          }
         }
       }
-    }
 
-    const cacheKey = `explore:${stableStringify({
-      queryFilters,
-      options,
-      limit,
-    })}`;
-    const cached = exploreQueryCache.get(cacheKey);
-    if (cached) {
-      return cached as unknown[];
-    }
-    const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
-    if (redisCached) {
-      exploreQueryCache.set(cacheKey, redisCached);
-      return redisCached;
-    }
+      const cacheKey = `explore:${stableStringify({
+        queryFilters,
+        options,
+        limit,
+      })}`;
+      const cached = exploreQueryCache.get(cacheKey);
+      if (cached) {
+        return cached as unknown[];
+      }
+      const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
+      if (redisCached) {
+        exploreQueryCache.set(cacheKey, redisCached);
+        return redisCached;
+      }
 
-    const properties = await this.propertyModel
-      .find(queryFilters, exploreProjection)
-      .limit(limit)
-      .lean()
-      .exec();
-    const validProperties = await this.excludeOrphanedProperties(properties);
-    const result = (await this.applyScoringAndFilters(validProperties, options)).map(
-      (property) => this.toPublicExploreProperty(property)
-    );
-    exploreQueryCache.set(cacheKey, result);
-    await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
-    return result;
+      const properties = await this.propertyModel
+        .find(queryFilters, exploreProjection)
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(limit)
+        .lean()
+        .exec();
+      const validProperties = await this.excludeOrphanedProperties(properties);
+      const result = (await this.applyScoringAndFilters(validProperties, options)).map(
+        (property) => this.toPublicExploreProperty(property)
+      );
+      exploreQueryCache.set(cacheKey, result);
+      await this.redisCache.setJson(cacheKey, result, EXPLORE_CACHE_TTL_SECONDS);
+      return result;
+    });
   }
 
   async getMapMatches(
@@ -393,56 +398,59 @@ export class PropertiesService {
       limit?: number;
     }
   ) {
-    const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
-    if (!matchIds.length) {
-      return [];
-    }
-    const withCoords = {
-      ...filters,
-      "address.lat": { $ne: null },
-      "address.lng": { $ne: null },
-    };
-    if (withCoords._id && typeof withCoords._id === "object") {
-      (withCoords._id as any).$in = matchIds;
-    } else {
-      withCoords._id = { $in: matchIds };
-    }
-    const limit = options?.limit ?? 50;
-    const cacheKey = `map:${stableStringify({
-      withCoords,
-      options,
-      limit,
-    })}`;
-    const cached = exploreQueryCache.get(cacheKey);
-    if (cached) {
-      return cached as unknown[];
-    }
-    const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
-    if (redisCached) {
-      exploreQueryCache.set(cacheKey, redisCached);
-      return redisCached;
-    }
+    return measureAsync(this.logger, "getMapMatches", async () => {
+      const matchIds = await this.getTenantMatchPropertyIds(options?.userId, false);
+      if (!matchIds.length) {
+        return [];
+      }
+      const withCoords = {
+        ...filters,
+        "address.lat": { $ne: null },
+        "address.lng": { $ne: null },
+      };
+      if (withCoords._id && typeof withCoords._id === "object") {
+        (withCoords._id as any).$in = matchIds;
+      } else {
+        withCoords._id = { $in: matchIds };
+      }
+      const limit = options?.limit ?? 50;
+      const cacheKey = `map:${stableStringify({
+        withCoords,
+        options,
+        limit,
+      })}`;
+      const cached = exploreQueryCache.get(cacheKey);
+      if (cached) {
+        return cached as unknown[];
+      }
+      const redisCached = await this.redisCache.getJson<unknown[]>(cacheKey);
+      if (redisCached) {
+        exploreQueryCache.set(cacheKey, redisCached);
+        return redisCached;
+      }
 
-    const properties = await this.propertyModel
-      .find(withCoords, exploreProjection)
-      .limit(limit)
-      .lean()
-      .exec();
-    const validProperties = await this.excludeOrphanedProperties(properties);
-    const results = await this.applyScoringAndFilters(validProperties, options);
-    const routeAccessMap = await this.getTenantRouteAccessMap(
-      options?.userId,
-      results.map((property) => property._id)
-    );
-    const mapped = results.map((property) => ({
-      ...this.toPublicExploreProperty(property),
-      ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
-        routeAccessStatus: RouteAccessStatus.None,
-      }),
-    }));
-    exploreQueryCache.set(cacheKey, mapped);
-    await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
-    return mapped;
+      const properties = await this.propertyModel
+        .find(withCoords, exploreProjection)
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(limit)
+        .lean()
+        .exec();
+      const validProperties = await this.excludeOrphanedProperties(properties);
+      const results = await this.applyScoringAndFilters(validProperties, options);
+      const routeAccessMap = await this.getTenantRouteAccessMap(
+        options?.userId,
+        results.map((property) => property._id)
+      );
+      const mapped = results.map((property) => ({
+        ...this.toPublicExploreProperty(property),
+        ...(routeAccessMap.get(property._id?.toString?.() ?? String(property._id)) ?? {
+          routeAccessStatus: RouteAccessStatus.None,
+        }),
+      }));
+      exploreQueryCache.set(cacheKey, mapped);
+      await this.redisCache.setJson(cacheKey, mapped, EXPLORE_CACHE_TTL_SECONDS);
+      return mapped;
+    });
   }
 
   async uploadImage(file?: Express.Multer.File) {
@@ -599,8 +607,19 @@ export class PropertiesService {
   ) {
     let tenantPreferences: TenantPreferences | undefined;
     if (options?.userId) {
-      const user = await this.usersService.findById(options.userId);
-      tenantPreferences = user.preferences?.tenant as TenantPreferences | undefined;
+      const user = await this.userModel
+        .findById(options.userId)
+        .select("preferences.tenant address.lat address.lng")
+        .lean()
+        .exec();
+      tenantPreferences = user?.preferences?.tenant as TenantPreferences | undefined;
+      if (tenantPreferences && user?.address) {
+        tenantPreferences = {
+          ...tenantPreferences,
+          lat: user.address.lat,
+          lng: user.address.lng,
+        };
+      }
     }
 
     const baseCoords =
@@ -722,7 +741,7 @@ export class PropertiesService {
         $nin: [MatchStatus.Dismissed, MatchStatus.Archived, MatchStatus.Closed],
       };
     }
-    return this.matchModel.find(filter).distinct("propertyId").exec();
+    return this.matchModel.distinct("propertyId", filter).exec();
   }
 
   private async getTenantRouteAccessMap(
@@ -747,12 +766,10 @@ export class PropertiesService {
       })
       .filter(Boolean) as Types.ObjectId[];
     if (!oids.length) return map;
-    const propertyIdVariants = [...oids, ...oids.map((id) => id.toString())];
-
     const matches = await this.matchModel
       .find({
-        tenantId: { $in: [new Types.ObjectId(tenantId), tenantId] },
-        propertyId: { $in: propertyIdVariants },
+        tenantId: new Types.ObjectId(tenantId),
+        propertyId: { $in: oids },
         status: {
           $nin: [MatchStatus.Dismissed, MatchStatus.Archived, MatchStatus.Closed],
         },

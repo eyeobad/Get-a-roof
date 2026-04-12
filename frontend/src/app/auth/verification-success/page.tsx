@@ -80,10 +80,8 @@ function VerificationSuccessContent() {
 
   useEffect(() => {
     if (outcome === "failed" || outcome === "abandoned") return undefined;
-    const timer = setTimeout(() => {
-      router.push(resolvedTarget);
-    }, 2200);
-    return () => clearTimeout(timer);
+    router.replace(resolvedTarget);
+    return undefined;
   }, [outcome, resolvedTarget, router]);
 
   const handleContinue = () => {
@@ -133,6 +131,14 @@ function VerificationSuccessContent() {
       actionLabel: "Continue to App",
     };
   })();
+
+  if (outcome === "success") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#fffefe] px-6 text-center font-display">
+        <p className="text-base font-semibold text-[#3e4564]">Redirecting...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#fffefe] px-6 text-center font-display">

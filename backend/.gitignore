@@ -24,6 +24,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 lerna-debug.log*
+.tmp-backend.out.log
+.tmp-backend.err.log
 
 # typescript
 *.tsbuildinfo
@@ -35,3 +37,6 @@ lerna-debug.log*
 # editors
 .idea/
 .vscode/
+
+# load test artifacts
+/loadtests/generated/

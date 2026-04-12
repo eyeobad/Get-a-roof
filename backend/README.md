@@ -72,6 +72,29 @@ Default port: `3001`
 - Landlord list endpoints accept `q`, `status`, and `sort` (`priceAsc`, `priceDesc`, `matchesDesc`, `matchesAsc`, `newDesc`, `newAsc`).
 - Landlord requirements accept numeric `budgetRange` and `annualIncome` values (converted to max/min ranges).
 
+## Performance Implementation
+
+The tenant swipe, match, and chat flow has been optimized for lower query overhead in the hottest endpoints:
+
+- `POST /api/matches`
+  Uses an atomic upsert on the canonical `{ tenantId, propertyId }` pair instead of duplicate-scan cleanup before every write.
+- `GET /api/matches/tenant`
+  Reads active matches using exact `ObjectId` filters and simpler landlord joins.
+- `GET /api/properties/explore`
+  Uses lean reads, explicit sorting, direct tenant preference lookup, and cheaper match-property exclusion.
+- `GET /api/chat/conversations`
+  Filters on denormalized `landlordId` / `tenantId` before joins and uses direct lookups instead of `$expr/$toString` joins.
+- `POST /api/chat/start`
+  Uses the same canonical match identity strategy as the match write path and avoids legacy string/ObjectId dual queries.
+
+Supporting changes:
+
+- Added lightweight timing instrumentation in [src/common/utils/perf.utils.ts](./src/common/utils/perf.utils.ts).
+- Added match indexes for conversation ordering and tenant/landlord chat reads.
+- Added property indexes for common explore filters.
+
+These changes reduce avoidable query work, but latency will still depend heavily on the deployment setup. Running against free-tier Atlas/Render without Redis enabled will still produce slow p95/p99 timings under load.
+
 ## Realtime chat
 
 Socket.IO gateway is available (JWT required). Provide a `token` in the handshake auth:

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
@@ -17,6 +18,7 @@ import { Message, MessageDocument } from "../chat/schemas/message.schema";
 import { WorkspaceService } from "../common/services/workspace.service";
 import { RedisCacheService } from "../common/services/redis-cache.service";
 import { stableStringify } from "../properties/utils/query-cache";
+import { measureAsync } from "../common/utils/perf.utils";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -104,6 +106,8 @@ function isMongoDuplicateKeyError(error: unknown): boolean {
 
 @Injectable()
 export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
   constructor(
     @InjectModel(Match.name) private matchModel: Model<MatchDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
@@ -133,151 +137,115 @@ export class MatchesService {
   // -----------------------------------------------------------------------
 
   async createMatch(dto: CreateMatchDto) {
-    if (!dto.tenantId) {
-      throw new BadRequestException("tenantId is required");
-    }
+    return measureAsync(this.logger, "createMatch", async () => {
+      if (!dto.tenantId) {
+        throw new BadRequestException("tenantId is required");
+      }
 
-    const [tenant, property] = await Promise.all([
-      this.usersService.findById(dto.tenantId),
-      this.propertiesService.getProperty(dto.propertyId),
-    ]);
-
-    const tenantPrefs = tenant.preferences?.tenant;
-    const matchInput: PropertyMatchInput = {
-      propertyType: property.propertyType,
-      monthlyPrice: property.monthlyPrice,
-      petFriendly: property.petFriendly,
-      landlordRequirements: property.landlordRequirements,
-      amenities: property.amenities,
-      lat: property.address?.lat,
-      lng: property.address?.lng,
-    };
-
-    const matchScoreData = computeMatchScore(
-      {
-        ...tenantPrefs,
-        lat: tenant.address?.lat,
-        lng: tenant.address?.lng,
-      },
-      matchInput
-    );
-
-    const isDismiss = dto.tenantLiked === false;
-    const baseStatus = isDismiss
-      ? MatchStatus.Dismissed
-      : MatchStatus.TenantLiked;
-
-    const computedStatus =
-      dto.status ||
-      (baseStatus === MatchStatus.TenantLiked && matchScoreData.matchScore >= 70
-        ? MatchStatus.LandlordQualified
-        : baseStatus);
-
-    const tenantOid = toObjectId(dto.tenantId);
-    const propertyOid = toObjectId(dto.propertyId);
-
-    const matchIdentityFilter = {
-      $or: [
-        { tenantId: tenantOid, propertyId: propertyOid },
-        { tenantId: dto.tenantId, propertyId: dto.propertyId },
-      ],
-    };
-
-    const duplicates = await this.matchModel
-      .find(matchIdentityFilter)
-      .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
-      .exec();
-    let existing = duplicates[0] ?? null;
-
-    if (duplicates.length > 1 && existing) {
-      const redundantIds = duplicates
-        .slice(1)
-        .map((item) => item._id);
-      await Promise.all([
-        this.messageModel.deleteMany({ matchId: { $in: redundantIds } }),
-        this.matchModel.deleteMany({ _id: { $in: redundantIds } }),
+      const tenantOid = toObjectId(dto.tenantId);
+      const propertyOid = toObjectId(dto.propertyId);
+      const [tenant, property, existing] = await Promise.all([
+        this.usersService.findById(dto.tenantId),
+        this.propertiesService.getProperty(dto.propertyId),
+        this.matchModel
+          .findOne({ tenantId: tenantOid, propertyId: propertyOid })
+          .select("status tenantLiked")
+          .exec(),
       ]);
-    }
 
-    const saveExisting = async (doc: MatchDocument) => {
-      const nextStatus =
-        doc.status === MatchStatus.Dismissed && !isDismiss
-          ? MatchStatus.TenantLiked
-          : computedStatus;
+      const tenantPrefs = tenant.preferences?.tenant;
+      const matchInput: PropertyMatchInput = {
+        propertyType: property.propertyType,
+        monthlyPrice: property.monthlyPrice,
+        petFriendly: property.petFriendly,
+        landlordRequirements: property.landlordRequirements,
+        amenities: property.amenities,
+        lat: property.address?.lat,
+        lng: property.address?.lng,
+      };
 
-      doc.tenantLiked = dto.tenantLiked ?? doc.tenantLiked;
-      // Normalize legacy string IDs to ObjectId representation.
-      if (!(doc.tenantId instanceof Types.ObjectId)) {
-        doc.tenantId = tenantOid;
+      const matchScoreData = computeMatchScore(
+        {
+          ...tenantPrefs,
+          lat: tenant.address?.lat,
+          lng: tenant.address?.lng,
+        },
+        matchInput
+      );
+
+      const isDismiss = dto.tenantLiked === false;
+      const baseStatus = isDismiss
+        ? MatchStatus.Dismissed
+        : MatchStatus.TenantLiked;
+      const computedStatus =
+        dto.status ||
+        (baseStatus === MatchStatus.TenantLiked && matchScoreData.matchScore >= 70
+          ? MatchStatus.LandlordQualified
+          : baseStatus);
+      const nextStatus = existing
+        ? this.validateTransition(
+            existing.status,
+            existing.status === MatchStatus.Dismissed && !isDismiss
+              ? MatchStatus.TenantLiked
+              : computedStatus
+          )
+        : computedStatus;
+
+      const nextValues = {
+        landlordId: property.landlordId,
+        status: nextStatus,
+        tenantLiked: dto.tenantLiked ?? existing?.tenantLiked,
+        matchScore: matchScoreData.matchScore,
+        preferencesMatchPercentage: matchScoreData.preferencesMatchPercentage,
+        apartmentPreferenceMatchPercentage:
+          matchScoreData.apartmentPreferenceMatchPercentage,
+        locationScore: matchScoreData.locationScore,
+        amenityScore: matchScoreData.amenityScore,
+        affordabilityScore: matchScoreData.affordabilityScore,
+        timestamp: new Date(),
+        dismissedAt: isDismiss ? new Date() : undefined,
+        dismissReason: isDismiss
+          ? dto.dismissReason ?? DismissReason.Soft
+          : undefined,
+      };
+
+      const update = {
+        $set: nextValues,
+        $setOnInsert: {
+          tenantId: tenantOid,
+          propertyId: propertyOid,
+        },
+        ...(isDismiss ? {} : { $unset: { dismissedAt: 1, dismissReason: 1 } }),
+      };
+
+      try {
+        const saved = await this.matchModel
+          .findOneAndUpdate(
+            { tenantId: tenantOid, propertyId: propertyOid },
+            update,
+            { upsert: true, new: true }
+          )
+          .exec();
+        await this.clearTenantMatchCaches(dto.tenantId);
+        return saved;
+      } catch (error) {
+        if (!isMongoDuplicateKeyError(error)) {
+          throw error;
+        }
+        const saved = await this.matchModel
+          .findOneAndUpdate(
+            { tenantId: tenantOid, propertyId: propertyOid },
+            update,
+            { new: true }
+          )
+          .exec();
+        if (!saved) {
+          throw error;
+        }
+        await this.clearTenantMatchCaches(dto.tenantId);
+        return saved;
       }
-      if (!(doc.propertyId instanceof Types.ObjectId)) {
-        doc.propertyId = propertyOid;
-      }
-      if (!doc.landlordId && property.landlordId) {
-        doc.landlordId = property.landlordId as Types.ObjectId;
-      }
-      doc.status = this.validateTransition(doc.status, nextStatus);
-      doc.matchScore = matchScoreData.matchScore;
-      doc.preferencesMatchPercentage = matchScoreData.preferencesMatchPercentage;
-      doc.apartmentPreferenceMatchPercentage =
-        matchScoreData.apartmentPreferenceMatchPercentage;
-      doc.locationScore = matchScoreData.locationScore;
-      doc.amenityScore = matchScoreData.amenityScore;
-      doc.affordabilityScore = matchScoreData.affordabilityScore;
-      doc.timestamp = new Date();
-
-      if (isDismiss) {
-        doc.dismissedAt = new Date();
-        doc.dismissReason = dto.dismissReason ?? DismissReason.Soft;
-      } else {
-        doc.dismissedAt = undefined;
-        doc.dismissReason = undefined;
-      }
-
-      const saved = await doc.save();
-      await this.clearTenantMatchCaches(dto.tenantId);
-      return saved;
-    };
-
-    if (existing) {
-      return saveExisting(existing);
-    }
-
-    const created = new this.matchModel({
-      tenantId: tenantOid,
-      propertyId: propertyOid,
-      landlordId: property.landlordId,
-      status: computedStatus,
-      tenantLiked: dto.tenantLiked,
-      matchScore: matchScoreData.matchScore,
-      preferencesMatchPercentage: matchScoreData.preferencesMatchPercentage,
-      apartmentPreferenceMatchPercentage:
-        matchScoreData.apartmentPreferenceMatchPercentage,
-      locationScore: matchScoreData.locationScore,
-      amenityScore: matchScoreData.amenityScore,
-      affordabilityScore: matchScoreData.affordabilityScore,
-      timestamp: new Date(),
-      dismissedAt: isDismiss ? new Date() : undefined,
-      dismissReason: isDismiss
-        ? dto.dismissReason ?? DismissReason.Soft
-        : undefined,
     });
-    try {
-      const saved = await created.save();
-      await this.clearTenantMatchCaches(dto.tenantId);
-      return saved;
-    } catch (error) {
-      if (!isMongoDuplicateKeyError(error)) {
-        throw error;
-      }
-      const raced = await this.matchModel
-        .findOne(matchIdentityFilter)
-        .exec();
-      if (!raced) {
-        throw error;
-      }
-      return saveExisting(raced);
-    }
   }
 
   // -----------------------------------------------------------------------
@@ -412,18 +380,19 @@ export class MatchesService {
     tenantId: string,
     options?: { page?: number; limit?: number; cooldownDays?: number }
   ) {
-    const cacheKey = this.tenantMatchCacheKey("recycled", tenantId, options);
-    const cached = await this.redisCache.getJson<unknown[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-    const cooldownDays = options?.cooldownDays ?? RECYCLE_COOLDOWN_DAYS;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - cooldownDays);
+    return measureAsync(this.logger, "getRecyclableMatches", async () => {
+      const cacheKey = this.tenantMatchCacheKey("recycled", tenantId, options);
+      const cached = await this.redisCache.getJson<unknown[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+      const cooldownDays = options?.cooldownDays ?? RECYCLE_COOLDOWN_DAYS;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - cooldownDays);
 
-    const tenantOid = toObjectId(tenantId);
+      const tenantOid = toObjectId(tenantId);
 
-    const pipeline: PipelineStage[] = [
+      const pipeline: PipelineStage[] = [
       {
         $match: {
           tenantId: tenantOid,
@@ -466,27 +435,8 @@ export class MatchesService {
       {
         $lookup: {
           from: "users",
-          let: { landlordId: "$property.landlordId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [
-                    { $toString: "$_id" },
-                    { $toString: "$$landlordId" },
-                  ],
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 1,
-                firstName: 1,
-                lastName: 1,
-                photoUrl: 1,
-              },
-            },
-          ],
+          localField: "landlordId",
+          foreignField: "_id",
           as: "landlord",
         },
       },
@@ -522,15 +472,16 @@ export class MatchesService {
           },
         },
       },
-    ];
+      ];
 
-    const results = await this.matchModel.aggregate(pipeline).exec();
-    await this.redisCache.setJson(
-      cacheKey,
-      results,
-      TENANT_MATCH_CACHE_TTL_SECONDS
-    );
-    return results;
+      const results = await this.matchModel.aggregate(pipeline).exec();
+      await this.redisCache.setJson(
+        cacheKey,
+        results,
+        TENANT_MATCH_CACHE_TTL_SECONDS
+      );
+      return results;
+    });
   }
 
   async recycleDismissedMatch(matchId: string, tenantId: string) {
@@ -813,21 +764,22 @@ export class MatchesService {
     tenantId: string,
     options?: { page?: number; limit?: number }
   ) {
-    if (!Types.ObjectId.isValid(tenantId)) {
-      throw new BadRequestException("Invalid tenantId");
-    }
-    const cacheKey = this.tenantMatchCacheKey("active", tenantId, options);
-    const cached = await this.redisCache.getJson<unknown[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    return measureAsync(this.logger, "getTenantMatches", async () => {
+      if (!Types.ObjectId.isValid(tenantId)) {
+        throw new BadRequestException("Invalid tenantId");
+      }
+      const cacheKey = this.tenantMatchCacheKey("active", tenantId, options);
+      const cached = await this.redisCache.getJson<unknown[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
 
-    const tenantOid = toObjectId(tenantId);
+      const tenantOid = toObjectId(tenantId);
 
-    const pipeline: PipelineStage[] = [
+      const pipeline: PipelineStage[] = [
       {
         $match: {
-          tenantId: { $in: [tenantOid, tenantId] },
+          tenantId: tenantOid,
           status: { $in: ACTIVE_MATCH_STATUSES },
         },
       },
@@ -843,27 +795,8 @@ export class MatchesService {
       {
         $lookup: {
           from: "users",
-          let: { landlordId: "$property.landlordId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: [
-                    { $toString: "$_id" },
-                    { $toString: "$$landlordId" },
-                  ],
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 1,
-                firstName: 1,
-                lastName: 1,
-                photoUrl: 1,
-              },
-            },
-          ],
+          localField: "landlordId",
+          foreignField: "_id",
           as: "landlord",
         },
       },
@@ -877,15 +810,16 @@ export class MatchesService {
       },
       { $sort: { "lastMessage.timestamp": -1, updatedAt: -1, _id: -1 } },
       ...paginationStages(options?.page, options?.limit),
-    ];
+      ];
 
-    const results = await this.matchModel.aggregate(pipeline).exec();
-    await this.redisCache.setJson(
-      cacheKey,
-      results,
-      TENANT_MATCH_CACHE_TTL_SECONDS
-    );
-    return results;
+      const results = await this.matchModel.aggregate(pipeline).exec();
+      await this.redisCache.setJson(
+        cacheKey,
+        results,
+        TENANT_MATCH_CACHE_TTL_SECONDS
+      );
+      return results;
+    });
   }
 
   // -----------------------------------------------------------------------

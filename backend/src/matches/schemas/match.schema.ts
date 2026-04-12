@@ -105,3 +105,5 @@ MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
 MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });
 MatchSchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
+MatchSchema.index({ tenantId: 1, "lastMessage.timestamp": -1, updatedAt: -1 });
+MatchSchema.index({ landlordId: 1, "lastMessage.timestamp": -1, updatedAt: -1 });

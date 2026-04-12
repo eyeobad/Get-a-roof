@@ -139,3 +139,5 @@ exports.MatchSchema.index({ tenantId: 1, status: 1, updatedAt: -1 });
 exports.MatchSchema.index({ propertyId: 1, status: 1, updatedAt: -1 });
 exports.MatchSchema.index({ status: 1, dismissReason: 1, dismissedAt: 1 });
 exports.MatchSchema.index({ landlordId: 1, status: 1, updatedAt: -1 });
+exports.MatchSchema.index({ tenantId: 1, "lastMessage.timestamp": -1, updatedAt: -1 });
+exports.MatchSchema.index({ landlordId: 1, "lastMessage.timestamp": -1, updatedAt: -1 });

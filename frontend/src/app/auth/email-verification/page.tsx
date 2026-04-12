@@ -128,8 +128,7 @@ function EmailVerificationContent() {
         }
         return;
       }
-      const query = new URLSearchParams({ userId });
-      router.push(`/auth/verification-success?${query.toString()}`);
+      router.push("/explore");
     } catch (err) {
       const message = getApiErrorMessage(err);
       showToast({ title: message, variant: "error" });
